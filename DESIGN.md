@@ -1,0 +1,340 @@
+# Multijugador — Diseño del producto
+
+Fecha: 2026-07-22 (act. 2026-07-24) · Estado: DISEÑO CERRADO + arquitectura técnica definida, pre-código
+
+## Narrativa (el posicionamiento oficial — lo primero que la gente entiende)
+
+**Un Discord, pero en vez de jugar videojuegos con tus compas, te juntas para vibecodear.**
+
+- Nombra un comportamiento QUE YA EXISTE y apesta hoy: la gente se junta en videollamada ("vamos a vibecodear juntos") y cada quien en su herramienta (uno en Lovable, otro en Claude Code), chocando — la historia de origen del fundador. No inventamos el hábito; le damos el lugar que le falta.
+- Instantáneamente entendible (un chavo de 16 lo capta en 2s), a diferencia de "IA multijugador" (suena técnico/enterprise).
+- El framing de Discord da gratis: lo social implícito, la diversión como punto (nadie entra a Discord a "ser productivo" — entra a pasarla con sus compas → separa 100% de Ace/enterprise), el modelo mental de "salas".
+- Eslóganes: "Vibecodea con tus compas" · "Un Discord para construir apps con tus amigos" · "Junta a tus compas. Construyan algo. En vivo."
+- Reposiciona el producto SIN cambiar el diseño técnico — solo cómo se cuenta: de "herramienta de IA colaborativa" a "el lugar donde te juntas con amigos a crear".
+- Matiz: es la narrativa de ENTRADA (hace que prueben). No encierra — como Discord, que empezó "para gamers" y creció a toda comunidad, puedes entrar por "vibecodea con compas" y crecer a "construye lo que sea con quien sea".
+
+**La verdad de origen (sin adornar):** le pasó al fundador. Él y su compa, cada uno en su Zoom compartiendo pantalla, uno en Lovable otro en Claude Code — vibecodeando juntos, hablando del producto y del futuro mientras el agente trabajaba. Funcionó como MOMENTO. Murió como proyecto, porque nunca hubo un lugar real donde eso viviera — solo dos pantallas separadas, pegadas con la mano al final.
+
+**Motor emocional (dos cosas reales, no "diversión" genérica):**
+1. **Ambición compartida** — no te juntas a programar por jugar; te emociona una idea y quieres construirla con alguien que se emociona igual. Eso sostiene el esfuerzo cuando se pone difícil.
+2. **El loop de avance, duplicado** — cada "ya quedó esto" es una pequeña victoria; en Multi ves la tuya Y la de tu compa casi al mismo tiempo, en el mismo canvas. El enganche del vibecoding solo, x2.
+
+**Pitch en una línea:** Vibecodea con tus compas — como esa llamada de Zoom donde ambos compartían pantalla, pero ahora en un solo lugar donde todos ven todo en tiempo real, sin pegar nada con la mano al final.
+
+**El "durante" (hueco a resolver antes del lunes — la parte más tuya y difícil de copiar):** el momento real no fue el output, fue la PLÁTICA mientras el agente construía (el futuro, la tecnología, el producto). Eso no está aún en el landing ni el mockup. Ningún competidor lo tiene porque es humano, no técnico. Diseñar cómo se siente "estar ahí" mientras el agente trabaja.
+
+**Competidor real — Replit** (más cercano que Ace). Investigado a fondo (2026):
+
+**Replit YA tiene todo lo técnico — NO competir en features:** multiplayer con cursores nombrados + presencia (maduro, fluido), multi-agente real (Agent 4, hasta 10 en paralelo), merge automático de conflictos vía agente, humanos aprobando tareas en vivo (board Kanban). Tiene $9B de valuación (Serie D, mar 2026), ~$150M ARR, 85% del Fortune 500. Si el pitch es "colaboración + varios agentes", Multi pierde. NO forzar ese ángulo.
+
+**Replit ABANDONÓ el terreno de Multi a propósito — ahí está la apertura (el hueco es de IDENTIDAD, no de features):**
+1. **Mató su comunidad social en 2024** — removió búsqueda social, Repls embebidos, comentarios, deploys gratis. Hubo protestas ("Don't Remove the community"). Hundió una de las comunidades de programadores más grandes. → **usuarios huérfanos y resentidos esperando.**
+2. **Full enterprise** — pivote explícito 2025 a no-técnicos empresariales (Zillow, Coinbase, Mercedes). Pro $100/mes, Enterprise con llamada de ventas. Cero vibra hangout.
+3. **La gente ODIA su billing** (queja #1) — sistema de créditos que se quema; gente reporta $70 en una noche, 20x lo esperado; y el agente se equivoca y te cobra por arreglar sus errores (The Register lo cubrió). Resentimiento activo. → **modelo de precios de Multi como arma directa: BYO-API-key o flat.**
+4. **100% cerrado, sin self-host** — no existe equivalente open source completo. Queja de lock-in/control/privacidad viva. → open source de Multi ataca esto directo.
+5. **Vibra corporativa** — nadie ocupa el espacio "divertido, con amigos, low-stakes, creativo". Es el Discord-vs-Slack / itch.io-vs-plataforma-enterprise.
+
+**Veredicto (= tesis de Multi confirmada):** Multi NO es "Replit pero mejor" (perdería). Multi es **todo lo que Replit dejó de ser**: casual vs corporativo, social/comunitario vs herramienta-sola, open source vs lock-in, precios que no te traicionan vs créditos que se queman. Replit desocupó ese asiento a propósito; hay comunidad huérfana esperando. La narrativa "Discord para vibecodear con tus compas" ES literalmente ese asiento vacío.
+
+**Dos riesgos honestos del hueco (ir con los ojos abiertos):**
+1. **El casual es difícil de monetizar** — Replit se fue a enterprise porque ahí está el dinero ($2.5M→$250M ARR persiguiendo empresas). El reto de Multi no es el producto, es cómo ganar dinero del casual (por eso el open-core → hosting importa, y BYO-key baja el costo de inferencia).
+2. **"Discord para X" = cold-start** — la retención viene de la red social; arrancar una red es difícil. Por eso el core (vibecodear juntos) tiene que enganchar ANTES de la capa social.
+
+**Base histórica de la narrativa (fechas VERIFICADAS en web; la síntesis del "punto medio" es lectura propia):**
+- **2018** → Replit lanzó Multiplayer en beta (cursores en vivo, ejecución compartida). **2019** → lo volvió primitiva central, rediseñó su protocolo para ser "colaborativo de corazón". Su frase textual de entonces: **"codea con amigos"** (= literalmente la narrativa de Multi; la tuvieron, la nombraron así, la abandonaron).
+- **Abril 2024** → Replit Teams (pivote a equipos/enterprise, mató lo social casual).
+- **2026** → Agent 4 (multiagente serio), Serie D $9B.
+- **La síntesis (lectura propia, no dato publicado — presentar como "mi análisis de su timeline"):** el punto medio —vibra casual de amigos + IA potente— NUNCA existió en Replit. Tuvieron "codea con amigos" en 2018 SIN IA útil, y la IA potente en 2026 SIN la vibra (ya enterprise). Y ese punto medio apenas se volvió POSIBLE ahora (modelos 2026 hacen el vibecoding real) = el "why now" con base histórica dura. El asiento está vacío y por primera vez es construible.
+- **Matiz honesto:** el timeline prueba que el asiento está VACÍO, no que dé DINERO. Replit se fue por estrategia (el casual no monetiza fácil), no por descuido. Oportunidad de producto = verificada; modelo de negocio = la apuesta a probar.
+
+## Tesis técnica (una frase)
+
+**Los humanos se dividen el trabajo hablando (como en Google Docs). Los agentes se ponen de acuerdo entre ellos por abajo (shapes, mocks, swaps). Y todo — lo de arriba y lo de abajo — es visible en tiempo real.**
+
+## Origen
+
+- Ensayo "Multiplayer AI" de Aaron Epstein (YC), publicado 2026-07-22: las mejores herramientas ganaron al volverse multiplayer (Docs vs Word, Figma vs Photoshop); la IA aún no tiene su momento multiplayer.
+- Dolor propio vivido: proyecto a dos personas — uno en Lovable, otro en Claude Code. Dos backends divergentes, caja negra mutua, features distintos, merge final "con pegamento". El proyecto sufrió/murió por no existir un lugar común donde ambos agentes convivieran.
+
+## Por qué AHORA (el "why now")
+
+Construir apps con amigos como actividad social no es idea nueva — lo nuevo es que **por fin es posible para todos**. Antes "construyamos algo juntos" exigía que ambos fueran programadores → mercado nicho (dos devs con las mismas skills). Hoy la barrera técnica es **cero**: el vibecoding volvió "construir una app" tan casual como hacer un doc o un diseño en Canva. El mercado ya no es "dos programadores" — es **cualquier par de amigos con una idea**, un mercado ~100x más grande que apareció en los últimos ~2 años.
+
+Mismo patrón que las herramientas del ensayo de Epstein:
+- Google Docs no inventó escribir juntos — lo hizo posible sin Word ni saber de formato. Mercado = todos los que escriben.
+- Figma no inventó diseñar juntos — lo hizo posible en el browser sin ser experto en Photoshop. Mercado ≫ diseñadores pro.
+- Multi no inventa construir apps juntos — lo hace posible sin saber programar. Mercado de "gente que construye software" = **ahora es todo mundo**.
+
+El timing es la joya: **no se podía hace 3 años** (con GPT-3.5 el agente no construía apps de verdad → "construir juntos con IA" no tenía sustancia). Los modelos actuales lo hicieron real este año. Convergen dos olas en la ventana exacta: (1) la capacidad técnica acaba de nacer, (2) el comportamiento social (todo mundo quiere construir apps) acaba de explotar. Nadie ha juntado las dos con la capa social encima — Ace va por enterprise, Lovable es single-player. El espacio "construir apps juntos, socialmente, para cualquiera" está vacío.
+
+## Usuario objetivo
+
+**Duos/trios de vibe-coders sin empresa** — gente que se junta por Discord/X para construir proyectos sin equipo formal, sin repo compartido, sin proceso. NO el equipo de ingeniería enterprise.
+
+Razón (eureka de la sesión): los grandes ya van por enterprise —
+- **Ace (GitHub Next):** multiplayer coding agent workspace, ecosistema GitHub
+- **Zed:** $32M de Sequoia, colaboración humano-agente en su editor
+- **Dust:** "multiplayer AI" para empresas
+- Todos presuponen: mismo equipo, misma herramienta, mismo repo, mismo empleador. El duo ad-hoc cross-tool no lo atiende nadie. Para este segmento **la diversión ES el producto** (videojuego, votar, presencia) — enterprise nunca va a competir ahí.
+
+## Decisión estratégica: reemplazo, no capa intermedia
+
+Se evaluó ser "capa intermedia" (contrato compartido entre Lovable y Claude Code, cada quien con su tool). Se descartó por la analogía central del ensayo:
+- Docs **reemplazó** Word; Figma **reemplazó** Sketch. Import una vez, adiós.
+- Precedente letal: **Abstract** (capa de colaboración/versionado sobre Sketch) murió cuando Figma hizo el multiplayer nativo — el multiplayer nativo elimina el problema que la capa resolvía.
+- Estrategia Docs: ganar usuarios NUEVOS primero (proyectos que NACEN compartidos), no rescatar codebases divergidas.
+- El "Word interno" ya no cuesta 4 años: existe bolt.diy (motor open source tipo Lovable: chat → agente → código → preview). El trabajo propio es la parte multiplayer.
+
+## Modelo mental central
+
+**El código es el formato de archivo, no la interfaz.** Como nadie edita el XML de Docs, nadie edita el código a mano: el "documento" compartido es la app viva (preview). Código visible read-only para quien quiera ("abrir el cofre"), editable solo vía agente.
+
+## Principios de diseño (destilados por iteración)
+
+1. **La visibilidad ES la coordinación.** Como en Docs: no escribes sobre la sección del otro porque lo VES escribiendo ahí. Sin locks, sin contratos visibles, sin carpetas asignadas.
+2. **El estado es la interfaz. Si alguien necesita un resumen, el canvas falló.** Nada de narración/catch-up: abres la sala y ves qué hay, qué es real y qué es promesa.
+3. **Los conflictos son manejo de excepciones, no feature central.** Modal de voto solo para: (a) simultaneidad genuina rara, (b) desacuerdos humanos de producto ("¿login con Google o email?"). Si el modal sale seguido, el motor está fallando.
+4. **Capa humana social, capa agente rigurosa.** La rigurosidad (contract-first) existe sin que ningún humano la administre.
+5. **Lo que ves, lo editas ahí mismo (EEA).** El estado no solo es visible — es editable en su lugar. Click al endpoint → resumen estructurado ("recibe: email, password · valida: mínimo 8") → tachas 8, pones 12. Diff exacto en vez de frase suelta que el agente interpreta; la tarea del agente pasa a "haz que el código cumpla la spec" (verificable). La spec es proyección bidireccional del código (se genera de él, lo regenera); divergencia = rojo en canvas (mismo mecanismo del mismatch de mocks). Ediciones a la spec visibles para todos en vivo, como Docs. **Frontera: el chat crea ("agrega login"), la spec afina ("12 en vez de 8")** — obligar todo por specs mata el videojuego. **EEA aplica solo al back** (endpoints, tablas, validaciones): la spec es proyección de lo que el código ya hace — enumeración finita, editarla no limita nada. **En el front NO hay panels ni knobs de propiedades:** todo cambio va por click (ancla el "cuál" exacto, selección visible para todos) + lenguaje al chat (el "qué", sin techo). Razón: cada control directo define el techo de lo editable — knob por knob se construye un Wix y el usuario acaba diseñando dentro de nuestro catálogo en vez de customizar; el lenguaje sobre código real no tiene techo. Consistencia igual la cuida el motor: aplica cambios como token/estilo global cuando corresponde (o pregunta "¿solo este o todos?") y el manual vivo destila los patrones.
+
+   **REFINAMIENTO (lección de Replit Visual Editor, 2026) — edits deterministas para lo TRIVIAL:** el "cero panels" se mantiene para layout/estructura/estética/comportamiento (eso es lo que se vuelve Wix), PERO se agrega **edición directa determinista SOLO para los 3 casos triviales e inequívocos: texto literal, color, spacing.** Estos NO pasan por el agente — se aplican directo al código, instantáneo y GRATIS (cero tokens). Por qué el cambio de postura: mandar el loop del agente para "cambia 'Hola' por 'Adiós'" es un misil para una mosca — cuesta tokens (dinero real, arma directa contra el billing de Replit que la gente odia), es lento, y es no-determinista. La línea clara: ¿es un valor literal único y obvio? → directo. ¿Requiere interpretar intención (layout, "más premium", estructura)? → agente. Esto NO es "panels de Wix" (el usuario no elige de un catálogo) — es "no gastes un misil en una mosca". Reconcilia el instinto anti-Wix con el ahorro de costo/velocidad.
+
+   **Instancias múltiples (loop/componente reusado):** al seleccionar un elemento que viene de un componente renderizado N veces (ej. una `<Card>` que aparece 20 veces), el cambio afecta a TODAS porque en el código es UN componente, no 20 (el código es la verdad, el DOM son copias). Regla: **resaltar las N instancias antes de aplicar** para que el usuario vea el alcance (como Replit) — y en Multi, TODOS en la sala ven las N resaltadas (Replit se lo muestra solo al que clickeó = diferenciador). Ambigüedad de intención (¿esta una o todas?): el edit determinista es solo para lo inequívoco; la duda "esta vs todas" va al lenguaje/agente, que desambigua o pregunta. Detalle técnico: detectar "aparece N veces" desde el DOM puro es difícil (el DOM no sabe qué componente lo generó); Replit usa metadata de React. Para v1 se aproxima con tag+clases; el caso fino lo resuelve el agente (que sí ve el código). = la respuesta madura al "¿solo este o todos?" que ya estaba en este principio.
+
+## Arquitectura del producto (4 piezas)
+
+1. **Sala con link** — entras estilo Docs/Figma: link, browser, cero setup. Humanos + agentes como participantes con nombre y presencia. Un solo canal; el chat es el log del proyecto. No existen sesiones privadas → no existe caja negra.
+2. **Estado 100% visible** — preview del front compartido en vivo + back desabstraído en el mismo canvas (schema como diagrama vivo, endpoints con estado visual: punteado/gris = mock, sólido/verde = real, rojo = mismatch). Click a un botón del preview ilumina la ruta botón → request → endpoint → tabla.
+3. **Click-to-edit anclado** — seleccionas un componente (o tabla del back); tu selección se ilumina para todos (cursor con nombre estilo Figma); el mensaje queda anclado al componente; el cambio se renderea en vivo para todos.
+
+   **Cómo se inyecta el inspector (decidido — reverse proxy, patrón ui-annotator-mcp):** el preview se sirve vía un reverse proxy en el server de Multi (`/preview/:roomId` → dev server de la sala), NO tocando el proyecto del workspace (agnóstico al stack: funciona con Vite/Next/Astro/HTML puro). El proxy es **`http` de Node puro, cero libs** (ui-annotator lo hace así en ~50 líneas; las libs de Fastify complican el transform de HTML + WS). Para respuestas HTML: inyecta `<script>` inspector antes de `</body>`, **reescribe `href="/..."` y `src="/..."`** para que las rutas pasen por el proxy, y **quita el header Content-Security-Policy** para permitir el script. CSS/JS/imágenes pasan directo. Da same-origin gratis (resuelve el cross-origin del iframe → el inspector puede LEER el DOM). Diferencia con ui-annotator: ellos usan GET polling cada seg; Multi NO — el script inyectado manda el click por `postMessage` al padre (la sala), y la sala (que tiene socket.io) lo retransmite a todos + al agente. Ref: github.com/mcpware/ui-annotator-mcp, issue slopus/happy#802.
+
+   **4 cuidados del click-to-select:** (1) validar `event.origin` en el listener de postMessage (no confiar en '*'); (2) el anclaje usa la selección LOCAL del usuario que manda, no una global (cada quien la suya, con su color); (3) al agente se manda TEXTO legible (tag/clases/texto/selector para grep), NO el JSON crudo con bbox; (4) al mandar mensaje anclado → limpiar la selección.
+
+   **Dos datos del mismo click, destinos distintos:** el **bbox** (x,y,w,h) viaja a los navegadores para DIBUJAR el outline (uso visual). El **selector/tag/texto** viaja al agente para ENCONTRAR el código con grep (uso lógico). No mezclar.
+
+   **Edge case — el elemento seleccionado desaparece por HMR** (el agente lo editó/borró): el outline dibujado sobre un bbox viejo queda fantasma (peor en Multi: todos ven el outline flotando sobre nada). Solución: el inspector.js NO confía en el bbox congelado — guarda el **selector** y tras cada cambio del DOM (MutationObserver, como ui-annotator) re-ejecuta `querySelector`: si el elemento sigue → recalcula bbox y el outline lo sigue; si murió → la selección se limpia sola y se avisa a la sala. El ANCLAJE al agente NO es frágil: viaja como texto en el payload del mensaje (una foto), no como referencia viva, así que sobrevive aunque el elemento desaparezca. Principio general: el DOM es efímero (cambia con cada HMR), nada dibujado encima puede asumir que se quedó quieto — cursores/selecciones/outlines se re-anclan o se desvanecen cuando el mundo cambia (versión visual de "el estado es la interfaz").
+4. **Motor invisible (EL MOAT)** — el sistema nervioso que permite paralelo sin pensar en el paralelo:
+   - Serializa escrituras de agentes; **el preview nunca muere** (equivalente al OT de Docs).
+   - Paralelismo front/back: si el back ya existe, el agente de front **lee** el shape real (caso 80%). Si no existe aún, los agentes **acuerdan el shape entre ellos en el canal** (visible si te asomas), el mock se genera de ese shape acordado.
+   - Swap mock→real automático cuando el endpoint real aterriza y cumple el shape. Mismatch → pieza en rojo en el canvas, agentes reconcilian o preguntan si es decisión de producto.
+   - Memoria compartida + manual vivo: los agentes destilan patrones y decisiones en el mismo canal; el proyecto se vuelve más consistente con el tiempo.
+
+La sala y el chat los clona cualquiera en un fin de semana; el motor es lo difícil y defendible.
+
+5. **Infraestructura invisible** — cero configuración, el usuario nunca ve commits, push, ni dashboards:
+   - **Git abajo:** el motor commitea solo (cada cambio de agente = commit). UI: línea de tiempo visual con scrubber + "regresar a esta versión" + "marcar versión". No existe botón de guardar — se guarda solo, como Docs.
+   - **Supabase abajo (BYO como Lovable):** el usuario conecta/crea su proyecto Supabase una vez; es dueño de sus datos. El agente corre migraciones desde el chat. UI: el diagrama de tablas del canvas, jamás el dashboard.
+   - **Endpoints = Supabase Edge Functions POR DEFAULT** (decisión de arquitectura propia, no posicionamiento — no competimos con Lovable, es otra categoría): el front habla con endpoints, no con tablas directo. La service role key nunca toca el browser. RLS es segunda muralla, no la única.
+   - **Por qué:** lección aprendida del patrón front→BD directo con RLS como única muralla (Lovable sí genera RLS, pero cuando es la única capa, una política faltante = tabla pública: CVE-2025-48757, ~10% de 1,645 apps con alguna política rota, 170+ filtrando datos vía anon key). Con capa de API, el mismo descuido topa con muralla antes de la tabla. Además: sin capa de API no hay nada que visualizar — el canvas del back con semáforo REQUIERE que el back exista como concepto. La feature visual y la decisión de seguridad son la misma decisión.
+   - **Seguridad como estado visible:** tabla sin política RLS o con política floja = tabla ROJA en el canvas. Nadie lee audits; ves rojo y le dices al agente que lo arregle.
+   - Referencias: integración Lovable-Supabase 2.0 (blue/red zone, migraciones, edge function logs), CVE-2025-48757 (superblocks.com/blog/lovable-vulnerabilities, vibeappscanner.com/lovable-security).
+
+## Arquitectura técnica de implementación (definida 2026-07-24)
+
+### Modelo mental: un IDE en la nube con la abstracción escondida
+
+El producto es un IDE completo por debajo, con la cabina tapada. **Dos capas + el agente como puente:**
+
+```
+┌────────────────────────────────────────────┐
+│  LA SALA  (nuestra diferenciación)         │  ← humanos + agentes conviven
+│  chat, preview vivo, cursores, presencia    │    lo social y visible
+├────────────────────────────────────────────┤
+│  AGENTES (N puentes, reactivos, paralelos)  │  ← cada uno un jugador con
+│  loop + tools; viven en la sala, operan     │    cursor/nombre/color
+│  el motor                                   │
+├────────────────────────────────────────────┤
+│  MOTOR IDE (openvscode-server)             │  ← real y completo, escondido:
+│  filesystem, terminal, dev server, LSP, git │    workspace compartido por sala
+└────────────────────────────────────────────┘
+```
+
+- **El motor NO se construye ni se forkea.** Se instancia **openvscode-server** (Gitpod): VS Code upstream completo como servidor por API, misma arquitectura que Codespaces. Forkear (como Cursor/Windsurf) cuesta un equipo dedicado a re-mergear upstream mensual y sirve solo si tu producto ES el editor — nosotros lo escondemos. Da motor completo, invisible y **multi-stack gratis** (corre cualquier dev server que el agente scaffoldee; el usuario nunca se casa con un stack — el agente pregunta o infiere, como Claude Code).
+- **Los agentes son REACTIVOS, no autónomos.** El humano los dispara (escribir en chat / seleccionar+hablar); el agente entra al loop, trabaja, y duerme hasta el siguiente trigger. Autonomía solo de EJECUCIÓN dentro de una tarea (decide qué archivos crear, qué instalar), nunca de iniciativa (el QUÉ siempre lo pone el humano). Regla: humano inicia, agente ejecuta y se detiene, cero acción no solicitada.
+- **Auto-verify (robar de Claude Code Desktop Preview) — refinamiento del motor, va con Fase 4+:** tras editar, el agente verifica que NO rompió el preview antes de decir "listo": revisa que cargue, checa errores de consola/build, y si rompió algo lo arregla solo. Importa MÁS en Multi que en Claude Code: si el agente rompe el preview, 2-3 personas ven la pantalla en blanco a la vez → se acaba el "videojuego". Es la implementación concreta del principio "el preview nunca muere". Mecanismo: la tool Bash corre build/lint + el agente lee logs del preview. NO es v1-mínimo (ahí el agente edita y ya); es la capa de robustez.
+- **Coordinación entre agentes = por el workspace compartido**, no por protocolo. Agente-back crea la tabla, agente-front la lee del mismo filesystem. La visibilidad es la coordinación.
+
+### Stack (cerrado)
+
+- **Node + TypeScript en TODO** (server, web, agentes). Cero frameworks de agente (ni LangGraph — Claude Code tampoco usa framework), cero SDK de modelo.
+- **Agentes a mano**, siguiendo el blueprint de CCX-RS / Claude Code (`~/ccx-rs`, reverse-engineering documentado). El loop es un while+switch: mensaje → API stream → si stop_reason==tool_use ejecuta TODAS las tools en paralelo → mete resultados → repite; termina en end_turn/max_tokens/límite de turnos.
+- **3 providers HTTP directos** (Claude, GPT, Gemini) tras una interfaz común `ModelProvider.stream(mensajes, tools)`. Un adaptador por proveedor (formato de tools/stream difiere entre los 3). Sin OpenRouter (solo 3 conocidos = 3 clientes directos, más barato/rápido). Default: Claude para el agente de código. Cambiar de modelo = instanciar otra clase.
+- **Tools del agente** (schema exacto en `~/ccx-rs/research-tools.md`): Read, Write, Edit (old/new/replace_all, escritura atómica temp+rename), Glob, Grep = funciones directas al filesystem (syscalls de Node, NO bash — precisas, observables: cada una emite evento socket `file:changed` → preview en vivo). Bash = terminal para procesos (npm install, git, arrancar dev server). Agent = spawnear otro agente-jugador (run_in_background, name, isolation).
+- **Robar de CCX / evitar sus gaps:** streaming con callbacks on_text/on_thinking (agente "escribiendo" en vivo en el chat); retry con backoff en 429/529; permission gate antes de cada tool; tools en PARALELO desde día 1 (CCX las hace en serie); compactación de contexto (MicroCompact) desde temprano — sesiones de horas; prompt caching activado.
+- **Multi-agente — arquitectura confirmada por la doc oficial de Claude Code Agent Teams** (Anthropic publicó su implementación; VALIDA la tesis: su versión es solo terminal/tmux para 1 dev, sin visual ni segunda persona — el moat de Multi es la capa social/visual, no la arquitectura). Robar: (1) **lista de tareas compartida** que los agentes auto-reclaman (pending/in-progress/completed + dependencias); (2) **mailbox** de mensajes entre agentes (archivos JSON, entrega automática, no polling); (3) **file-locking al reclamar tarea** para evitar race conditions → confirma que serializar (cola FIFO) es el patrón correcto; (4) **cada agente posee archivos distintos** para evitar conflictos → confirma nuestra decisión de working tree. Sin las restricciones de ellos (líder fijo, un equipo por sesión, sin anidar) porque nuestra capa de sala es propia. Detalle en [[referencia-ccx-rs-claude-code]].
+- **Fastify + socket.io** — salas, presencia, chat, broadcast del preview.
+- **React + Vite** — la UI de la Sala (traducir `app/sala.html` a React).
+- **Supabase** — persistir salas/proyectos + BYO del usuario para sus apps.
+- **Astro** — el landing de marketing (SEO). El landing NO es Vite; solo el marketing estático usa Astro.
+
+### Aclaraciones de vocabulario
+
+- **"Template" / "plantilla" = NUESTRO monorepo interno** (server, web, motor), NO un molde para las apps de usuarios. Los proyectos de usuarios los scaffoldea el agente desde cero en el workspace del motor. Cero molde impuesto (a diferencia de Lovable).
+
+## Plan de versiones — v1 COMPLETO desde ya (decisión: ~1-2 días, no fin de semana escalonado)
+
+Se descartó el enfoque v0-primero: se construye v1 completo directo.
+
+**Incluye:**
+- Sala en vivo: entrar con link + nombre, chat, presencia, cursores de todos (humanos y agentes)
+- Motor openvscode-server con workspace por sala + preview en vivo (dev server en iframe, HMR broadcasteado)
+- Agente(s) a mano: loop + tools + 3 providers; **multi-agente en paralelo** con cursores
+- Click-to-select: script inyectado → socket → selección compartida + mensaje anclado
+- Back desabstraído (canvas de schema/endpoints con semáforo mock/real)
+- Modal de conflicto (solo si la realidad lo pide)
+- Manual vivo destilado (mecánica abajo)
+- Persistencia Supabase
+
+**Orden de construcción:** (0) levantar openvscode-server, proyecto de prueba corriendo → (1) agente + tools tocan el motor, ves un archivo cambiar → (2) sala mínima: preview iframe + chat, le hablas al agente y el preview se actualiza → (3) presencia + cursores + click-to-select → (4) multi-agente paralelo → (5) back visual → (6) persistencia.
+
+**Demo de éxito:** (multiplayer) dos laptops, un link, "ponlo verde" → el otro lo ve al instante. (solo) entras solo, pides el menú, y MIENTRAS el agente lo construye en vivo seleccionas el título y disparas otro cambio — diriges un equipo, no esperas un spinner.
+
+## Git por debajo + concurrencia — E2E de la mecánica
+
+Adaptación del paper "Realtime GitHub" a nuestro caso (escritor = agente en bursts, no humano tecleando). El paper resuelve su unidad (transacción por teclazo) y su grano fino disuelve el problema del "preview vs commit"; nosotros SÍ tenemos ese gap y lo resolvemos con dos canales separados.
+
+### Los DOS canales (dos velocidades, independientes)
+
+- **CANAL 1 — TIEMPO REAL (lo que ven todos en vivo):** cada `Write`/`Edit` emite `file:changed` → el dev server (Vite) hace HMR → el preview (iframe) se refresca AL INSTANTE, archivo por archivo, MIENTRAS el agente trabaja. NO espera al commit. El canvas del back (semáforo mock/real) igual: la pieza pasa de gris a verde en vivo. Red de seguridad ("el preview nunca muere"): si un estado intermedio rompería el render (componente sin su import), el motor espera al siguiente estado válido en vez de pantalla blanca.
+- **CANAL 2 — GUARDADO (el historial):** el agente termina su turno → 1 commit. Es el checkpoint que alimenta el scrubber. Invisible ("guardado solo", como Docs). **Commit ≠ visualización:** el commit es solo el álbum de fotos; el preview va por el Canal 1, por delante, sin esperarlo.
+
+### El commit y la cola (Canal 2 en detalle)
+
+- **Unidad de commit = por TURNO de agente** (cuando termina SU tarea), no por archivo ni por tiempo. El scrubber muestra cambios con sentido ("puso el botón verde"), no ruido.
+- **"Por turnos" NO significa que los agentes se turnen** — trabajan en PARALELO, libres, cada uno su cursor, ninguno sabe del otro. "Turno" = el turno de ESE agente al terminar. La coordinación NO vive en los agentes → vive en el servidor.
+- **El servidor es la única autoridad del hash** de la sala. Los clientes no tienen repos; solo ven el preview y reciben "el estado es X". El motor (openvscode-server) tiene EL repo.
+- **Cola FIFO de commits + validación de hash en el dequeue** (control de concurrencia optimista, = el compare-and-swap del paper). Cada agente propone su cambio + el **hash base** del que partió. El server procesa la cola de una en una:
+  ```
+  saca propuesta (FIFO) →
+    ¿su hash base == estado actual del server?
+      SÍ                → aplica commit, avanza estado, notifica a todos
+      NO, sin solape     → rebasea sobre el estado actual, aplica, notifica
+      NO, con solape     → congela, dispara el modal de VOTO humano
+  ```
+  El hash base es el seguro: sin él, un agente que partió de un estado viejo pisaría el trabajo de otro. FIFO da el orden; el hash-check garantiza que nadie sobrescribe.
+- **Tres desenlaces:** aplica directo (90%) / rebase automático (zonas distintas — git lo hace limpio) / conflicto real de mismo pedazo → NO auto-resuelve → modal de voto (git detecta la sintaxis, los humanos deciden la intención). El paper mandaba todo a resolución manual porque asumía humanos tecleando; nosotros auto-rebaseamos la mayoría (agentes escriben en zonas separadas casi siempre) y solo votamos el choque real.
+
+### Working tree — decisión v1
+
+**Mismo working tree compartido, con las ESCRITURAS serializadas por la cola** (no solo los commits). Los agentes "piensan" en paralelo (llaman al modelo simultáneamente, ahí está el tiempo), pero sus operaciones de escritura al filesystem pasan por la misma cola → nunca dos escrituras físicas al mismo instante → cero race conditions de filesystem. Un solo tree, un solo dev server, un solo preview. Simple.
+
+**Evolución futura (NO v1):** worktrees aislados por agente (cada uno un branch/worktree efímero desde el hash base, se proyecta al tree de la sala) — esto es lo que hace el paper ("branch barato desde cualquier estado, merge al terminar"). Se migra cuando el multi-agente pesado (npm installs largos en paralelo) empiece a bloquear la cola. Decisión reversible, no cierra puertas.
+
+### Lo que NO tomamos del paper
+
+Clientes como clones, pull/rebase/push distribuido, offline. El servidor es autoritativo y punto — más simple, y el paper mismo lo avala cuando no necesitas descentralización. Para 2-4 personas en una sala, servidor autoritativo basta.
+
+### Manual vivo — mecánica (circuito cerrado)
+
+Marco: sensores → política → herramientas → aprendizaje (bucle recursivo). Sin la capa de aprendizaje solo hay automatización; con ella, la sala se vuelve más inteligente con el uso.
+
+- **Destilar en LOTE, no en tiempo real.** El estado (preview, canvas, chat) es tiempo real; la destilación de patrones es batch — corre en momentos de cierre (feature terminada, versión marcada). Destilar cada evento = ruido; en lote = patrones.
+- **Sensores:** correcciones de humanos en el chat, previews rotos, cambios revertidos, decisiones tomadas.
+- **Clasificación del destilador:** nuevo → al manual · redundante → se ignora · **contradice → NUNCA se auto-escribe: dispara el modal de conflicto** (contradicción de manual = decisión humana de producto → votan → Decisiones). Umbral: ≥2 ocurrencias antes de volverse patrón.
+- **Consumo:** los agentes leen el manual antes de cada tarea. Efecto: "le dijimos una vez que usara rem y nunca más usó px" — el proyecto se vuelve más consistente con el tiempo, no menos.
+- **Alcance:** cada sala tiene SU manual, privado, como archivo en el repo mantenido por el motor. Sin Mem0 ni infra dedicada en v1. Sin agregación entre salas (posible moat futuro, fuera de diseño actual — el moat definido es el motor).
+- **IA al centro, humanos en los bordes:** agentes ejecutan lo repetitivo; humanos deciden producto y lo irreversible (borrar tabla, deploy, pagos).
+
+## Arquitectura del motor — referencia técnica (de "Realtime GitHub", GitHub Next 2023)
+
+Blueprint validado por el equipo que hoy construye Ace. Aplica al motor invisible de v1 (cuando hay múltiples agentes escribiendo en paralelo). Nota de arranque: las primeras iteraciones pueden serializar + broadcastear simple antes de meter el sync por git completo.
+
+- **No CRDTs.** Sus fortalezas (descentralización, muchos colaboradores) no aplican a salas de 2-4 personas. Servidor autoritativo.
+- **Git como protocolo de sync, no solo historial:** cliente = clone; cambio se aplica local optimista → se manda al server con hash base → hash coincide: aplica y notifica; no coincide: pull, rebase, retry. Los árboles git son hash trees persistentes: clientes cachean por hash, bajan solo lo que cambió, cargan lazy solo lo que ven.
+- **Ventaja propia:** nuestra infraestructura invisible YA es git abajo → el sync en tiempo real y el scrubber de versiones son EL MISMO mecanismo. Un solo sustrato.
+- **Merge por tipo de dato, dos granularidades:** fino = transacciones rebaseadas en vivo; grueso = merge semántico 3-way sobre estructura (no líneas), conflictos como nodos especiales visibles en UI para resolución manual (= nuestra pieza roja en canvas + modal).
+- **Herramientas externas (agentes) como participantes** vía exposición del branch como filesystem — su diseño ya contempla AI assistants como colaboradores.
+- Posicionamiento: Realtime GitHub/Ace exponen git al usuario ("meet me in this branch") y construyen desde el editor hacia arriba, para devs. Nosotros escondemos git y construimos desde la app viva (preview + agente) hacia abajo, para no-devs. Extremos opuestos del mismo túnel.
+
+**Filtro 2023→2026 (qué envejeció del paper y qué no):**
+- **Vigente (física, no IA):** hash trees, sync por hash, servidor autoritativo, lazy fetch, merge por tipo de dato. No depende de qué tan capaz sea el modelo.
+- **Envejecido (suposición de quién escribe):** su modelo asume muchos humanos tecleando; hoy escriben agentes en bursts de cientos de líneas → menos merge fino de teclazos, más merge grueso/semántico.
+- **Conflictos:** su diseño escala todo a resolución manual; hoy el agente reconcilia solo y escala únicamente decisiones de producto. Los modelos actuales hacen viable este diseño (con GPT-4 no se podía — por eso 2023 dio un editor de docs, no una sala de agentes).
+- **Opción nueva 2026 — merge de intenciones:** cuando el merge estructural se pone feo, es más barato regenerar el archivo cumpliendo las DOS intenciones que mergear texto. El motor elige entre merge determinista y re-generación.
+- **Simplificación clave propia:** aquí los humanos NO editan código — solo agentes escriben, pocos y serializables. El problema difícil del paper (concurrencia humana masiva sobre archivos) es ~cero; el nuestro es reconciliar intenciones de agentes: inteligencia, no protocolo.
+
+## Modo solo = multijugador con agentes (caso de uso clave)
+
+Entrar solo NO es estar solo: la sala nunca está vacía — el agente está presente con cursor y avatar, trabajando en vivo frente a ti. Mientras un agente trabaja, el usuario sigue seleccionando y hablando, y cada nueva instrucción sobre otra cosa puede disparar OTRO agente en paralelo — el equipo de agentes se forma jugando, sin panel de configuración ni orquestador visible (el chat crea, el click señala).
+
+Implicaciones:
+- **Mata el arranque en frío** de todo producto multiplayer: valor completo desde el día 1 en solitario; invitar compas es upgrade natural, no requisito. (Figma solo servía si tu equipo llegaba; aquí no.)
+- **Mata el tiempo muerto** del AI single-player (promptear y ver el spinner): aquí diriges — mientras uno construye, tú ya estás disparando lo siguiente. Se siente RTS (comandar unidades), no chat.
+- **Cero UI nueva:** la presencia (cursores, avatares, selecciones) ya trata a los agentes como jugadores; N agentes = N cursores. El sistema no cambia, solo cambia quién llena los asientos.
+- Camino de adopción: solo → equipo de agentes → invitas al compa → misma sala, un jugador más.
+- **Validación de la brecha (dato real):** el fundador, power user de Claude Code, no sabía que CC ya puede lanzar multi-agentes (se pide en lenguaje natural y corren en background). La capacidad existe en los labs pero está enterrada: invisible, sin presencia, sin feedback en vivo, contexto por texto. El moat no es "multi-agentes" — es que aquí la capacidad se descubre jugando (seleccionas otra cosa, hablas, aparece otro cursor), no leyendo docs. Si un power user no la encuentra en CC, el usuario de Lovable jamás la encontrará.
+
+## Evidencia de demanda — el assignment
+
+Evidencia actual: dolor propio (N=1, historia real del proyecto Lovable+Claude Code) + ensayo de YC como señal de mercado (tesis de inversor, no demanda).
+
+**Assignment:** cuando el v1 corra, invitar al compa de Lovable — el del proyecto que murió — y construir algo chico juntos adentro. Su reacción a los 5 minutos es la primera evidencia real. "No mames, sigamos usándolo" = producto. Aburrido a los 10 min = aprendizaje barato.
+
+**Objeción "¿la gente pagaría?" — ya respondida por el mercado (y por el fundador):** el fundador, estudiante, quemó $100 USD de Claude Code en UN día construyendo, sin dudarlo. El hábito de pagar por IA para construir ya es masivo y probado (Cursor factura cientos de millones, Lovable cobra suscripción). La disposición a pagar NO es el riesgo. Además el multiplayer históricamente SUBE el precio, no lo baja (Figma cobra por asiento, Notion por equipo) → "paga por la versión colaborativa" es más fácil que "paga por IA". Matiz honesto: esto valida "pagan por construir con IA" (sólido), NO todavía "pagan por la versión multijugador/social específica" — ese es el salto de fe que valida el assignment de arriba. Ángulo de negocio extra: dos amigos en UNA sala comparten/coordinan el costo de tokens mejor que cada quien quemando su suscripción aislada.
+
+## Idea v2 — Capa social de descubrimiento (growth loop)
+
+Aclaración: el producto YA es social en v1 (compartes link, entran, construyen juntos en vivo = colaboración estilo Google Docs, sin fricción de "solicitudes"). El link-y-entra se queda como el modo principal. Lo de v2 NO es "hacerlo social" — es agregar **descubrimiento y comunidad** encima.
+
+Idea (inspiración: la capa social de una red, pero sin la fricción de solicitudes formales):
+- **Feed de tu círculo:** ves las salas públicas de tus amigos — "Erick construyó [taquería-app], 2 amigos adentro", "el Compa está EN VIVO en [juego] ahora".
+- **Presencia social en tiempo real:** como el producto es en vivo, el feed muestra quién está construyendo AHORITA, no posts muertos. Es Discord (ver quién está en línea) + Strava (actividad de tu gente) para vibe-coders. Nadie lo tiene.
+- **Unirse:** pedir entrar a una sala pública / abierta → el dueño acepta → entras como jugador.
+
+Por qué importa: es el **growth loop**. v1 crece sumando (cada quien invita a su compa por link); el feed social crece multiplicando (entras, ves 3 amigos construyendo, te unes, invitas a otro — la red se teje sola). Es el efecto de red que Figma/Discord tienen y Lovable no. Además baja la barrera del lienzo en blanco (entrar a una sala con algo pasando invita a jugar).
+
+Reglas / peligros:
+- **NO construir antes de validar el core.** Feed + círculos ANTES de que 2 compas amen construir juntos = techo sin paredes. Primero el core en vivo engancha, LUEGO el descubrimiento.
+- **Privado por default, público si el usuario elige.** El feed muestra SOLO lo que la gente hizo público. Forzar visibilidad asusta y expulsa (error clásico de privacidad).
+- Nivel: alto potencial (motor de crecimiento), cero urgencia (no bloquea v1).
+
+## Contexto estratégico (dónde vive el proyecto)
+
+- **Multi = side-project, código abierto.** No es la apuesta principal de tiempo del fundador ahora — es una apuesta asimétrica de bajo riesgo (no arriesga el sustento) y upside enorme (mercado masivo si pega).
+- **Wienops = el negocio principal AHORA** — agencia de IA nativa modelo Palantir, ya con un cliente pagando, aprendiendo manufactura desde adentro. Da runway y evita depender de que Multi explote.
+- **Se retroalimentan:** meterse a manufactureras revela procesos que gritan "necesita herramienta"; Multi (construir apps rápido en equipo) puede ser el arma para construir las automatizaciones de Wienops más rápido.
+- **Umbral de salto (por definir con un número, no un sentimiento):** "si Multi llega a X usuarios activos / salas / gente desconocida usándolo → salto a tiempo completo". Sin umbral claro, el riesgo es que la agencia (dinero YA) se coma al producto (dinero DESPUÉS) y la ventana se cierre.
+- **Nota OSS:** open source da distribución y credibilidad gratis para un side-project, pero ≠ negocio automático; si algún día se salta a Multi de lleno, necesitará un modelo (hosting / versión pro). Para ahora, perfecto.
+
+## Modelo de negocio — open-core → SaaS de hosting (referencia: PostHog)
+
+Jugada: código abierto → comunidad gigante → cobrar por hosting gestionado → SaaS con usuarios reales desde el día 1. Es el playbook estándar de dev-tools 2026 (Vercel/Next.js, Supabase, GitLab, Sentry, PostHog).
+
+**Referencia PostHog (YC W20, open source, hoy vale ~$1B):**
+- **~70% de sus ingresos = PostHog Cloud (hosting gestionado).** El hosting ES la columna vertebral del negocio, no un extra.
+- El resto: enterprise self-hosted (compliance) + marketplace de add-ons.
+- Su frase-regla: "ganamos dinero de los que lo tienen y les gustan nuestros productos, NO de los que no lo tienen" (estudiante/proyecto chico = gratis; empresa que factura = paga).
+- Por qué pagan el hosting aunque sea open source: self-hostear PostHog cuesta $5–15k/mes en infra+DevOps vs $300–2.5k/mes el cloud; solo vale self-hostear a escala enorme con equipo dedicado. **El open source es real y completo, pero operarlo bien es tan caro/molesto que casi todos pagan el hosting.** Ese es el truco maestro — no mutilar el producto, sino quitarle a la gente el dolor de operarlo.
+- Lección de producto: MVP lean, expandir SOLO siguiendo jalón real de usuarios; tratar usuarios como co-creadores (los vuelve advocates). = valida nuestra secuencia.
+
+**Regla de oro (qué guardar para el pago):** lo de pago debe ser **operacional / escala / equipo / social**, NUNCA la funcionalidad core. El core (construir juntos en vivo) es completo y gratis; se cobra por operarlo sin dolor y a escala. Si guardas el core detrás del muro, la comunidad siente un demo mutilado, se enoja, hace un fork gratis, y matas tu distribución.
+
+| GRATIS (open source, core completo) | PAGO (hosting) |
+|---|---|
+| La sala multijugador, agentes, motor | **Hosting gestionado** (cero setup, cero servidores) |
+| Preview en vivo, cursores, chat | **Escala** (muchas salas/agentes sin caídas) |
+| Construir con 1-2 compas | **Equipos grandes** (más de X por sala) |
+| Self-hostearlo tú mismo | **Persistencia/backups gestionados** |
+| | **Capa social/descubrimiento (v2)** — valor añadido, no mutila el core |
+| | **Modelos premium / más tokens incluidos** · **salas privadas / permisos** |
+
+**Encaje perfecto para Multi:** correr openvscode-server + agentes + quemar tokens de IA a escala es un infierno técnico y un costo real por usuario. "Yo pongo la infra + absorbo el costo de tokens, tú solo úsalo" es un valor obvio y honesto — idéntico a Supabase. NUNCA guardar detrás del muro la esencia (ej. "el tercer amigo" o "multiplayer de más de 2" mataría la magia); sí guardar escala/equipos/enterprise.
+
+**Secuencia obligatoria (el orden manda):** (1) producto que engancha —validar que 2 compas lo amen— ANTES de abrir; (2) open source → comunidad crece; (3) % pequeño (1–5%) paga hosting; (4) SaaS con usuarios reales. Open source sobre un producto que nadie ama = comunidad de cero. Esto refina el umbral de salto Wienops→Multi: la señal no es solo "usuarios", es "comunidad creciendo Y gente pagando hosting".
+
+## Riesgos abiertos
+
+- **Ace (GitHub Next)** resuelve el MISMO problema técnico (multijugador + agentes + código en vivo) pero NO es competidor directo: va por equipos de ingeniería enterprise dentro de GitHub; Multi va por el duo vibe-coder casual. Mismo mecanismo, mercados opuestos — no pelean por el mismo cliente ni el mismo dinero. Que Ace exista VALIDA el espacio (GitHub apuesta recursos a la tesis) y marca el hueco por contraste (mientras suben a enterprise, dejan el casual/social libre). Riesgo real (bajo): que GitHub decida BAJAR al segmento casual — improbable, va contra su ADN/precios/cultura enterprise. Aun así, ganar el segmento vibe-coder rápido.
+- Adopción requiere que el proyecto NAZCA adentro (no hay import de proyectos divergidos en v1).
+- El motor (serialización + shapes + preview siempre vivo) es la apuesta técnica; si el preview muere seguido, se acaba el "videojuego".
+
+## Estado de la UI (construido, pre-código del motor)
+
+Ver `soul.md` (alma/mood) y las carpetas del repo:
+- **Nombre:** "MULTI" es placeholder. NO reusar "multi.app" (startup de colaboración multiplayer que OpenAI compró y cerró en 2024).
+- **Dirección visual:** cartel/revista editorial exclusiva (moodboard `insp2` tipo "SILHOUETTE") — serif gigante, grano, composición de póster. Paleta crepúsculo del Gengar bajo la lluvia (`insp3`): indigo #383b5e, navy #2e3150, lavanda #b9a8e3, ámbar #ffc37a, rojo #d95d63, rosa #c393c9. La estética exclusiva ES marketing (se screenshotea y comparte; los AI tools se ven genéricos, este no).
+- **Reglas de diseño:** cero emojis, bordes/espaciado limpios, iterar componentes sueltos.
+- **Landing:** `landing/hero.html` (crepúsculo oscuro, elegido sobre `hero-v2-celestial.html`). Imagen hero = "La Creación de Adán" reimaginada (escultura mármol con hoodie + fantasmita lavanda tocándose los dedos), recorte en `landing/assets-src/adan-cutout.png`. El fantasmita puede volverse mascota/logo. Pendiente: migrar el landing a Astro.
+- **La Sala:** `app/sala.html` — chat izquierda estilo Discord (mensajes planos agrupados, no burbujas; una sola línea vertical sin cruces), escenario central con tabs (I La app / II El back), cursores en vivo + selección compartida + notas ancladas, scrubber "Historial" abajo.
+- **Pipeline de imágenes:** el usuario genera PNGs (Gemini/Midjourney) con prompts que escribe el asistente; recorte de fondo con rembg (venv en scratchpad, `rembg i -m isnet-general-use`).

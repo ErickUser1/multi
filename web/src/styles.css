@@ -1,0 +1,409 @@
+/* Multi — la sala. Paleta crepúsculo (Gengar), chat estilo Discord.
+   Traducido de app/sala.html. */
+:root {
+  --fondo: #33365a;
+  --fondo2: #2b2e4c;
+  --panel: #3b3e66;
+  --texto: #eef0fb;
+  --dim: #a9abd0;
+  --linea: #4a4d78;
+  --lavanda: #b9a8e3;
+  --ambar: #ffc37a;
+  --rosa: #c393c9;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: "Segoe UI", system-ui, sans-serif;
+  color: var(--texto);
+  background: linear-gradient(180deg, var(--fondo) 0%, var(--fondo2) 100%);
+  height: 100vh;
+  overflow: hidden;
+}
+
+#root {
+  height: 100vh;
+}
+
+/* ── Pantallas de entrada ─────────────────────────────────────────────── */
+
+.center-screen {
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.card {
+  text-align: center;
+  padding: 48px 56px;
+  background: rgba(43, 46, 76, 0.5);
+  border: 1px solid var(--linea);
+  border-radius: 10px;
+  max-width: 420px;
+}
+
+.brand {
+  font-family: "Bodoni MT", "Didot", Georgia, serif;
+  font-size: 64px;
+  letter-spacing: 6px;
+}
+
+.sub {
+  color: var(--dim);
+  font-size: 14px;
+  margin-top: 8px;
+}
+
+.room-name {
+  font-family: "Bodoni MT", "Didot", Georgia, serif;
+  font-size: 28px;
+  margin: 8px 0 20px;
+  color: var(--lavanda);
+}
+
+.cta {
+  margin-top: 28px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  padding: 15px 32px;
+  border-radius: 4px;
+  border: none;
+  background: var(--texto);
+  color: var(--fondo2);
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.cta:hover:not(:disabled) {
+  opacity: 0.85;
+}
+.cta:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.hint {
+  margin-top: 18px;
+  font-size: 12px;
+  color: var(--dim);
+}
+
+.name-input {
+  margin-top: 8px;
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--linea);
+  background: var(--panel);
+  color: var(--texto);
+  font-size: 14px;
+}
+.name-input:focus {
+  outline: none;
+  border-color: var(--lavanda);
+}
+
+/* ── La sala: 2 columnas ──────────────────────────────────────────────── */
+
+.sala {
+  display: flex;
+  height: 100vh;
+}
+
+/* Chat izquierda — una sola línea vertical, sin cruces (estilo Discord) */
+.chat {
+  width: 340px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--linea);
+  background: rgba(43, 46, 76, 0.5);
+}
+
+.sala-cab {
+  padding: 16px 18px 12px;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.18);
+}
+.sala-nombre {
+  font-family: "Bodoni MT", "Didot", Georgia, serif;
+  font-size: 19px;
+  letter-spacing: 1px;
+}
+.sala-meta {
+  font-size: 9px;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin-top: 3px;
+}
+
+.chat-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.msg {
+  display: flex;
+  gap: 12px;
+  padding: 8px 16px 2px;
+}
+.msg:hover {
+  background: rgba(255, 255, 255, 0.025);
+}
+.msg-system {
+  padding: 4px 16px;
+  justify-content: center;
+}
+.system-text {
+  font-size: 11px;
+  color: var(--dim);
+  font-style: italic;
+}
+
+.av {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 800;
+  flex-shrink: 0;
+  color: #fff;
+}
+
+.msg-cuerpo {
+  min-width: 0;
+}
+.msg-cab {
+  margin-bottom: 2px;
+}
+.quien {
+  font-size: 12.5px;
+  font-weight: 700;
+}
+.burbuja {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--texto);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.tool-line {
+  font-size: 11px;
+  color: var(--dim);
+  font-family: ui-monospace, monospace;
+  margin-bottom: 4px;
+}
+
+.chat-input {
+  padding: 6px 14px 16px;
+}
+.caja {
+  width: 100%;
+  background: var(--panel);
+  border: none;
+  border-radius: 6px;
+  padding: 12px 14px;
+  font-size: 13px;
+  color: var(--texto);
+}
+.caja:focus {
+  outline: none;
+}
+.caja::placeholder {
+  color: var(--dim);
+}
+
+/* Escenario derecha */
+.escenario {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.barra-sup {
+  display: flex;
+  align-items: center;
+  padding: 12px 24px 0;
+}
+.presencia {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.presencia .av {
+  width: 28px;
+  height: 28px;
+  border: 2px solid var(--fondo);
+}
+.invitar {
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--dim);
+  border: 1px solid var(--linea);
+  padding: 7px 14px;
+  border-radius: 3px;
+  cursor: pointer;
+  background: transparent;
+}
+.invitar:hover {
+  color: var(--texto);
+  border-color: var(--dim);
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  padding: 12px 24px 0;
+}
+.tab {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  color: var(--dim);
+  padding: 9px 18px;
+  border-radius: 3px 3px 0 0;
+  cursor: pointer;
+}
+.tab.activa {
+  color: var(--texto);
+  background: var(--panel);
+}
+.tab.disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.lienzo {
+  flex: 1;
+  margin: 0 24px 24px;
+  background: var(--panel);
+  border-radius: 0 3px 3px 3px;
+  overflow: hidden;
+  display: flex;
+  position: relative; /* para posicionar cursores/selecciones encima */
+}
+
+/* botón de inspect en la barra superior */
+.barra-sup {
+  justify-content: space-between;
+}
+.inspect-btn {
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--dim);
+  border: 1px solid var(--linea);
+  padding: 7px 14px;
+  border-radius: 3px;
+  cursor: pointer;
+  background: transparent;
+}
+.inspect-btn:hover {
+  color: var(--texto);
+  border-color: var(--dim);
+}
+.inspect-btn.on {
+  color: var(--fondo2);
+  background: var(--lavanda);
+  border-color: var(--lavanda);
+}
+
+/* cursores de otros sobre el escenario */
+.remote-cursor {
+  position: absolute;
+  pointer-events: none;
+  z-index: 20;
+  transition: left 0.05s linear, top 0.05s linear;
+}
+.cursor-name {
+  position: absolute;
+  left: 12px;
+  top: 10px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #fff;
+  padding: 2px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+/* badges de selección de otros */
+.others-selections {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 15;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  pointer-events: none;
+}
+.sel-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border: 1px solid;
+  border-radius: 3px;
+  background: rgba(43, 46, 76, 0.85);
+}
+
+/* chip de anclaje en el input del chat */
+.anchor-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: var(--lavanda);
+  background: rgba(185, 168, 227, 0.12);
+  border: 1px solid rgba(185, 168, 227, 0.3);
+  border-radius: 4px;
+  padding: 5px 8px;
+  margin-bottom: 6px;
+}
+.anchor-x {
+  cursor: pointer;
+  font-size: 13px;
+  margin-left: auto;
+  opacity: 0.7;
+}
+.anchor-x:hover {
+  opacity: 1;
+}
+
+/* nota de anclaje en un mensaje ya mandado */
+.anchor-note {
+  font-size: 10px;
+  color: var(--dim);
+  font-style: italic;
+  margin-bottom: 3px;
+}
+.preview-frame {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: #fff;
+}
+.preview-loading {
+  margin: auto;
+  color: var(--dim);
+  font-size: 13px;
+}

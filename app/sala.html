@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>La Sala — Multi</title>
+<style>
+  /* LA SALA — mismo mood del hero (crepúsculo Gengar, grano, acentos serif)
+     pero UI limpia para pasar horas: chat izquierda, escenario con tabs,
+     cursores en vivo, selección compartida, notas ancladas. */
+  * { margin:0; padding:0; box-sizing:border-box; }
+  :root {
+    --fondo:#33365a; --fondo2:#2b2e4c; --panel:#3b3e66; --panel2:#43467240;
+    --texto:#eef0fb; --dim:#a9abd0; --linea:#4a4d78;
+    --lavanda:#b9a8e3; --rojo:#d95d63; --ambar:#ffc37a; --rosa:#c393c9; --verde:#8fb573;
+    --azul:#7fa3d8;
+  }
+  body {
+    font-family:'Segoe UI', system-ui, sans-serif; color:var(--texto);
+    height:100vh; display:flex; flex-direction:column; overflow:hidden;
+    background:linear-gradient(180deg, var(--fondo) 0%, var(--fondo2) 100%);
+  }
+  /* grano del hero, más sutil para no cansar */
+  body::after { content:''; position:fixed; inset:0; pointer-events:none; opacity:.035; z-index:90;
+    background-image:repeating-conic-gradient(#fff 0 .0001%, transparent 0 .0002%); }
+
+  /* ── estructura discord: dos columnas de altura completa,
+     UNA sola línea vertical, sin horizontales que la crucen ── */
+  .sala-cab { display:flex; flex-direction:column; gap:3px; padding:16px 18px 12px;
+    box-shadow:0 1px 0 rgba(0,0,0,.18); flex-shrink:0; }
+  .sala-nombre { font-family:'Bodoni MT','Didot',Georgia,serif; font-size:19px; letter-spacing:1px; }
+  .sala-meta { font-size:9px; letter-spacing:2.5px; text-transform:uppercase; color:var(--dim); }
+  .barra-sup { display:flex; align-items:center; padding:12px 24px 0; flex-shrink:0; }
+  .presencia { margin-left:auto; display:flex; align-items:center; gap:16px; }
+  .avatares { display:flex; }
+  .av { width:28px; height:28px; border-radius:50%; border:2px solid var(--fondo);
+    display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700;
+    margin-left:-7px; }
+  .av:first-child{margin-left:0}
+  .av-e{background:var(--azul)} .av-c{background:var(--rosa); color:#2b2e4c}
+  .av-ai{background:var(--ambar); color:#3d2a12; font-size:9px; letter-spacing:.5px}
+  .invitar { font-size:10px; letter-spacing:2px; text-transform:uppercase; color:var(--dim);
+    border:1px solid var(--linea); padding:7px 14px; border-radius:3px; cursor:pointer; }
+  .invitar:hover { color:var(--texto); border-color:var(--dim); }
+
+  main { flex:1; display:flex; min-height:0; }
+
+  /* ── CHAT (izquierda, fijo) ── */
+  .chat { width:340px; flex-shrink:0; display:flex; flex-direction:column;
+    border-right:1px solid var(--linea); background:rgba(43,46,76,.5); }
+  .chat-scroll { flex:1; overflow-y:auto; padding:16px 0; display:flex; flex-direction:column; }
+  /* mensajes estilo discord: planos, a lo ancho, agrupados por autor */
+  .msg { display:flex; gap:12px; padding:8px 16px 2px; }
+  .msg:hover { background:rgba(255,255,255,.025); }
+  .msg .av { width:34px; height:34px; margin:0; border:none; flex-shrink:0; }
+  .msg-cuerpo { min-width:0; }
+  .msg-cab { display:flex; align-items:baseline; gap:8px; margin-bottom:2px; }
+  .quien { font-size:12.5px; font-weight:700; }
+  .q-e{color:var(--azul)} .q-c{color:var(--rosa)} .q-ai{color:var(--ambar)}
+  .hora { font-size:10px; color:var(--dim); }
+  .burbuja { font-size:13px; line-height:1.55; color:var(--texto); }
+  /* mensaje seguido del mismo autor: sin avatar, alineado con el texto */
+  .msg-seguido { display:flex; padding:1px 16px 1px 62px; }
+  .msg-seguido:hover { background:rgba(255,255,255,.025); }
+  .msg-seguido .burbuja { font-size:13px; line-height:1.55; }
+  /* etiqueta AI junto al nombre del agente */
+  .tag-ai { font-size:8px; font-weight:700; letter-spacing:1px; background:var(--ambar);
+    color:#3d2a12; padding:2px 5px; border-radius:2px; text-transform:uppercase; }
+  /* divisor de fecha estilo discord */
+  .divisor { display:flex; align-items:center; gap:10px; padding:14px 16px 8px; }
+  .divisor .raya { flex:1; height:1px; background:var(--linea); }
+  .divisor span { font-size:9px; letter-spacing:2px; text-transform:uppercase; color:var(--dim); }
+  /* nota anclada — eco en el chat */
+  .eco-nota { margin:8px 16px; display:flex; align-items:center; gap:9px;
+    padding:9px 12px; background:var(--panel2); border:1px solid var(--linea); border-radius:3px; }
+  .pin-mini { width:18px; height:18px; border-radius:50% 50% 50% 0; background:var(--lavanda);
+    color:#2b2e4c; font-size:9px; font-weight:700; display:flex; align-items:center;
+    justify-content:center; transform:rotate(-45deg); flex-shrink:0; }
+  .pin-mini span { transform:rotate(45deg); }
+  .eco-txt { font-size:11px; color:var(--dim); line-height:1.5; }
+  .eco-txt b { color:var(--texto); font-weight:600; }
+  .escribiendo { display:flex; gap:4px; padding:4px 0; }
+  .escribiendo i { width:5px; height:5px; border-radius:50%; background:var(--dim);
+    animation:bote 1.2s infinite; }
+  .escribiendo i:nth-child(2){animation-delay:.15s} .escribiendo i:nth-child(3){animation-delay:.3s}
+  @keyframes bote { 30%{transform:translateY(-4px)} }
+  /* input flotante estilo discord: sin línea, solo la caja */
+  .chat-input { padding:6px 14px 16px; }
+  .caja { background:var(--panel); border-radius:6px;
+    padding:12px 14px; font-size:12.5px; color:var(--dim); }
+
+  /* ── ESCENARIO ── */
+  .escenario { flex:1; display:flex; flex-direction:column; min-width:0; position:relative; }
+  .tabs { display:flex; align-items:center; gap:4px; padding:6px 24px 0; }
+  .tab { font-size:10px; font-weight:700; letter-spacing:2.5px; text-transform:uppercase;
+    color:var(--dim); padding:9px 18px; border-radius:3px 3px 0 0; cursor:pointer; }
+  .tab.activa { color:var(--texto); background:var(--panel); }
+  .tab .num { font-family:'Bodoni MT','Didot',Georgia,serif; font-size:11px; margin-right:7px;
+    color:var(--lavanda); letter-spacing:0; }
+  .lienzo { flex:1; margin:0 24px 18px; background:var(--panel); border-radius:0 3px 3px 3px;
+    padding:26px; display:flex; align-items:center; justify-content:center; position:relative;
+    min-height:0; }
+
+  /* preview de la app del usuario */
+  .preview { width:100%; max-width:560px; background:#fdf8f1; border-radius:4px; overflow:hidden;
+    box-shadow:0 24px 60px rgba(0,0,0,.4); position:relative; }
+  .app-nav { background:#e8563f; color:#fff; padding:13px 20px; font-weight:800; font-size:15px; }
+  .app-cuerpo { padding:22px; color:#4a3f36; }
+  .app-h1 { font-size:23px; font-weight:800; color:#2e2620; margin-bottom:4px; }
+  .app-p { font-size:12.5px; color:#8a7c6e; margin-bottom:16px; }
+  .platillos { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+  .platillo { background:#fff; border:1px solid #eee2d4; border-radius:8px; padding:12px; }
+  .platillo .nom { font-weight:700; font-size:12.5px; margin-bottom:2px; }
+  .platillo .precio { font-size:11px; color:#b05f3c; font-weight:700; }
+  .btn-pedido { margin-top:18px; background:#2ea36b; color:#fff; border:none; padding:11px 22px;
+    border-radius:8px; font-weight:700; font-size:13px; position:relative; }
+
+  /* selección compartida del Compa sobre el botón */
+  .sel { position:absolute; inset:-5px; border:1.5px solid var(--rosa); border-radius:10px;
+    pointer-events:none; }
+  .sel-tag { position:absolute; top:-20px; left:-1px; background:var(--rosa); color:#2b2e4c;
+    font-size:8.5px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase;
+    padding:3px 8px; border-radius:2px; white-space:nowrap; }
+
+  /* nota anclada — pin sobre el preview */
+  .pin { position:absolute; top:88px; right:64px; width:26px; height:26px;
+    border-radius:50% 50% 50% 0; background:var(--lavanda); transform:rotate(-45deg);
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:0 4px 12px rgba(0,0,0,.35); cursor:pointer; z-index:5; }
+  .pin span { transform:rotate(45deg); font-size:11px; font-weight:700; color:#2b2e4c; }
+  .pin-nota { position:absolute; top:76px; right:98px; background:var(--fondo2);
+    border:1px solid var(--linea); border-radius:3px 3px 0 3px; padding:10px 13px;
+    max-width:190px; z-index:5; box-shadow:0 8px 24px rgba(0,0,0,.35); }
+  .pin-nota .q { font-size:8.5px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase;
+    color:var(--azul); margin-bottom:3px; }
+  .pin-nota .t { font-size:11.5px; line-height:1.5; color:var(--texto); }
+
+  /* cursores en vivo */
+  .cursor { position:absolute; z-index:6; pointer-events:none; }
+  .cursor .flecha { width:0; height:0; border-left:10px solid var(--rosa);
+    border-bottom:10px solid transparent; border-top:4px solid var(--rosa);
+    transform:rotate(-8deg); display:inline-block; }
+  .cursor .nombre { background:var(--rosa); color:#2b2e4c; font-size:8.5px; font-weight:700;
+    letter-spacing:1.5px; text-transform:uppercase; padding:3px 8px; border-radius:2px;
+    margin-left:1px; vertical-align:top; }
+  .cursor-c { top:57%; left:48%; }
+  .cursor-ai { top:35%; left:63%; }
+  .cursor-ai .flecha { border-left-color:var(--ambar); border-top-color:var(--ambar); }
+  .cursor-ai .nombre { background:var(--ambar); }
+
+  /* ── SCRUBBER — flotante dentro del escenario, sin línea que cruce ── */
+  .historial { display:flex; align-items:center; gap:16px; padding:0 24px 16px;
+    flex-shrink:0; font-size:9.5px; letter-spacing:2px;
+    text-transform:uppercase; color:var(--dim); }
+  .scrubber { flex:1; height:3px; background:var(--linea); border-radius:2px; position:relative; }
+  .scrubber-fill { position:absolute; inset:0 10% 0 0; border-radius:2px;
+    background:linear-gradient(90deg, var(--lavanda), var(--ambar)); }
+  .perilla { position:absolute; right:10%; top:50%; transform:translate(50%,-50%);
+    width:11px; height:11px; border-radius:50%; background:var(--texto);
+    border:2px solid var(--ambar); }
+</style>
+</head>
+<body>
+
+  <main>
+    <aside class="chat">
+      <div class="sala-cab">
+        <div class="sala-nombre">Taquería App</div>
+        <div class="sala-meta">Sala en vivo · 3 presentes</div>
+      </div>
+      <div class="chat-scroll">
+        <div class="divisor"><div class="raya"></div><span>Hoy</span><div class="raya"></div></div>
+
+        <div class="msg"><div class="av av-c">C</div>
+          <div class="msg-cuerpo">
+            <div class="msg-cab"><span class="quien q-c">Compa</span><span class="hora">9:41 pm</span></div>
+            <div class="burbuja">we el menú ya se ve bien, pero el botón como que se pierde no?</div>
+          </div></div>
+        <div class="msg-seguido"><div class="burbuja">osea sí se ve pero no invita a pedir jaja</div></div>
+
+        <div class="msg"><div class="av av-e">E</div>
+          <div class="msg-cuerpo">
+            <div class="msg-cab"><span class="quien q-e">Erick</span><span class="hora">9:42 pm</span></div>
+            <div class="burbuja">ponlo verde y más grande, a ver qué tal</div>
+          </div></div>
+
+        <div class="msg"><div class="av av-ai">AI</div>
+          <div class="msg-cuerpo">
+            <div class="msg-cab"><span class="quien q-ai">Agente</span><span class="tag-ai">AI</span><span class="hora">9:42 pm</span></div>
+            <div class="burbuja">Listo — botón en verde y con más peso. Si quieren lo animo al hacer hover.</div>
+          </div></div>
+
+        <div class="eco-nota">
+          <div class="pin-mini"><span>1</span></div>
+          <div class="eco-txt"><b>Erick dejó una nota</b> en la tarjeta de Quesadilla — "aquí falta foto no?"</div>
+        </div>
+
+        <div class="msg"><div class="av av-c">C</div>
+          <div class="msg-cuerpo">
+            <div class="msg-cab"><span class="quien q-c">Compa</span><span class="hora">9:44 pm</span></div>
+            <div class="escribiendo"><i></i><i></i><i></i></div>
+          </div></div>
+      </div>
+      <div class="chat-input">
+        <div class="caja">Escribe a la sala — o selecciona algo y coméntalo</div>
+      </div>
+    </aside>
+
+    <section class="escenario">
+      <div class="barra-sup">
+        <div class="presencia">
+          <div class="avatares">
+            <div class="av av-e">E</div><div class="av av-c">C</div><div class="av av-ai">AI</div>
+          </div>
+          <div class="invitar">Invitar con link</div>
+        </div>
+      </div>
+      <div class="tabs">
+        <div class="tab activa"><span class="num">I</span>La app</div>
+        <div class="tab"><span class="num">II</span>El back</div>
+      </div>
+      <div class="lienzo">
+        <div class="preview">
+          <div class="app-nav">Taquería La Sala</div>
+          <div class="app-cuerpo">
+            <div class="app-h1">El menú de hoy</div>
+            <div class="app-p">Tacos hechos con cariño, pedidos sin filas.</div>
+            <div class="platillos">
+              <div class="platillo"><div class="nom">Pastor</div><div class="precio">$18</div></div>
+              <div class="platillo"><div class="nom">Quesadilla</div><div class="precio">$25</div></div>
+              <div class="platillo"><div class="nom">Agua fresca</div><div class="precio">$15</div></div>
+            </div>
+            <button class="btn-pedido">
+              Hacer pedido
+              <span class="sel"><span class="sel-tag">Compa</span></span>
+            </button>
+          </div>
+          <div class="pin"><span>1</span></div>
+          <div class="pin-nota">
+            <div class="q">Erick</div>
+            <div class="t">aquí falta foto no?</div>
+          </div>
+        </div>
+
+        <div class="cursor cursor-c"><span class="flecha"></span><span class="nombre">Compa</span></div>
+        <div class="cursor cursor-ai"><span class="flecha"></span><span class="nombre">Agente</span></div>
+      </div>
+
+      <div class="historial">
+        <span>Historial</span>
+        <div class="scrubber"><div class="scrubber-fill"></div><div class="perilla"></div></div>
+        <span>Guardado solo ✓</span>
+      </div>
+    </section>
+  </main>
+
+</body>
+</html>

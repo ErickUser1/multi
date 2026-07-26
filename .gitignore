@@ -1,0 +1,20 @@
+# deps
+node_modules/
+
+# workspaces de salas (proyectos de usuarios, cada uno con su propio git)
+workspaces/
+
+# env — API keys jamás al repo
+.env
+.env.*
+
+# builds
+dist/
+*.tsbuildinfo
+
+# logs
+*.log
+
+# os
+.DS_Store
+Thumbs.db

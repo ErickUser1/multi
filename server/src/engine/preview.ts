@@ -1,0 +1,144 @@
+import { spawn, type ChildProcess } from "node:child_process";
+import { createConnection, createServer } from "node:net";
+import type { Workspace } from "./workspace.js";
+
+export interface Preview {
+  roomId: string;
+  port: number;
+  url: string;
+  process: ChildProcess;
+  stop: () => Promise<void>;
+}
+
+// Rango de puertos para dev servers de salas. Una sala = un puerto.
+const BASE_PORT = 5200;
+const MAX_PORT = 5400;
+const usedPorts = new Set<number>();
+
+/** ¿El puerto está realmente libre en el sistema? */
+function isPortFree(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const probe = createServer();
+    probe.once("error", () => resolve(false));
+    probe.once("listening", () => probe.close(() => resolve(true)));
+    probe.listen(port, "127.0.0.1");
+  });
+}
+
+/**
+ * Siguiente puerto libre. Verifica contra el SISTEMA, no solo contra el Set:
+ * si el server reinició, procesos huérfanos de salas viejas pueden seguir
+ * ocupando puertos que el Set ya no recuerda (bug real que causaba 502 en el
+ * proxy: se asignaba un puerto ocupado por el vite de una sala muerta).
+ */
+async function nextPort(): Promise<number> {
+  for (let p = BASE_PORT; p <= MAX_PORT; p++) {
+    if (usedPorts.has(p)) continue;
+    if (await isPortFree(p)) {
+      usedPorts.add(p);
+      return p;
+    }
+  }
+  throw new Error(`no hay puertos libres en el rango ${BASE_PORT}-${MAX_PORT}`);
+}
+
+/**
+ * Arranca el dev server del workspace de una sala.
+ *
+ * Es genérico al stack: NO asume Vite. Usa `workspace.launch` (comando + args)
+ * que el proyecto declara — patrón launch.json de Claude Code Desktop. El motor
+ * solo "prende el server y reporta la URL"; quién la muestra (iframe) es otra pieza.
+ *
+ * Corre como PROCESO SEPARADO (no embebido) para aislamiento: si un preview
+ * crashea, no tumba el server de Multi. Alineado con el futuro Docker/openvscode.
+ */
+export async function startPreview(workspace: Workspace): Promise<Preview> {
+  const port = await nextPort();
+  const { command, args, portEnv } = workspace.launch;
+
+  const child = spawn(command, args, {
+    cwd: workspace.dir,
+    env: { ...process.env, ...(portEnv ? { [portEnv]: String(port) } : {}) },
+    // stdout/stderr capturados para logs y para detectar arranque; sin shell.
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  const tag = `[preview ${workspace.roomId}:${port}]`;
+  child.stdout?.on("data", (d) => process.stdout.write(`${tag} ${d}`));
+  child.stderr?.on("data", (d) => process.stderr.write(`${tag} ${d}`));
+
+  const url = `http://localhost:${port}`;
+
+  const stop = async (): Promise<void> => {
+    usedPorts.delete(port);
+    if (child.killed) return;
+    child.kill("SIGTERM");
+    // Gracia breve; si no muere, SIGKILL.
+    await new Promise<void>((resolve) => {
+      const t = setTimeout(() => {
+        child.kill("SIGKILL");
+        resolve();
+      }, 3000);
+      child.once("exit", () => {
+        clearTimeout(t);
+        resolve();
+      });
+    });
+  };
+
+  // Si el proceso muere solo (crash de install/dev), liberar el puerto.
+  child.once("exit", (code) => {
+    usedPorts.delete(port);
+    process.stdout.write(`${tag} proceso terminó (code ${code})\n`);
+  });
+
+  // Esperar a que el dev server acepte conexiones en el puerto antes de reportar.
+  await waitForPort(port, { timeoutMs: 120_000, child });
+
+  return { roomId: workspace.roomId, port, url, process: child, stop };
+}
+
+/** Sondea el puerto hasta que acepte una conexión TCP (dev server listo). */
+function waitForPort(
+  port: number,
+  opts: { timeoutMs: number; child: ChildProcess },
+): Promise<void> {
+  const { timeoutMs, child } = opts;
+  const deadline = Date.now() + timeoutMs;
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+
+    // Si el proceso muere antes de escuchar, fallar rápido.
+    const onExit = (code: number | null) => {
+      if (settled) return;
+      settled = true;
+      reject(new Error(`dev server terminó antes de escuchar (code ${code})`));
+    };
+    child.once("exit", onExit);
+
+    const attempt = () => {
+      if (settled) return;
+      const sock = createConnection({ port, host: "127.0.0.1" });
+      sock.once("connect", () => {
+        sock.destroy();
+        if (settled) return;
+        settled = true;
+        child.off("exit", onExit);
+        resolve();
+      });
+      sock.once("error", () => {
+        sock.destroy();
+        if (Date.now() > deadline) {
+          if (settled) return;
+          settled = true;
+          child.off("exit", onExit);
+          reject(new Error(`timeout esperando el dev server en :${port}`));
+          return;
+        }
+        setTimeout(attempt, 400);
+      });
+    };
+    attempt();
+  });
+}

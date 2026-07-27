@@ -234,6 +234,31 @@ Confundirlos fue el error del diseño original: usábamos la herramienta del his
 - **El servidor es la única autoridad** del estado de la sala. Los clientes no tienen repos.
 - **Snapshots shadow (truco de OpenCode) para el scrubber:** repo git paralelo en un directorio aparte que opera con `--git-dir shadow --work-tree real`, sin tocar el `.git` del usuario. Clave para que sea barato: `objects/info/alternates` apuntando al object store del repo real → reusa los blobs ya hasheados (en repos enormes, capturar pasa de minutos a instantáneo). Respeta `.gitignore` del usuario y excluye archivos grandes.
 - **Revert selectivo por archivo** (patrón OpenCode): para volver atrás, por cada archivo se restaura el snapshot MÁS ANTIGUO posterior al punto de corte. No es un reset global — es "deja cada archivo como estaba justo antes del primer cambio después de aquí".
+
+### Cuándo un archivo pasa de "en caliente" a "en el historial"
+
+**Disco = ahora. Commit = memoria.** Un archivo entra al historial cuando el agente TERMINA SU TURNO completo, no cuando se escribe. Un turno puede tocar 5 archivos → 1 solo commit.
+
+```
+t=1  escribe App.jsx   → CAS ok → a disco → HMR → TODOS lo ven (aún sin commit)
+t=2  escribe Menu.jsx  → CAS ok → a disco → HMR
+t=3  corre npm install
+t=4  TERMINA el turno  → 1 commit con los 3 cambios → punto en el scrubber
+```
+
+Por qué commit por turno y no por archivo: el commit es la unidad de SENTIDO, no de escritura. Por archivo, el scrubber se llena de ruido y —peor— guarda **estados intermedios rotos** (el componente escrito pero su import todavía no). Cada punto del scrubber debe ser un estado coherente y con nombre ("hizo el menú de tacos"), que es lo que tiene sentido restaurar.
+
+**Con varios agentes en paralelo la separación se luce:** el CAS los protege archivo por archivo en tiempo real; los commits salen desfasados, en orden de terminación, cada uno con su nombre. Y como el CAS ya garantizó que nadie sobrescribió a nadie, **el commit del segundo agente no necesita rebase** — el árbol ya es consistente cuando llega a git. El CAS resuelve el conflicto ANTES de que llegue a git; git solo registra historia, no arbitra peleas.
+
+### Turnos huérfanos (el server se cayó a media tarea)
+
+Ventana de riesgo: entre la primera escritura y el commit, el trabajo está en disco y **ya lo vieron todos**, pero no está en el historial.
+
+**Cómo se detecta:** el snapshot no es un objeto suelto — pertenece a un turno, y el turno tiene **estado durable** (en disco/DB, NO solo en memoria; si vive en memoria muere con el proceso y no queda rastro). Ciclo: `running` → `committed` | `failed`. Al arrancar, el server hace un **barrido de recuperación**: los turnos que quedaron en `running` son huérfanos por definición (un proceso que se apaga bien no deja turnos corriendo). Es el mismo patrón que OpenCode usa para tools colgadas (`failInterruptedTools` barre las `pending`/`running` al inicio de cada run).
+
+**Qué hacer con el huérfano — decisión: NO decidir automáticamente.** Se preserva el disco tal cual y la sala pregunta: *"El agente se interrumpió a media tarea. ¿Guardas lo que alcanzó a hacer o vuelves al último punto?"*. Razón: ese trabajo **ya está en disco y ya lo vieron todos en el preview** — descartarlo solo se sentiría como una traición; commitearlo a ciegas metería estados rotos al historial. El humano decide con el botón de "regresar" que ya existe. Encaja con "humanos en los bordes, lo irreversible es suyo".
+
+**Ciclo de vida del snapshot:** durante el turno son red de seguridad, no historial. Turno commiteado → sus snapshots intermedios son descartables (evita acumulación infinita). Turno huérfano → sus snapshots son lo único que queda del trabajo, se preservan hasta que el humano decida.
 - **Conflictos que escalan a humano = solo los de INTENCIÓN** ("¿botón azul o verde?"), no los de archivo. Los de archivo los resuelve el modelo con el mensaje del CAS. El paper mandaba todo a resolución manual porque asumía humanos tecleando.
 
 ### Working tree — decisión v1 (sin cambios)

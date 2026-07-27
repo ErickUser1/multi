@@ -13,9 +13,12 @@ import {
   membersList,
   stopAllPreviews,
   parseIntent,
+  wakeRoom,
+  loadRoomIndex,
   type Room,
   type SelectedElement,
 } from "./rooms.js";
+import { getStorage } from "./storage/index.js";
 import { MAX_AGENTS_PER_ROOM } from "./engine/agents.js";
 import { startTurn, commitTurn, failTurn } from "./engine/turns.js";
 import { commitAll, discardChanges } from "./engine/git.js";
@@ -125,7 +128,8 @@ io.on("connection", (socket) => {
   let joinedRoom: Room | null = null;
 
   socket.on("join", async ({ roomId, name }: { roomId: string; name: string }) => {
-    const room = getRoom(roomId);
+    // Si no está en memoria, puede existir en la BD (el server reinició).
+    const room = getRoom(roomId) ?? (await wakeRoom(roomId));
     if (!room) {
       socket.emit("error:join", { message: "sala no encontrada" });
       return;
@@ -134,7 +138,9 @@ io.on("connection", (socket) => {
     socket.join(roomId);
     const member = addMember(room, socket.id, name || "anónimo");
 
-    // Estado inicial para el que entra.
+    // Estado inicial para el que entra, con el chat que ya existía.
+    const storage = await getStorage();
+    const history = await storage.getMessages(roomId);
     socket.emit("joined", {
       roomId,
       you: member,
@@ -142,6 +148,13 @@ io.on("connection", (socket) => {
       previewUrl: room.preview?.url ?? null,
       agents: room.agents.list(),
       orphanTurns: room.orphanTurns ?? [],
+      messages: history.map((m) => ({
+        from: m.author,
+        color: m.color,
+        role: m.role,
+        text: m.text,
+        anchoredTo: m.anchoredTo,
+      })),
     });
     // Avisar a los demás de la nueva presencia.
     socket.to(roomId).emit("presence", { members: membersList(room) });
@@ -159,7 +172,7 @@ io.on("connection", (socket) => {
     if (!member) return;
 
     // 1) Eco del mensaje humano a toda la sala (con marca de anclaje si aplica).
-    io.to(room.id).emit("chat:message", {
+    void say(room, {
       from: member.name,
       color: member.color,
       role: "human",
@@ -274,8 +287,31 @@ io.on("connection", (socket) => {
   });
 });
 
+/** Emite un mensaje a la sala Y lo persiste, para que sobreviva al reinicio. */
+async function say(
+  room: Room,
+  msg: { from: string; color: string; role: "human" | "agent" | "system"; text: string; anchoredTo?: string },
+): Promise<void> {
+  io.to(room.id).emit("chat:message", msg);
+  try {
+    const storage = await getStorage();
+    await storage.appendMessage({
+      roomId: room.id,
+      author: msg.from,
+      color: msg.color,
+      role: msg.role,
+      text: msg.text,
+      anchoredTo: msg.anchoredTo,
+      createdAt: Date.now(),
+    });
+    await storage.touchRoom(room.id);
+  } catch (err) {
+    console.error(`[sala ${room.id}] no se pudo persistir el mensaje:`, err);
+  }
+}
+
 function systemMsg(room: Room, text: string, color = "#a9abd0"): void {
-  io.to(room.id).emit("chat:message", { from: "sistema", color, role: "system", text });
+  void say(room, { from: "sistema", color, role: "system", text });
 }
 
 /** Cola de mensajes pendientes por agente (para el coalescing del coordinador). */
@@ -318,7 +354,12 @@ async function runAgentTurn(
   io.to(room.id).emit("agents", { agents: room.agents.list() });
 
   const turn = await startTurn(room.workspace.dir, { roomId: room.id, agentId, task });
-  const history = room.histories.get(agentId) ?? [];
+  // Si la sala despertó tras un reinicio, el historial vive en la BD.
+  let history = room.histories.get(agentId);
+  if (!history) {
+    history = await (await getStorage()).getAgentHistory(room.id, agentId);
+    room.histories.set(agentId, history);
+  }
 
   try {
     const result = await runAgent({
@@ -355,13 +396,15 @@ async function runAgentTurn(
       },
     });
 
-    io.to(room.id).emit("chat:message", {
+    await say(room, {
       from: agent.name,
       color: agent.color,
       role: "agent",
       text: result.finalText,
     });
     room.histories.set(agentId, result.messages);
+    // Persistir la conversación del agente para que continúe tras un reinicio.
+    void getStorage().then((s) => s.saveAgentHistory(room.id, agentId, result.messages));
 
     // Canal 2: el turno cierra con UN commit (unidad de sentido del scrubber).
     const hash = await commitTurn(room.workspace.dir, turn, { summary: result.finalText });
@@ -419,7 +462,12 @@ process.on("SIGTERM", () => void shutdown("SIGTERM"));
 try {
   await fastify.listen({ port: PORT, host: "0.0.0.0" });
   hookPreviewProxy();
-  console.log(`Multi server en http://localhost:${PORT}  (provider: ${provider.name})`);
+  // Las salas no se despiertan al arrancar: sería carísimo levantar N dev
+  // servers. Cada una despierta cuando alguien entra (wakeRoom).
+  const salas = await loadRoomIndex();
+  console.log(
+    `Multi server en http://localhost:${PORT}  (provider: ${provider.name}, ${salas} sala(s) guardada(s))`,
+  );
 } catch (err) {
   fastify.log.error(err);
   process.exit(1);

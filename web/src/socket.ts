@@ -72,6 +72,8 @@ export interface JoinedPayload {
   agents?: Agent[];
   /** Turnos que quedaron a medias por un crash; el humano decide qué hacer. */
   orphanTurns?: OrphanTurn[];
+  /** El chat que ya existía en la sala (persistido). */
+  messages?: ChatMessage[];
 }
 
 // ── API HTTP ────────────────────────────────────────────────────────────────

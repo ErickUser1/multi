@@ -159,6 +159,8 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
       if (p.previewUrl) setPreviewReady(true);
       if (p.agents) setAgents(p.agents);
       if (p.orphanTurns?.length) setOrphans(p.orphanTurns);
+      // El chat que ya existía en la sala (sobrevivió al reinicio).
+      if (p.messages?.length) setMessages(p.messages);
     });
     socket.on("presence", ({ members }: { members: Member[] }) => setMembers(members));
     socket.on("preview:ready", () => setPreviewReady(true));

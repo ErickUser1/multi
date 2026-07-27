@@ -5,6 +5,7 @@ import type { Message } from "./agent/providers/types.js";
 import { AgentRegistry } from "./engine/agents.js";
 import { RunCoordinator } from "./engine/coordinator.js";
 import { sweepOrphans, type Turn } from "./engine/turns.js";
+import { getStorage } from "./storage/index.js";
 
 /** Un miembro humano conectado a la sala. */
 export interface Member {
@@ -64,8 +65,9 @@ export function colorFor(index: number): string {
  * instala deps y arranca el preview. Devuelve la sala lista.
  */
 export async function createRoom(): Promise<Room> {
+  const storage = await getStorage();
   let id = genId();
-  while (rooms.has(id)) id = genId();
+  while (rooms.has(id) || (await storage.getRoom(id))) id = genId();
 
   const workspace = await createWorkspace(id, { clean: true });
 
@@ -81,10 +83,50 @@ export async function createRoom(): Promise<Room> {
   };
   rooms.set(id, room);
 
+  const now = Date.now();
+  await storage.createRoom({ id, workspaceDir: workspace.dir, createdAt: now, lastActiveAt: now });
+
   // Instalar deps + arrancar preview en background (no bloquea la creación).
   void bootPreview(room);
 
   return room;
+}
+
+/**
+ * Despierta una sala que existe en la BD pero no está en memoria (el server
+ * reinició). El proyecto ya vive en disco con su git; aquí se reconstruye el
+ * estado de la sala y se vuelve a arrancar su preview.
+ */
+export async function wakeRoom(id: string): Promise<Room | null> {
+  if (rooms.has(id)) return rooms.get(id)!;
+
+  const storage = await getStorage();
+  const stored = await storage.getRoom(id);
+  if (!stored) return null;
+
+  const room: Room = {
+    id,
+    // El workspace ya existe en disco: NO se re-siembra ni se limpia.
+    workspace: await createWorkspace(id, { seed: false }),
+    preview: null,
+    members: new Map(),
+    histories: new Map(),
+    selections: new Map(),
+    agents: new AgentRegistry(),
+    coordinator: new RunCoordinator(),
+  };
+  rooms.set(id, room);
+
+  await storage.touchRoom(id);
+  void bootPreview(room);
+  return room;
+}
+
+/** Carga el índice de salas al arrancar (sin despertarlas: eso es perezoso). */
+export async function loadRoomIndex(): Promise<number> {
+  const storage = await getStorage();
+  const list = await storage.listRooms();
+  return list.length;
 }
 
 /** npm install + arranca el preview de la sala. Best-effort, en background. */

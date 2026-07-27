@@ -1,0 +1,47 @@
+import type { Message } from "../agent/providers/types.js";
+
+/**
+ * Capa de persistencia de Multi.
+ *
+ * Abstracta a propósito: SQLite es el default (clonas el repo y corre, cero
+ * setup — importante para open source), pero la interfaz deja la puerta abierta
+ * a Postgres/Supabase cuando haya varios servidores.
+ */
+
+export interface StoredRoom {
+  id: string;
+  workspaceDir: string;
+  createdAt: number;
+  lastActiveAt: number;
+}
+
+export interface StoredMessage {
+  roomId: string;
+  author: string;
+  color: string;
+  role: "human" | "agent" | "system";
+  text: string;
+  anchoredTo?: string;
+  createdAt: number;
+}
+
+export interface Storage {
+  /** Crea el esquema si hace falta. */
+  init(): Promise<void>;
+
+  createRoom(room: StoredRoom): Promise<void>;
+  getRoom(id: string): Promise<StoredRoom | null>;
+  listRooms(): Promise<StoredRoom[]>;
+  /** Marca actividad reciente (para saber qué salas siguen vivas). */
+  touchRoom(id: string): Promise<void>;
+
+  appendMessage(msg: StoredMessage): Promise<void>;
+  /** Los mensajes de una sala, en orden. */
+  getMessages(roomId: string, limit?: number): Promise<StoredMessage[]>;
+
+  /** Historial de conversación de un agente (para que continúe donde iba). */
+  saveAgentHistory(roomId: string, agentId: string, messages: Message[]): Promise<void>;
+  getAgentHistory(roomId: string, agentId: string): Promise<Message[]>;
+
+  close(): Promise<void>;
+}

@@ -23,6 +23,7 @@ import { MAX_AGENTS_PER_ROOM } from "./engine/agents.js";
 import { startTurn, commitTurn, failTurn } from "./engine/turns.js";
 import { commitAll, discardChanges, diffCommit, revertTo, revertFile } from "./engine/git.js";
 import { getHistory, setBookmark } from "./engine/history.js";
+import { buildApiMap } from "./engine/api-map.js";
 import { handlePreviewRequest, handlePreviewUpgrade } from "./engine/proxy.js";
 import { runAgent } from "./agent/loop.js";
 import { AnthropicProvider } from "./agent/providers/anthropic.js";
@@ -91,6 +92,13 @@ fastify.get<{ Params: { id: string } }>("/rooms/:id/history", async (req, reply)
   const room = getRoom(req.params.id) ?? (await wakeRoom(req.params.id));
   if (!room) return reply.code(404).send({ error: "sala no encontrada" });
   return { entries: await getHistory(room.workspace.dir) };
+});
+
+// El mapa del back: qué endpoints llama el front y cuáles existen de verdad.
+fastify.get<{ Params: { id: string } }>("/rooms/:id/api-map", async (req, reply) => {
+  const room = getRoom(req.params.id) ?? (await wakeRoom(req.params.id));
+  if (!room) return reply.code(404).send({ error: "sala no encontrada" });
+  return await buildApiMap(room.workspace.dir);
 });
 
 // El diff de un turno — opt-in, no se muestra por defecto.

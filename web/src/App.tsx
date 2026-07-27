@@ -16,6 +16,7 @@ import {
 import { AgentList } from "./AgentList.js";
 import { MentionMenu } from "./MentionMenu.js";
 import { Historial } from "./Historial.js";
+import { BackCanvas, type Endpoint } from "./BackCanvas.js";
 
 // El roomId vive en el hash de la URL: #/sala/taco-fiesta-42
 function readRoomFromHash(): string | null {
@@ -133,6 +134,10 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
   const [mention, setMention] = useState<string | null>(null);
   /** Se incrementa cuando el historial cambia, para que el scrubber recargue. */
   const [histVersion, setHistVersion] = useState(0);
+  /** Se incrementa cuando cambia un archivo, para que el mapa del back recargue. */
+  const [apiVersion, setApiVersion] = useState(0);
+  /** Qué tab del escenario se ve. */
+  const [tab, setTab] = useState<"app" | "back">("app");
 
   // Modo inspect activo (para seleccionar elementos del preview).
   const [inspect, setInspect] = useState(false);
@@ -145,6 +150,7 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
 
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const escenarioRef = useRef<HTMLElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
   // El iframe apunta al PROXY del server (que inyecta el inspector), no al dev server directo.
   const previewSrc = `${SERVER_URL}/preview/${roomId}`;
@@ -172,6 +178,9 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
     socket.on("history:new", () => setHistVersion((v) => v + 1));
     socket.on("history:changed", () => setHistVersion((v) => v + 1));
     socket.on("orphans", ({ turns }: { turns: OrphanTurn[] }) => setOrphans(turns));
+    // Un archivo cambió: el contrato front/back pudo haberse movido. El mismo
+    // canal de tiempo real que alimenta el preview alimenta el semáforo.
+    socket.on("file:changed", () => setApiVersion((v) => v + 1));
 
     socket.on("chat:message", (m: ChatMessage) => {
       setMessages((prev) => [...prev, m]);
@@ -284,6 +293,22 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
     }
   };
 
+  /**
+   * Anclar un endpoint al chat. A diferencia del anclaje del preview (que manda
+   * un SelectedElement del DOM), aquí se redacta el pedido en el borrador: el
+   * usuario lo lee, lo edita si quiere, y decide cuándo mandarlo.
+   */
+  const anclarEndpoint = (e: Endpoint) => {
+    const donde = e.calls[0] ? ` (el front lo llama desde ${e.calls[0].file})` : "";
+    const texto =
+      e.status === "faltante"
+        ? `@agente crea el endpoint ${e.method} ${e.path}${donde}`
+        : `@agente sobre el endpoint ${e.method} ${e.path}: `;
+    setDraft(texto);
+    setTab("app");
+    inputRef.current?.focus();
+  };
+
   // Menú de menciones: se abre al escribir "@" al inicio de una palabra.
   const onDraftChange = (value: string) => {
     setDraft(value);
@@ -375,6 +400,7 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
               <MentionMenu agents={agents} query={mention} onPick={pickMention} />
             )}
             <input
+              ref={inputRef}
               className="caja"
               placeholder="habla con la sala — o escribe @agente para pedir algo"
               value={draft}
@@ -411,11 +437,21 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
         </div>
 
         <div className="tabs">
-          <div className="tab activa">La app</div>
-          <div className="tab disabled">El back</div>
+          <button className={`tab ${tab === "app" ? "activa" : ""}`} onClick={() => setTab("app")}>
+            La app
+          </button>
+          <button className={`tab ${tab === "back" ? "activa" : ""}`} onClick={() => setTab("back")}>
+            El back
+          </button>
         </div>
 
-        <div className="lienzo">
+        {tab === "back" && (
+          <div className="lienzo">
+            <BackCanvas roomId={roomId} version={apiVersion} onAnclar={anclarEndpoint} />
+          </div>
+        )}
+
+        <div className="lienzo" style={tab === "back" ? { display: "none" } : undefined}>
           {previewReady ? (
             <>
               <iframe

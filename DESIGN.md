@@ -319,6 +319,25 @@ El problema técnico: el proyecto en disco es CÓDIGO FUENTE (JSX/TS). El dev se
 - **4b-mínima:** lista de agentes con sus 3 estados + atribución por agente en el chat + autocompletado de `@` + aviso de turnos huérfanos. SIN representación en el preview. Ya se ve el multi-agente funcionando.
 - **4b-plus (después):** el resaltado del elemento afectado. Requiere el mapeo archivo→elemento visual, que NO es trivial (saber que `Menu.jsx` es ese `<nav>`). Se construye junto con el mapeo del back visual (Fase 6), no improvisado.
 
+## Fase 6 — El back visual: lo que hay y el issue abierto
+
+**Construido (punto de partida, funcionando):** `engine/api-map.ts` + `web/BackCanvas.tsx` + `GET /rooms/:id/api-map`. Escanea el workspace con regex, cruza lo que el FRONT llama (`fetch`, `axios.*`, `useSWR`) contra lo que el BACK declara (`app.get`, `router.post`, rutas por convención de archivo tipo `app/api/x/route.ts`), y dibuja una card por endpoint con semáforo: **punteado** (el front lo llama, no existe), **verde** (existe y lo usan), **gris** (existe, nadie lo llama). Se actualiza en vivo por `file:changed`. Click en una card redacta el pedido en el chat. Verificado: `npm run demo:back`, 12/12.
+
+**El issue abierto: falta lo que guarda la app (las tablas).** Un endpoint es lenguaje de programador; `GET /api/pedidos` no le dice nada a alguien que no programa. Lo que un compa necesita saber para no chocar es *qué guarda esto*.
+
+**Por qué importa aquí y no en Lovable.** Lovable esconde el back porque es un jugador con un agente: todo el estado vive en su chat. Multi es multijugador — si tu compa hizo que se guardaran pedidos y tú no te enteras, pides algo que choca y acabas pegando dos backends que no se conocen. Ese es el dolor del que nació el producto. La contra legítima: "si quieres saber, pregúntale al agente o al compa en el chat". Cierto, pero uno no pregunta por una tabla que no sospecha que existe — las pantallas no responden preguntas, las provocan.
+
+**Callejones ya recorridos (no repetirlos):**
+- **Leer las migraciones** — son un histórico incremental (`create table`, luego `add column`, luego `drop column`). Saber cómo está la tabla HOY exige replayearlas en orden y en el dialecto correcto. Además mucha gente no usa migraciones.
+- **Un `schema.sql` que el agente mantenga** — es una copia sincronizada a mano, y las copias se desincronizan. Sería un artefacto que existe solo para que la pantalla se vea bien: el mismo error del mock incrustado (ver `multi-mocks-aparte`).
+- **Leer el archivo del ORM** (`schema.prisma`, `models.py`) — no cubre a quien corre queries directos en el dashboard de Supabase. Ese flujo es legítimo, deja la base perfecta y el proyecto sin rastro alguno.
+
+**A dónde habíamos llegado:** todos los caminos anteriores leen *representaciones* del esquema, y una representación puede mentir. La única fuente que no puede mentir sobre sí misma es **la base viva**. Y no hace falta que Multi escriba un cliente por cada motor: **el agente ya tiene las creds del `.env` y una terminal** — puede preguntarle a la base y reportar el resultado, igual que hace el setup del front. La agnosticidad no la da un detector nuestro; ya la tiene el motor (IDE + agente que instala y corre lo que sea).
+
+**Cuidados si se retoma:** (1) preguntarle a la base cuesta conexión — refrescar al cerrar un turno que tocó datos o bajo demanda, no en cada `file:changed`; (2) si no hay creds o la base está apagada, decirlo ("no me pude conectar"), nunca mostrar vacío que parezca "no hay tablas"; (3) estructura sí, datos no por default — en una sala compartida las filas pueden ser sensibles; (4) si el canvas refleja lo que el agente reporta, un cambio no reportado lo deja viejo en silencio: atarlo al cierre de turno.
+
+**Los tres bloques que tendría el tab completo** (qué guarda / qué responde / qué necesita para vivir): tablas con sus campos; endpoints (ya construido); y variables de entorno **por nombre, nunca por valor** — que exista `STRIPE_KEY` y esté puesta, sin enseñar el secreto. Explicar la lógica de negocio en prosa queda FUERA: eso es interpretación, envejece, y para eso está el chat.
+
 ### Cuándo un archivo pasa de "en caliente" a "en el historial"
 
 **Disco = ahora. Commit = memoria.** Un archivo entra al historial cuando el agente TERMINA SU TURNO completo, no cuando se escribe. Un turno puede tocar 5 archivos → 1 solo commit.

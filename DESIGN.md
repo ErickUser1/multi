@@ -107,6 +107,11 @@ Se evaluó ser "capa intermedia" (contrato compartido entre Lovable y Claude Cod
 2. **Estado 100% visible** — preview del front compartido en vivo + back desabstraído en el mismo canvas (schema como diagrama vivo, endpoints con estado visual: punteado/gris = mock, sólido/verde = real, rojo = mismatch). Click a un botón del preview ilumina la ruta botón → request → endpoint → tabla.
 3. **Click-to-edit anclado** — seleccionas un componente (o tabla del back); tu selección se ilumina para todos (cursor con nombre estilo Figma); el mensaje queda anclado al componente; el cambio se renderea en vivo para todos.
 
+   **PENDIENTES de pulido (Fase 3 construida, falta refinar):**
+   - **Cursor remoto dentro del preview.** Hoy el cursor de otros se dibuja sobre el ESCENARIO (el marco), no dentro del iframe — o sea no se ve exactamente sobre el elemento que el compa está mirando. Fix: el inspector.js (que ya vive dentro del iframe) reporta también la posición del mouse por postMessage, igual que ya hace con los clicks (~10 líneas, mismo camino probado). Esto NO es solo estético: ver que tu compa señala ESE botón es la esencia del "todos ven lo mismo".
+   - **Estética del cursor**: hoy es un SVG genérico y feo. Pulido puro.
+   - **Edits deterministas (Replit-style)**: texto/color/spacing directo al código sin agente. Es v2 (ver principio 5 del diseño). La base ya existe: el sistema ya sabe QUÉ elemento se seleccionó y su selector.
+
    **Cómo se inyecta el inspector (decidido — reverse proxy, patrón ui-annotator-mcp):** el preview se sirve vía un reverse proxy en el server de Multi (`/preview/:roomId` → dev server de la sala), NO tocando el proyecto del workspace (agnóstico al stack: funciona con Vite/Next/Astro/HTML puro). El proxy es **`http` de Node puro, cero libs** (ui-annotator lo hace así en ~50 líneas; las libs de Fastify complican el transform de HTML + WS). Para respuestas HTML: inyecta `<script>` inspector antes de `</body>`, **reescribe `href="/..."` y `src="/..."`** para que las rutas pasen por el proxy, y **quita el header Content-Security-Policy** para permitir el script. CSS/JS/imágenes pasan directo. Da same-origin gratis (resuelve el cross-origin del iframe → el inspector puede LEER el DOM). Diferencia con ui-annotator: ellos usan GET polling cada seg; Multi NO — el script inyectado manda el click por `postMessage` al padre (la sala), y la sala (que tiene socket.io) lo retransmite a todos + al agente. Ref: github.com/mcpware/ui-annotator-mcp, issue slopus/happy#802.
 
    **4 cuidados del click-to-select:** (1) validar `event.origin` en el listener de postMessage (no confiar en '*'); (2) el anclaje usa la selección LOCAL del usuario que manda, no una global (cada quien la suya, con su color); (3) al agente se manda TEXTO legible (tag/clases/texto/selector para grep), NO el JSON crudo con bbox; (4) al mandar mensaje anclado → limpiar la selección.
@@ -196,30 +201,52 @@ Adaptación del paper "Realtime GitHub" a nuestro caso (escritor = agente en bur
 
 ### Los DOS canales (dos velocidades, independientes)
 
-- **CANAL 1 — TIEMPO REAL (lo que ven todos en vivo):** cada `Write`/`Edit` emite `file:changed` → el dev server (Vite) hace HMR → el preview (iframe) se refresca AL INSTANTE, archivo por archivo, MIENTRAS el agente trabaja. NO espera al commit. El canvas del back (semáforo mock/real) igual: la pieza pasa de gris a verde en vivo. Red de seguridad ("el preview nunca muere"): si un estado intermedio rompería el render (componente sin su import), el motor espera al siguiente estado válido en vez de pantalla blanca.
+- **CANAL 1 — TIEMPO REAL (lo que ven todos en vivo):** cada `Write`/`Edit` emite `file:changed` → el dev server (Vite) hace HMR → el preview (iframe) se refresca AL INSTANTE, archivo por archivo, MIENTRAS el agente trabaja. NO espera al commit.
+  - **Listener eager (lección de OpenCode):** suscribir al bus de eventos ANTES de abrir el stream al cliente. Si no, se pierden los eventos emitidos en la ventana entre "el cliente conecta" y "el stream está listo" → se manifiesta como *"a veces falta el primer tool call"*, un bug horrible de diagnosticar. Aplica a nuestro socket.io igual.
+  - **Semáforo de publicación (lección de OpenCode):** con tools corriendo en paralelo, sus eventos llegan intercalados. Serializar la publicación (permit=1) para que el orden que ve la UI sea coherente. El canvas del back (semáforo mock/real) igual: la pieza pasa de gris a verde en vivo. Red de seguridad ("el preview nunca muere"): si un estado intermedio rompería el render (componente sin su import), el motor espera al siguiente estado válido en vez de pantalla blanca.
 - **CANAL 2 — GUARDADO (el historial):** el agente termina su turno → 1 commit. Es el checkpoint que alimenta el scrubber. Invisible ("guardado solo", como Docs). **Commit ≠ visualización:** el commit es solo el álbum de fotos; el preview va por el Canal 1, por delante, sin esperarlo.
 
-### El commit y la cola (Canal 2 en detalle)
+### DOS problemas distintos, DOS mecanismos (corrección tras estudiar OpenCode)
 
-- **Unidad de commit = por TURNO de agente** (cuando termina SU tarea), no por archivo ni por tiempo. El scrubber muestra cambios con sentido ("puso el botón verde"), no ruido.
-- **"Por turnos" NO significa que los agentes se turnen** — trabajan en PARALELO, libres, cada uno su cursor, ninguno sabe del otro. "Turno" = el turno de ESE agente al terminar. La coordinación NO vive en los agentes → vive en el servidor.
-- **El servidor es la única autoridad del hash** de la sala. Los clientes no tienen repos; solo ven el preview y reciben "el estado es X". El motor (openvscode-server) tiene EL repo.
-- **Cola FIFO de commits + validación de hash en el dequeue** (control de concurrencia optimista, = el compare-and-swap del paper). Cada agente propone su cambio + el **hash base** del que partió. El server procesa la cola de una en una:
-  ```
-  saca propuesta (FIFO) →
-    ¿su hash base == estado actual del server?
-      SÍ                → aplica commit, avanza estado, notifica a todos
-      NO, sin solape     → rebasea sobre el estado actual, aplica, notifica
-      NO, con solape     → congela, dispara el modal de VOTO humano
-  ```
-  El hash base es el seguro: sin él, un agente que partió de un estado viejo pisaría el trabajo de otro. FIFO da el orden; el hash-check garantiza que nadie sobrescribe.
-- **Tres desenlaces:** aplica directo (90%) / rebase automático (zonas distintas — git lo hace limpio) / conflicto real de mismo pedazo → NO auto-resuelve → modal de voto (git detecta la sintaxis, los humanos deciden la intención). El paper mandaba todo a resolución manual porque asumía humanos tecleando; nosotros auto-rebaseamos la mayoría (agentes escriben en zonas separadas casi siempre) y solo votamos el choque real.
+Confundirlos fue el error del diseño original: usábamos la herramienta del historial (hash del árbol completo) para resolver la concurrencia de escrituras. Se separan:
 
-### Working tree — decisión v1
+| | **Problema A: escrituras concurrentes** | **Problema B: historial y volver atrás** |
+|---|---|---|
+| Escala | segundos | minutos/horas |
+| Pregunta | ¿quién escribe qué AHORA? | ¿cómo estaba el proyecto ANTES? |
+| Mecanismo | **CAS por archivo** (OpenCode) | **commit por turno + git** (paper) |
+| Grano | un archivo | el proyecto entero |
 
-**Mismo working tree compartido, con las ESCRITURAS serializadas por la cola** (no solo los commits). Los agentes "piensan" en paralelo (llaman al modelo simultáneamente, ahí está el tiempo), pero sus operaciones de escritura al filesystem pasan por la misma cola → nunca dos escrituras físicas al mismo instante → cero race conditions de filesystem. Un solo tree, un solo dev server, un solo preview. Simple.
+**Lo único que se cae del diseño original:** el compare-and-swap sobre el hash del ÁRBOL COMPLETO con rebase automático. Era demasiado grueso — dos agentes tocando archivos distintos se estorbaban sin razón. Todo lo demás del paper sigue vigente.
 
-**Evolución futura (NO v1):** worktrees aislados por agente (cada uno un branch/worktree efímero desde el hash base, se proyecta al tree de la sala) — esto es lo que hace el paper ("branch barato desde cualquier estado, merge al terminar"). Se migra cuando el multi-agente pesado (npm installs largos en paralelo) empiece a bloquear la cola. Decisión reversible, no cierra puertas.
+### Problema A — escrituras concurrentes: CAS por archivo (patrón OpenCode)
+
+- **Compare-and-swap POR ARCHIVO, no por proyecto.** Cada tool de escritura manda "espero que este archivo tenga estos bytes" (los que leyó). Si nadie lo tocó → escribe. Si cambió → falla con `StaleContentError`. Dos agentes en archivos distintos **nunca se estorban**.
+- **El read-compare-write es atómico** vía un mutex por ruta canónica de archivo (`KeyedMutex`: misma clave → cola, claves distintas → paralelo). Y la escritura va en un bloque no-interrumpible: nunca queda un archivo a medio escribir.
+- **El error va dirigido al MODELO, no al humano.** Mensaje estilo OpenCode: *"El archivo cambió después de que lo leíste. Léelo otra vez antes de editar."* → el LLM lo resuelve solo, sin interrumpir a nadie. En multi-agente esto pasa seguido; tiene que ser recuperable sin humano.
+- **Mejora propia sobre OpenCode (encaja con "todos ven todo"):** al fallar el CAS, decirle al agente **QUIÉN** lo cambió y hace cuánto ("el agente del front tocó este archivo hace 12s"). OpenCode no lo tiene; el punto de enganche ya existe.
+- **Coordinador por sala con coalescing** (patrón `run-coordinator` de OpenCode, ~100 líneas): un solo "drain" activo por sala, salas distintas en paralelo. Tres comportamientos a copiar: (1) **join en vez de encolar** — dos requests para la misma sala comparten la misma ejecución, no arrancan dos loops; (2) **coalescing de wakeups** — si llegan 5 mensajes mientras el agente trabaja, se arranca UNA sola ejecución al terminar (sin esto, con dos compas escribiendo en vivo, se queman tokens en ejecuciones redundantes); (3) **flag `stopping` con retry** — cierra la carrera cancelar/reiniciar (el bug que muerde a las 3 semanas).
+
+### Problema B — historial: commit por turno (paper, sigue vigente)
+
+- **Unidad de commit = por TURNO de agente** (cuando termina SU tarea). El scrubber muestra cambios con sentido ("puso el botón verde"), no ruido.
+- **"Por turnos" NO significa que los agentes se turnen** — trabajan en PARALELO. "Turno" = el turno de ESE agente al terminar.
+- **El servidor es la única autoridad** del estado de la sala. Los clientes no tienen repos.
+- **Snapshots shadow (truco de OpenCode) para el scrubber:** repo git paralelo en un directorio aparte que opera con `--git-dir shadow --work-tree real`, sin tocar el `.git` del usuario. Clave para que sea barato: `objects/info/alternates` apuntando al object store del repo real → reusa los blobs ya hasheados (en repos enormes, capturar pasa de minutos a instantáneo). Respeta `.gitignore` del usuario y excluye archivos grandes.
+- **Revert selectivo por archivo** (patrón OpenCode): para volver atrás, por cada archivo se restaura el snapshot MÁS ANTIGUO posterior al punto de corte. No es un reset global — es "deja cada archivo como estaba justo antes del primer cambio después de aquí".
+- **Conflictos que escalan a humano = solo los de INTENCIÓN** ("¿botón azul o verde?"), no los de archivo. Los de archivo los resuelve el modelo con el mensaje del CAS. El paper mandaba todo a resolución manual porque asumía humanos tecleando.
+
+### Working tree — decisión v1 (sin cambios)
+
+**Mismo working tree compartido.** Ya NO se serializan todas las escrituras por una cola global (eso era el diseño viejo): el CAS por archivo + mutex por ruta da paralelismo real con seguridad. Un solo tree, un solo dev server, un solo preview.
+
+**Evolución futura (NO v1):** worktrees aislados por agente. Nota: OpenCode los tiene implementados (`worktree/index.ts`) pero como aislamiento OPCIONAL y manual, no como el modo por defecto de sus agentes — coincide con nuestra decisión.
+
+### Lecciones de OpenCode sobre lo que NO tiene (= nuestro hueco)
+
+- **No tiene coordinación semántica entre agentes** sobre el mismo workspace: su "coordinación" para subagentes es prompt engineering (*"DO NOT duplicate this task's work — avoid working with the same files"*). Literalmente les piden por favor que no se pisen. **Ese es el hueco que Multi llena.**
+- **No tiene colaboración de varios humanos** sobre una sesión (su stream es broadcast read-only, el steering no tiene identidad de autor).
+- **No recupera la ejecución tras un crash** (el historial sobrevive, el turno en curso no). Para Multi: el estado del proyecto vive en git (sobrevive), y los agentes son reactivos (el humano re-dispara si hace falta).
 
 ### Lo que NO tomamos del paper
 

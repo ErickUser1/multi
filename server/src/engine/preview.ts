@@ -1,5 +1,8 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { createConnection, createServer } from "node:net";
+import { readFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import type { Workspace } from "./workspace.js";
 
 export interface Preview {
@@ -42,19 +45,56 @@ async function nextPort(): Promise<number> {
   throw new Error(`no hay puertos libres en el rango ${BASE_PORT}-${MAX_PORT}`);
 }
 
+/** Cómo levantar el proyecto. Sale de lo que el AGENTE escribió, no de un molde. */
+export interface Launch {
+  command: string;
+  args: string[];
+  /** Variable por la que se le pasa el puerto (la mayoría de dev servers usan PORT). */
+  portEnv?: string;
+}
+
+/**
+ * ¿Hay algo que levantar en este workspace?
+ *
+ * La sala nace vacía: hasta que el agente no scaffoldee un proyecto, no hay dev
+ * server que arrancar y eso NO es un error — es el estado normal al empezar.
+ *
+ * No asume el stack: lee lo que el proyecto declara. Hoy soporta `package.json`
+ * con un script de desarrollo (cubre Vite, Next, Nuxt, Astro, Remix y demás).
+ * Otros ecosistemas se suman aquí, sin tocar el resto del motor.
+ */
+export async function detectLaunch(dir: string): Promise<Launch | null> {
+  const pkgPath = join(dir, "package.json");
+  if (!existsSync(pkgPath)) return null;
+
+  let scripts: Record<string, string> = {};
+  try {
+    const pkg = JSON.parse(await readFile(pkgPath, "utf8"));
+    scripts = pkg?.scripts ?? {};
+  } catch {
+    return null; // package.json a medio escribir (el agente sigue trabajando)
+  }
+
+  // Orden por convención: el primero que exista gana.
+  const script = ["dev", "start", "serve"].find((s) => typeof scripts[s] === "string");
+  if (!script) return null;
+
+  return { command: "npm", args: ["run", script], portEnv: "PORT" };
+}
+
 /**
  * Arranca el dev server del workspace de una sala.
  *
- * Es genérico al stack: NO asume Vite. Usa `workspace.launch` (comando + args)
- * que el proyecto declara — patrón launch.json de Claude Code Desktop. El motor
- * solo "prende el server y reporta la URL"; quién la muestra (iframe) es otra pieza.
+ * Es genérico al stack: NO asume Vite. El `launch` sale de `detectLaunch`, que
+ * lee lo que el proyecto declara. El motor solo "prende el server y reporta la
+ * URL"; quién la muestra (iframe) es otra pieza.
  *
  * Corre como PROCESO SEPARADO (no embebido) para aislamiento: si un preview
  * crashea, no tumba el server de Multi. Alineado con el futuro Docker/openvscode.
  */
-export async function startPreview(workspace: Workspace): Promise<Preview> {
+export async function startPreview(workspace: Workspace, launch: Launch): Promise<Preview> {
   const port = await nextPort();
-  const { command, args, portEnv } = workspace.launch;
+  const { command, args, portEnv } = launch;
 
   const child = spawn(command, args, {
     cwd: workspace.dir,

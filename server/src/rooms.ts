@@ -1,5 +1,5 @@
 import { createWorkspace, type Workspace } from "./engine/workspace.js";
-import { startPreview, type Preview } from "./engine/preview.js";
+import { startPreview, detectLaunch, type Preview } from "./engine/preview.js";
 import { spawn } from "node:child_process";
 import type { Message } from "./agent/providers/types.js";
 import { AgentRegistry } from "./engine/agents.js";
@@ -30,6 +30,8 @@ export interface Room {
   id: string;
   workspace: Workspace;
   preview: Preview | null;
+  /** Hay un arranque de preview en curso (evita dos npm install a la vez). */
+  previewBooting?: boolean;
   members: Map<string, Member>;
   /** Historial de chat POR AGENTE (cada agente tiene su propia conversación). */
   histories: Map<string, Message[]>;
@@ -107,7 +109,7 @@ export async function wakeRoom(id: string): Promise<Room | null> {
   const room: Room = {
     id,
     // El workspace ya existe en disco: NO se re-siembra ni se limpia.
-    workspace: await createWorkspace(id, { seed: false }),
+    workspace: await createWorkspace(id),
     preview: null,
     members: new Map(),
     histories: new Map(),
@@ -129,7 +131,13 @@ export async function loadRoomIndex(): Promise<number> {
   return list.length;
 }
 
-/** npm install + arranca el preview de la sala. Best-effort, en background. */
+/**
+ * Prepara la sala y arranca su preview SI ya hay proyecto.
+ *
+ * Una sala recién creada está vacía: no hay nada que levantar, y eso es normal
+ * (el agente todavía no scaffoldea). No es error ni espera indefinida — el
+ * preview arranca solo cuando aparezca algo, vía `maybeStartPreview`.
+ */
 async function bootPreview(room: Room): Promise<void> {
   try {
     // Barrido de huérfanos: turnos que quedaron "running" de un server muerto.
@@ -140,11 +148,38 @@ async function bootPreview(room: Room): Promise<void> {
       room.orphanTurns = orphans;
     }
 
+    await maybeStartPreview(room);
+  } catch (err) {
+    console.error(`[sala ${room.id}] falló el arranque:`, err);
+  }
+}
+
+/**
+ * Arranca el preview si el proyecto ya se puede levantar. Idempotente y seguro
+ * de llamar seguido: se invoca cuando el agente termina un turno, porque es ahí
+ * cuando pudo haber aparecido el proyecto.
+ *
+ * Devuelve la URL si quedó corriendo, null si todavía no hay qué levantar.
+ */
+export async function maybeStartPreview(room: Room): Promise<string | null> {
+  if (room.preview) return room.preview.url;
+  if (room.previewBooting) return null; // ya hay un arranque en curso
+
+  const launch = await detectLaunch(room.workspace.dir);
+  if (!launch) return null; // la sala sigue vacía: normal
+
+  room.previewBooting = true;
+  try {
+    // El agente pudo instalar deps él mismo; esto las completa si faltan.
     await runInstall(room.workspace.dir);
-    room.preview = await startPreview(room.workspace);
+    room.preview = await startPreview(room.workspace, launch);
     console.log(`[sala ${room.id}] preview listo en ${room.preview.url}`);
+    return room.preview.url;
   } catch (err) {
     console.error(`[sala ${room.id}] falló el preview:`, err);
+    return null;
+  } finally {
+    room.previewBooting = false;
   }
 }
 

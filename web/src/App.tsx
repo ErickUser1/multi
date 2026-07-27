@@ -472,7 +472,12 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
             </>
           ) : (
             <div className="preview-loading">
-              preparando la sala… (instalando y arrancando el preview)
+              <p>La sala está vacía.</p>
+              <p className="preview-loading-sub">
+                Pídele a un agente que arranque el proyecto — el stack lo eliges tú.
+                <br />
+                Por ejemplo: <code>@agente crea un Next con Tailwind</code>
+              </p>
             </div>
           )}
 

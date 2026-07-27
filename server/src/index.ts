@@ -14,6 +14,7 @@ import {
   stopAllPreviews,
   parseIntent,
   wakeRoom,
+  maybeStartPreview,
   loadRoomIndex,
   type Room,
   type SelectedElement,
@@ -481,6 +482,10 @@ async function runAgentTurn(
     // Canal 2: el turno cierra con UN commit (unidad de sentido del scrubber).
     const hash = await commitTurn(room.workspace.dir, turn, { summary: result.finalText });
     if (hash) io.to(room.id).emit("history:new", { hash, agentId, message: turn.task });
+
+    // El turno pudo haber creado el proyecto (la sala nace vacía): si ya se
+    // puede levantar, el preview arranca solo y todos lo ven aparecer.
+    void notifyPreviewWhenReady(room);
   } catch (err) {
     await failTurn(room.workspace.dir, turn.id);
     systemMsg(room, `${agent.name} falló: ${String(err)}`, "#d95d63");
@@ -504,15 +509,16 @@ function summarizeTool(name: string, input: Record<string, unknown>): string {
   return name;
 }
 
-/** Espera a que el preview de la sala arranque y avisa a todos su URL. */
+/**
+ * Intenta arrancar el preview y, si arrancó, avisa a todos.
+ *
+ * Se llama cuando pudo aparecer un proyecto: al entrar a la sala (por si ya
+ * había uno) y al cerrar cada turno de agente (por si lo acaba de scaffoldear).
+ * Que no arranque NO es error: la sala vacía es el estado normal al empezar.
+ */
 async function notifyPreviewWhenReady(room: Room): Promise<void> {
-  for (let i = 0; i < 120; i++) {
-    if (room.preview) {
-      io.to(room.id).emit("preview:ready", { previewUrl: room.preview.url });
-      return;
-    }
-    await new Promise((r) => setTimeout(r, 1000));
-  }
+  const url = await maybeStartPreview(room);
+  if (url) io.to(room.id).emit("preview:ready", { previewUrl: url });
 }
 
 // ── Arranque ────────────────────────────────────────────────────────────────

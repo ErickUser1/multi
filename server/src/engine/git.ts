@@ -54,6 +54,19 @@ export async function commitAll(
   return stdout.trim();
 }
 
+/**
+ * Descarta los cambios no commiteados (vuelve al último punto guardado).
+ * Solo se llama por decisión explícita del humano.
+ */
+export async function discardChanges(dir: string): Promise<void> {
+  const hasHead = await execFileP("git", ["rev-parse", "--verify", "HEAD"], { cwd: dir })
+    .then(() => true)
+    .catch(() => false);
+  if (!hasHead) return; // sin commits todavía: no hay punto al que volver
+  await execFileP("git", ["reset", "--hard", "HEAD"], { cwd: dir });
+  await execFileP("git", ["clean", "-fd"], { cwd: dir });
+}
+
 /** Historial de la sala — alimenta el scrubber (Fase 5). */
 export async function log(dir: string, limit = 100): Promise<CommitInfo[]> {
   const SEP = "";

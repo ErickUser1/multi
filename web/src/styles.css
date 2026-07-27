@@ -144,6 +144,152 @@ body {
   margin-top: 3px;
 }
 
+/* ── Lista de agentes ─────────────────────────────────────────────────── */
+/* Tres estados con peso visual distinto: waiting es NEUTRO (está en fila,
+   no es un problema); solo stuck usa color de alerta. */
+.agent-list {
+  padding: 8px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.18);
+}
+
+.agent-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  padding: 3px 0;
+}
+.agent-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.agent-working .agent-dot {
+  animation: pulso 1.6s ease-in-out infinite;
+}
+@keyframes pulso {
+  50% {
+    opacity: 0.35;
+  }
+}
+.agent-name {
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.agent-status {
+  color: var(--dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Esperando: neutro, atenuado. NO es alarma. */
+.agent-waiting .agent-dot {
+  background: var(--dim) !important;
+}
+.agent-waiting .agent-status {
+  font-style: italic;
+}
+/* Atorado: esto SÍ pide atención. */
+.agent-stuck .agent-dot {
+  background: #d95d63 !important;
+}
+.agent-stuck .agent-status {
+  color: #d95d63;
+}
+.agent-idle {
+  opacity: 0.5;
+}
+.agent-fold {
+  font-size: 10px;
+  color: var(--dim);
+  cursor: pointer;
+  padding: 2px 0;
+}
+.agent-fold:hover {
+  color: var(--texto);
+}
+
+/* ── Menú de menciones (@) ────────────────────────────────────────────── */
+.input-wrap {
+  position: relative;
+}
+.mention-menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  background: var(--fondo2);
+  border: 1px solid var(--linea);
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  z-index: 30;
+}
+.mention-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+.mention-item:hover {
+  background: var(--panel);
+}
+.mention-name {
+  font-size: 12px;
+  font-weight: 700;
+}
+.mention-hint {
+  font-size: 10.5px;
+  color: var(--dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Turnos huérfanos (crash a media tarea) ───────────────────────────── */
+.orphan-card {
+  margin: 8px 14px;
+  padding: 10px 12px;
+  background: rgba(255, 195, 122, 0.08);
+  border: 1px solid rgba(255, 195, 122, 0.3);
+  border-radius: 6px;
+}
+.orphan-text {
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--texto);
+}
+.orphan-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.orphan-btn {
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 6px 10px;
+  border-radius: 3px;
+  border: 1px solid var(--linea);
+  background: transparent;
+  color: var(--dim);
+  cursor: pointer;
+}
+.orphan-btn:hover {
+  color: var(--texto);
+}
+.orphan-btn.keep {
+  background: var(--ambar);
+  border-color: var(--ambar);
+  color: #3d2a12;
+  font-weight: 700;
+}
+
 .chat-scroll {
   flex: 1;
   overflow-y: auto;

@@ -17,7 +17,8 @@ import {
   type SelectedElement,
 } from "./rooms.js";
 import { MAX_AGENTS_PER_ROOM } from "./engine/agents.js";
-import { startTurn, commitTurn, failTurn, sweepOrphans } from "./engine/turns.js";
+import { startTurn, commitTurn, failTurn } from "./engine/turns.js";
+import { commitAll, discardChanges } from "./engine/git.js";
 import { handlePreviewRequest, handlePreviewUpgrade } from "./engine/proxy.js";
 import { runAgent } from "./agent/loop.js";
 import { AnthropicProvider } from "./agent/providers/anthropic.js";
@@ -140,6 +141,7 @@ io.on("connection", (socket) => {
       members: membersList(room),
       previewUrl: room.preview?.url ?? null,
       agents: room.agents.list(),
+      orphanTurns: room.orphanTurns ?? [],
     });
     // Avisar a los demás de la nueva presencia.
     socket.to(roomId).emit("presence", { members: membersList(room) });
@@ -233,6 +235,33 @@ io.on("connection", (socket) => {
       color: member.color,
       element: sel,
     });
+  });
+
+  // El humano decide qué hacer con el trabajo que quedó a medias por un crash.
+  // Nunca se decide automáticamente: ese trabajo ya está en disco y ya lo vieron
+  // todos en el preview (ver DESIGN.md "turnos huérfanos").
+  socket.on("orphans:resolve", async ({ action }: { action: "keep" | "revert" }) => {
+    const room = joinedRoom;
+    if (!room?.orphanTurns?.length) return;
+    const member = room.members.get(socket.id);
+
+    try {
+      if (action === "keep") {
+        const hash = await commitAll(room.workspace.dir, {
+          message: "trabajo recuperado de un turno interrumpido",
+          author: room.orphanTurns[0].agentId,
+        });
+        systemMsg(room, `${member?.name ?? "alguien"} guardó el trabajo interrumpido${hash ? "" : " (no había cambios)"}`);
+      } else {
+        await discardChanges(room.workspace.dir);
+        systemMsg(room, `${member?.name ?? "alguien"} volvió al último punto guardado`);
+      }
+    } catch (err) {
+      systemMsg(room, `no se pudo resolver: ${String(err)}`, "#d95d63");
+    }
+
+    room.orphanTurns = [];
+    io.to(room.id).emit("orphans", { turns: [] });
   });
 
   socket.on("disconnect", () => {

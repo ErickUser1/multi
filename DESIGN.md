@@ -275,6 +275,33 @@ Los dos relojes se cubren mutuamente: los locks son de milisegundos por naturale
 
 **Bonus que sale gratis:** si dos agentes hacen fila seguido por el mismo archivo, la sala puede avisar *"Agente-1 y Agente-3 están trabajando sobre el mismo archivo"*. Eso ES coordinación semántica — justo lo que Anthropic admite que Agent Teams no tiene.
 
+### Cómo se REPRESENTA un agente en el preview (decisión)
+
+**Cursores = humanos. Resaltados = agentes.** De un vistazo sabes quién es quién.
+
+Se descartó darle al agente un cursor que se mueva como persona: sería una **mentira bonita** — el agente no navega el DOM, edita archivos. Habría que *inventar* la posición mapeando "editó Menu.jsx" → "el menú está por aquí", y un cursor mal puesto se ve roto. Humanos y agentes trabajan distinto y el diseño debe respetarlo, no disfrazarlo: un humano **señala** (cursor puntual), un agente **transforma** (afecta una zona).
+
+**Decisión: resaltar el elemento afectado** con el color del agente mientras trabaja. Es honesto (no finge un cursor), se siente vivo (ves la zona brillar y cambiar), reutiliza la maquinaria del inspector (ya sabe resaltar por selector), y tolera imprecisión (resaltar una zona aguanta error; un cursor no).
+
+### Ver el código / los diffs (validado contra Lovable)
+
+**El código no es el centro, pero está accesible.** Jerarquía de profundidad:
+```
+preview (lo que ves)  →  historial de versiones  →  diff del cambio
+   siempre visible          panel / scrubber          un click más adentro
+```
+Lovable hace exactamente esto y funciona con no-técnicos: la unidad NO es el diff, es la **versión**. Cada respuesta del agente genera una tarjeta con botón de revertir ahí mismo; un panel de History lista todas las versiones; clickeas una → **la previsualizas** → y solo entonces "Restore".
+
+Patrones suyos a copiar: (1) **revertir NO borra historia** — crea una entrada nueva y los cambios posteriores siguen disponibles para reaplicar (= nuestro revert como commit nuevo); (2) **preview antes de restaurar** (= arrastrar el scrubber y luego "Regresar aquí"); (3) **bookmarks** — marcar versiones que importan ("la que funcionaba", "antes del login"); lo teníamos como "marcar versión" sin darle peso, Lovable lo hace feature de primera clase.
+
+**Donde los superamos:** su revert es todo-o-nada por versión (restaura el proyecto entero). Nosotros ya diseñamos **revert selectivo por archivo** (patrón OpenCode) → podemos ofrecer "regresa solo este archivo" además de "regresa todo".
+
+Alcance: los diffs viven en la **Fase 5** (scrubber/historial), como el nivel más profundo. El dato ya existe: commit por turno + `filesInCommit` en `git.ts`; falta endpoint y visor.
+
+**Alcance — la 4b se parte en dos:**
+- **4b-mínima:** lista de agentes con sus 3 estados + atribución por agente en el chat + autocompletado de `@` + aviso de turnos huérfanos. SIN representación en el preview. Ya se ve el multi-agente funcionando.
+- **4b-plus (después):** el resaltado del elemento afectado. Requiere el mapeo archivo→elemento visual, que NO es trivial (saber que `Menu.jsx` es ese `<nav>`). Se construye junto con el mapeo del back visual (Fase 6), no improvisado.
+
 ### Cuándo un archivo pasa de "en caliente" a "en el historial"
 
 **Disco = ahora. Commit = memoria.** Un archivo entra al historial cuando el agente TERMINA SU TURNO completo, no cuando se escribe. Un turno puede tocar 5 archivos → 1 solo commit.

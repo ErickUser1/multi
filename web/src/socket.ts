@@ -18,6 +18,27 @@ export interface ChatMessage {
   anchoredTo?: string;
 }
 
+/** Un agente de la sala, como jugador visible. */
+export type AgentState = "idle" | "working" | "waiting" | "stuck";
+
+export interface Agent {
+  id: string;
+  name: string;
+  color: string;
+  state: AgentState;
+  task?: string;
+  /** Si está esperando: a quién y por qué archivo (estado NORMAL, no alarma). */
+  waitingFor?: { holder?: string; path: string };
+}
+
+/** Turno que quedó a medias por un crash del server. */
+export interface OrphanTurn {
+  id: string;
+  agentId: string;
+  task: string;
+  startedAt: number;
+}
+
 /** Elemento del preview seleccionado (capturado por el inspector). */
 export interface SelectedElement {
   selector: string;
@@ -48,7 +69,9 @@ export interface JoinedPayload {
   you: Member;
   members: Member[];
   previewUrl: string | null;
-  history: unknown[];
+  agents?: Agent[];
+  /** Turnos que quedaron a medias por un crash; el humano decide qué hacer. */
+  orphanTurns?: OrphanTurn[];
 }
 
 // ── API HTTP ────────────────────────────────────────────────────────────────

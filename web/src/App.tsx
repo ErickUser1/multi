@@ -10,7 +10,11 @@ import {
   type SelectedElement,
   type CursorInfo,
   type SelectionInfo,
+  type Agent,
+  type OrphanTurn,
 } from "./socket.js";
+import { AgentList } from "./AgentList.js";
+import { MentionMenu } from "./MentionMenu.js";
 
 // El roomId vive en el hash de la URL: #/sala/taco-fiesta-42
 function readRoomFromHash(): string | null {
@@ -116,12 +120,16 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
   const [members, setMembers] = useState<Member[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [previewReady, setPreviewReady] = useState(false);
-  const [agentBusy, setAgentBusy] = useState(false);
   const [draft, setDraft] = useState("");
 
   const socketRef = useRef<Socket | null>(null);
-  const [streaming, setStreaming] = useState<string>("");
-  const [toolLine, setToolLine] = useState<string>("");
+  // Streaming POR AGENTE: varios pueden estar hablando a la vez.
+  const [streaming, setStreaming] = useState<Record<string, string>>({});
+  const [toolLines, setToolLines] = useState<Record<string, string>>({});
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [orphans, setOrphans] = useState<OrphanTurn[]>([]);
+  /** Query del menú de menciones (null = cerrado). */
+  const [mention, setMention] = useState<string | null>(null);
 
   // Modo inspect activo (para seleccionar elementos del preview).
   const [inspect, setInspect] = useState(false);
@@ -149,23 +157,37 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
     socket.on("joined", (p: JoinedPayload) => {
       setMembers(p.members);
       if (p.previewUrl) setPreviewReady(true);
+      if (p.agents) setAgents(p.agents);
+      if (p.orphanTurns?.length) setOrphans(p.orphanTurns);
     });
     socket.on("presence", ({ members }: { members: Member[] }) => setMembers(members));
     socket.on("preview:ready", () => setPreviewReady(true));
+    socket.on("agents", ({ agents }: { agents: Agent[] }) => setAgents(agents));
+    socket.on("orphans", ({ turns }: { turns: OrphanTurn[] }) => setOrphans(turns));
 
     socket.on("chat:message", (m: ChatMessage) => {
       setMessages((prev) => [...prev, m]);
+      // Al llegar el mensaje final de UN agente, limpiar SU streaming (no el de otros).
       if (m.role === "agent") {
-        setStreaming("");
-        setToolLine("");
+        setStreaming((prev) => {
+          const n = { ...prev };
+          delete n[m.from];
+          return n;
+        });
+        setToolLines((prev) => {
+          const n = { ...prev };
+          delete n[m.from];
+          return n;
+        });
       }
     });
-    socket.on("agent:delta", ({ text }: { text: string }) => setStreaming((p) => p + text));
-    socket.on("agent:tool", ({ summary }: { summary: string }) => setToolLine(summary));
-    socket.on("agent:state", ({ busy }: { busy: boolean }) => {
-      setAgentBusy(busy);
-      if (!busy) setToolLine("");
-    });
+    // Cada delta trae el agentId: se acumula en el mensaje de ESE agente.
+    socket.on("agent:delta", ({ agentId, text }: { agentId: string; text: string }) =>
+      setStreaming((p) => ({ ...p, [agentId]: (p[agentId] ?? "") + text })),
+    );
+    socket.on("agent:tool", ({ agentId, summary }: { agentId: string; summary: string }) =>
+      setToolLines((p) => ({ ...p, [agentId]: summary })),
+    );
 
     // Cursores de otros.
     socket.on("cursor", (c: CursorInfo) => {
@@ -246,11 +268,30 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
     // Anclar MI selección local al mensaje (cuidado 2/3/4).
     socketRef.current?.emit("chat", { text, anchor: mySelection });
     setDraft("");
+    setMention(null);
     if (mySelection) {
       setMySelection(null);
       postToInspector({ type: "selection:clear" }); // cuidado 4
       setInspect(false);
     }
+  };
+
+  // Menú de menciones: se abre al escribir "@" al inicio de una palabra.
+  const onDraftChange = (value: string) => {
+    setDraft(value);
+    const m = value.match(/(?:^|\s)@([a-z0-9-]*)$/i);
+    setMention(m ? m[1] : null);
+  };
+
+  const pickMention = (name: string) => {
+    setDraft((d) => d.replace(/(?:^|\s)@([a-z0-9-]*)$/i, (full) => `${full.startsWith(" ") ? " " : ""}@${name} `));
+    setMention(null);
+  };
+
+  /** El humano decide qué hacer con el trabajo que quedó a medias por un crash. */
+  const resolveOrphans = (action: "keep" | "revert") => {
+    socketRef.current?.emit("orphans:resolve", { action });
+    setOrphans([]);
   };
 
   const copyLink = () => navigator.clipboard.writeText(window.location.href);
@@ -264,26 +305,52 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
           <div className="sala-meta">{members.length} en la sala</div>
         </div>
 
+        {/* Los agentes de la sala, como jugadores visibles */}
+        <AgentList agents={agents} />
+
+        {/* Trabajo que quedó a medias por un crash: decide el humano */}
+        {orphans.length > 0 && (
+          <div className="orphan-card">
+            <div className="orphan-text">
+              {orphans.length === 1 ? "Un agente se interrumpió" : `${orphans.length} agentes se interrumpieron`} a
+              media tarea. ¿Guardas lo que alcanzó a hacer?
+            </div>
+            <div className="orphan-actions">
+              <button className="orphan-btn keep" onClick={() => resolveOrphans("keep")}>
+                Guardar
+              </button>
+              <button className="orphan-btn" onClick={() => resolveOrphans("revert")}>
+                Volver al último punto
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="chat-scroll">
           {messages.map((m, i) => (
             <ChatRow key={i} msg={m} />
           ))}
-          {(streaming || toolLine) && (
-            <div className="msg">
-              <div className="av" style={{ background: "#ffc37a", color: "#3d2a12" }}>
-                AI
-              </div>
-              <div className="msg-cuerpo">
-                <div className="msg-cab">
-                  <span className="quien" style={{ color: "#ffc37a" }}>
-                    Agente
-                  </span>
+          {/* Un bloque de streaming POR AGENTE: varios pueden hablar a la vez */}
+          {Object.keys({ ...streaming, ...toolLines }).map((agentId) => {
+            const agent = agents.find((a) => a.id === agentId);
+            const color = agent?.color ?? "#ffc37a";
+            return (
+              <div className="msg" key={agentId}>
+                <div className="av" style={{ background: color, color: "#3d2a12" }}>
+                  AI
                 </div>
-                {toolLine && <div className="tool-line">{toolLine}</div>}
-                {streaming && <div className="burbuja">{streaming}</div>}
+                <div className="msg-cuerpo">
+                  <div className="msg-cab">
+                    <span className="quien" style={{ color }}>
+                      {agent?.name ?? agentId}
+                    </span>
+                  </div>
+                  {toolLines[agentId] && <div className="tool-line">{toolLines[agentId]}</div>}
+                  {streaming[agentId] && <div className="burbuja">{streaming[agentId]}</div>}
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })}
         </div>
 
         <div className="chat-input">
@@ -295,13 +362,21 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
               </span>
             </div>
           )}
-          <input
-            className="caja"
-            placeholder={agentBusy ? "el agente está trabajando…" : "dile algo a la sala…"}
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && send()}
-          />
+          <div className="input-wrap">
+            {mention !== null && (
+              <MentionMenu agents={agents} query={mention} onPick={pickMention} />
+            )}
+            <input
+              className="caja"
+              placeholder="habla con la sala — o escribe @agente para pedir algo"
+              value={draft}
+              onChange={(e) => onDraftChange(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") send();
+                if (e.key === "Escape") setMention(null);
+              }}
+            />
+          </div>
         </div>
       </aside>
 

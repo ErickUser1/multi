@@ -10,6 +10,11 @@ export interface ToolContext {
   workspaceDir: string;
   /** Emite un evento observable (ej. file:changed). Opcional (CLI no lo usa). */
   emit?: (event: ToolEvent) => void;
+  /** Quién está usando las tools. Para el CAS ("lo tocó Agente-1") y los locks. */
+  agentId?: string;
+  /** Se llama al empezar/terminar una espera de lock (dos relojes — ver DESIGN.md). */
+  onWaitStart?: (info: { path: string; holder?: string }) => void;
+  onWaitEnd?: () => void;
 }
 
 export type ToolEvent =

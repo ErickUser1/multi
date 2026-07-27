@@ -53,6 +53,11 @@ export async function runAgent(opts: {
   maxTokens?: number;
   callbacks?: AgentCallbacks;
   signal?: AbortSignal;
+  /** Quién es este agente (para el CAS y los locks). */
+  agentId?: string;
+  /** Avisos de espera de lock (para mostrar "esperando a X" — dos relojes). */
+  onWaitStart?: (info: { path: string; holder?: string }) => void;
+  onWaitEnd?: () => void;
 }): Promise<RunResult> {
   const { provider, workspaceDir, userMessage, model, maxTokens, callbacks = {}, signal } = opts;
 
@@ -64,6 +69,9 @@ export async function runAgent(opts: {
   const toolCtx: ToolContext = {
     workspaceDir,
     emit: callbacks.onToolEvent,
+    agentId: opts.agentId,
+    onWaitStart: opts.onWaitStart,
+    onWaitEnd: opts.onWaitEnd,
   };
 
   let finalText = "";

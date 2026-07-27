@@ -12,9 +12,12 @@ import {
   removeMember,
   membersList,
   stopAllPreviews,
+  parseIntent,
   type Room,
   type SelectedElement,
 } from "./rooms.js";
+import { MAX_AGENTS_PER_ROOM } from "./engine/agents.js";
+import { startTurn, commitTurn, failTurn, sweepOrphans } from "./engine/turns.js";
 import { handlePreviewRequest, handlePreviewUpgrade } from "./engine/proxy.js";
 import { runAgent } from "./agent/loop.js";
 import { AnthropicProvider } from "./agent/providers/anthropic.js";
@@ -136,7 +139,7 @@ io.on("connection", (socket) => {
       you: member,
       members: membersList(room),
       previewUrl: room.preview?.url ?? null,
-      history: room.history,
+      agents: room.agents.list(),
     });
     // Avisar a los demás de la nueva presencia.
     socket.to(roomId).emit("presence", { members: membersList(room) });
@@ -162,19 +165,32 @@ io.on("connection", (socket) => {
       anchoredTo: anchor ? anchor.path : undefined,
     });
 
-    // 2) Disparar el agente (si no está ocupado).
-    if (room.agentBusy) {
-      io.to(room.id).emit("chat:message", {
-        from: "sistema",
-        color: "#a9abd0",
-        role: "system",
-        text: "el agente está ocupado, espera a que termine…",
-      });
-      return;
-    }
+    // 2) ¿Es plática o una orden? El agente solo despierta si lo llaman.
+    const intent = parseIntent(text, !!anchor);
+    if (intent.kind === "talk") return; // plática entre humanos: nadie despierta
+
     // Anclaje: prependemos el elemento como texto legible (cuidado 3).
-    const prompt = anchor ? `${anchorText(anchor)}\n\n${text}` : text;
-    void runAgentInRoom(room, prompt);
+    const withAnchor = (t: string) => (anchor ? `${anchorText(anchor)}\n\n${t}` : t);
+
+    if (intent.kind === "address") {
+      // "@agente-2 ..." → join a ese agente (coalescing, no arranca otro loop).
+      const target = room.agents.findByMention(intent.agentName);
+      if (!target) {
+        systemMsg(room, `no existe "${intent.agentName}" en esta sala`);
+        return;
+      }
+      void dispatchAgent(room, target.id, withAnchor(intent.task));
+    } else {
+      // "@agente ..." o mensaje anclado → agente NUEVO (paralelo real).
+      const agent = room.agents.spawn(intent.task);
+      if (!agent) {
+        systemMsg(room, `ya hay ${MAX_AGENTS_PER_ROOM} agentes trabajando; espera a que alguno termine`);
+        return;
+      }
+      io.to(room.id).emit("agents", { agents: room.agents.list() });
+      void dispatchAgent(room, agent.id, withAnchor(intent.task));
+    }
+
     // Al mandar mensaje anclado, limpiar la selección de este miembro (cuidado 4).
     if (anchor) {
       room.selections.delete(socket.id);
@@ -229,27 +245,66 @@ io.on("connection", (socket) => {
   });
 });
 
-/** Corre el agente en la sala, streameando todo por socket. */
-async function runAgentInRoom(room: Room, userText: string): Promise<void> {
-  room.agentBusy = true;
-  io.to(room.id).emit("agent:state", { busy: true });
+function systemMsg(room: Room, text: string, color = "#a9abd0"): void {
+  io.to(room.id).emit("chat:message", { from: "sistema", color, role: "system", text });
+}
 
-  let streamingText = "";
-  const AGENT = { from: "Agente", color: "#ffc37a", role: "agent" as const };
+/** Cola de mensajes pendientes por agente (para el coalescing del coordinador). */
+const pendingByAgent = new Map<string, string[]>();
+
+/**
+ * Despacha trabajo a UN agente. El coordinador garantiza un solo drain activo
+ * por agentId — pero agentes distintos corren EN PARALELO (esa es la clave).
+ * Si el agente ya está corriendo, el mensaje se acumula y se atiende en UNA
+ * sola re-ejecución al terminar (coalescing).
+ */
+async function dispatchAgent(room: Room, agentId: string, userText: string): Promise<void> {
+  const key = `${room.id}:${agentId}`;
+  const queue = pendingByAgent.get(key) ?? [];
+  queue.push(userText);
+  pendingByAgent.set(key, queue);
+
+  await room.coordinator.run(key, async (signal) => {
+    const pending = pendingByAgent.get(key) ?? [];
+    pendingByAgent.set(key, []);
+    if (pending.length === 0) return;
+    // Coalescing: varios mensajes acumulados se atienden en un solo turno.
+    const task = pending.join("\n\n");
+    await runAgentTurn(room, agentId, task, signal);
+  });
+}
+
+/** Un turno completo de un agente: abre turno durable, corre el loop, commitea. */
+async function runAgentTurn(
+  room: Room,
+  agentId: string,
+  task: string,
+  signal: AbortSignal,
+): Promise<void> {
+  const agent = room.agents.get(agentId);
+  if (!agent) return;
+
+  agent.task = task.slice(0, 80);
+  room.agents.setState(agentId, "working");
+  io.to(room.id).emit("agents", { agents: room.agents.list() });
+
+  const turn = await startTurn(room.workspace.dir, { roomId: room.id, agentId, task });
+  const history = room.histories.get(agentId) ?? [];
 
   try {
     const result = await runAgent({
       provider,
       workspaceDir: room.workspace.dir,
-      messages: room.history,
-      userMessage: userText,
+      messages: history,
+      userMessage: task,
+      signal,
+      agentId,
       callbacks: {
-        onText: (delta) => {
-          streamingText += delta;
-          io.to(room.id).emit("agent:delta", { text: delta });
-        },
+        onText: (delta) => io.to(room.id).emit("agent:delta", { agentId, text: delta }),
         onToolStart: ({ name, input }) => {
+          room.agents.touch(agentId);
           io.to(room.id).emit("agent:tool", {
+            agentId,
             name,
             summary: summarizeTool(name, input),
           });
@@ -260,22 +315,34 @@ async function runAgentInRoom(room: Room, userText: string): Promise<void> {
           }
         },
       },
+      // Estados visibles: "esperando" NO es alarma, es fila (ver DESIGN.md).
+      onWaitStart: (info) => {
+        room.agents.startWaiting(agentId, info);
+        io.to(room.id).emit("agents", { agents: room.agents.list() });
+      },
+      onWaitEnd: () => {
+        room.agents.endWaiting(agentId);
+        io.to(room.id).emit("agents", { agents: room.agents.list() });
+      },
     });
 
-    // Mensaje final del agente al chat.
-    io.to(room.id).emit("chat:message", { ...AGENT, text: result.finalText });
-    // Guardar el historial actualizado para continuar la conversación.
-    room.history = result.messages;
-  } catch (err) {
     io.to(room.id).emit("chat:message", {
-      from: "sistema",
-      color: "#d95d63",
-      role: "system",
-      text: `el agente falló: ${String(err)}`,
+      from: agent.name,
+      color: agent.color,
+      role: "agent",
+      text: result.finalText,
     });
+    room.histories.set(agentId, result.messages);
+
+    // Canal 2: el turno cierra con UN commit (unidad de sentido del scrubber).
+    const hash = await commitTurn(room.workspace.dir, turn, { summary: result.finalText });
+    if (hash) io.to(room.id).emit("history:new", { hash, agentId, message: turn.task });
+  } catch (err) {
+    await failTurn(room.workspace.dir, turn.id);
+    systemMsg(room, `${agent.name} falló: ${String(err)}`, "#d95d63");
   } finally {
-    room.agentBusy = false;
-    io.to(room.id).emit("agent:state", { busy: false });
+    room.agents.finish(agentId);
+    io.to(room.id).emit("agents", { agents: room.agents.list() });
   }
 }
 

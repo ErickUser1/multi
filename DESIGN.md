@@ -235,6 +235,46 @@ Confundirlos fue el error del diseño original: usábamos la herramienta del his
 - **Snapshots shadow (truco de OpenCode) para el scrubber:** repo git paralelo en un directorio aparte que opera con `--git-dir shadow --work-tree real`, sin tocar el `.git` del usuario. Clave para que sea barato: `objects/info/alternates` apuntando al object store del repo real → reusa los blobs ya hasheados (en repos enormes, capturar pasa de minutos a instantáneo). Respeta `.gitignore` del usuario y excluye archivos grandes.
 - **Revert selectivo por archivo** (patrón OpenCode): para volver atrás, por cada archivo se restaura el snapshot MÁS ANTIGUO posterior al punto de corte. No es un reset global — es "deja cada archivo como estaba justo antes del primer cambio después de aquí".
 
+### Disparar agentes: `@agente` separa plática de orden
+
+**Regla central:** el chat es para HUMANOS. El agente solo despierta si lo llamas.
+
+| Lo que escribes | Qué pasa |
+|---|---|
+| Texto normal | **Plática.** Nadie despierta. |
+| `@agente <tarea>` | **Nace un agente nuevo** (límite 3 por sala) |
+| `@agente-2 <algo>` | **Join** a ese agente (coalescing, no arranca otro loop) |
+| Con elemento anclado (aunque no pongas `@`) | **Nace agente** — el click ya implica la orden |
+
+Por qué importa más allá de lo técnico: sin esto, CADA mensaje dispara al agente y **no puedes hablar con tu compa** sin que se ponga a trabajar. Eso mata la plática que es el corazón del producto ("el momento real no fue el output, fue la plática mientras el agente construía"). Y `@` da gratis el direccionamiento cuando hay varios agentes — el patrón de Discord que la gente ya conoce, cero aprendizaje. UX: al escribir `@` mostrar autocompletado con los agentes activos y su tarea. (Claude Code usa el mismo patrón de mención-@ con estado.)
+
+**La clave del coordinador es el `agentId`, NO la sala.** Esto es lo que da paralelo REAL. OpenCode (clave = sesión) y Agent Teams (un líder que delega) son secuenciales por sesión — copiarlos nos encasillaría en su limitación. En Multi **los humanos son los líderes**: no hay agente-jefe que reparta trabajo; tú y tu compa comandan con `@`. Se siente RTS, no "pedirle a un manager".
+
+### Dos relojes distintos: trabajo activo vs espera de lock
+
+Problema: el coordinador despacha por `agentId` (paralelo), pero el CAS usa mutex por ruta (si dos agentes tocan el mismo archivo, uno espera). Si esa espera contara para el timeout de turno, marcaríamos como "atorado" a alguien que solo está EN FILA — y el sistema se vería más roto cuanto más activo esté. Pésima señal.
+
+**Decisión: el timeout de turno mide TRABAJO ACTIVO, no tiempo transcurrido.** El reloj se pausa al entrar a la cola de un lock y se reanuda al obtenerlo. Pero eso dejaría un deadlock invisible, así que la espera tiene su propio reloj con distinto significado:
+
+| Reloj | Mide | Si vence |
+|---|---|---|
+| **Timeout de turno** | tiempo trabajando (pausado en esperas) | el agente no avanza solo → **atorado** |
+| **Timeout de lock** | tiempo esperando un archivo | **el problema es del DUEÑO del lock**, no del que espera → investigar/destrabar al dueño, nunca culpar a la víctima |
+
+Los dos relojes se cubren mutuamente: los locks son de milisegundos por naturaleza (leer-comparar-escribir), así que una espera larga significa que el dueño está atorado — y su propio timeout de turno debería haberlo detectado primero.
+
+**Tres estados visualmente distintos en la sala** (que la gente entienda de un vistazo si preocuparse):
+```
+🟡 Agente-1  escribiendo Menu.jsx              ← trabajando (normal)
+⏳ Agente-3  esperando a Agente-1 (Menu.jsx)   ← EN FILA: normal, color NEUTRO,
+                                                  dice a quién espera y por qué archivo
+⚠️ Agente-2  atorado: sin respuesta hace 3m    ← requiere atención, color de alerta,
+                                                  dice desde cuándo y qué hizo al final
+```
+"Esperando" NO usa color de alerta — es un estado normal como "cargando"; si lo pintas de alarma, entrenas a la gente a ignorar las alertas reales. Y decir **a quién** espera convierte una espera opaca en algo comprensible (= "la visibilidad es la coordinación", se entiende el sistema sin explicación).
+
+**Bonus que sale gratis:** si dos agentes hacen fila seguido por el mismo archivo, la sala puede avisar *"Agente-1 y Agente-3 están trabajando sobre el mismo archivo"*. Eso ES coordinación semántica — justo lo que Anthropic admite que Agent Teams no tiene.
+
 ### Cuándo un archivo pasa de "en caliente" a "en el historial"
 
 **Disco = ahora. Commit = memoria.** Un archivo entra al historial cuando el agente TERMINA SU TURNO completo, no cuando se escribe. Un turno puede tocar 5 archivos → 1 solo commit.

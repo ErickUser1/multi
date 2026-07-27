@@ -1,6 +1,6 @@
-import { readFile, writeFile, mkdir, rename, readdir, stat } from "node:fs/promises";
+import { readFile, mkdir, readdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { join, dirname, relative, sep } from "node:path";
+import { join, relative, sep } from "node:path";
 import {
   type Tool,
   type ToolContext,
@@ -9,6 +9,7 @@ import {
   reqString,
   optBool,
 } from "./base.js";
+import { fileMutation, StaleContentError } from "../../engine/file-mutation.js";
 
 // ── Read ────────────────────────────────────────────────────────────────────
 
@@ -58,8 +59,9 @@ export const writeTool: Tool = {
     const rel = reqString(input, "path");
     const content = reqString(input, "content");
     const p = safePath(ctx.workspaceDir, rel);
-    await mkdir(dirname(p), { recursive: true });
-    await atomicWrite(p, content);
+    // write es incondicional (crear/sobrescribir a propósito): expected undefined.
+    // Igual pasa por el mutex → nunca dos escrituras simultáneas a la misma ruta.
+    await casWrite(ctx, { path: p, rel, content });
     ctx.emit?.({ type: "file:changed", path: rel, action: "write" });
     return `escrito ${rel} (${content.length} caracteres)`;
   },
@@ -105,7 +107,10 @@ export const editTool: Tool = {
     const updated = replaceAll
       ? content.split(oldStr).join(newStr)
       : content.replace(oldStr, newStr);
-    await atomicWrite(p, updated);
+
+    // CAS: escribe solo si el archivo sigue como lo acabamos de leer. Si otro
+    // agente lo cambió en medio, falla con un mensaje que el modelo sabe resolver.
+    await casWrite(ctx, { path: p, rel, content: updated, expected: content });
     ctx.emit?.({ type: "file:changed", path: rel, action: "edit" });
     return `editado ${rel} (${count} reemplazo${count > 1 ? "s" : ""})`;
   },
@@ -182,11 +187,29 @@ export const fsTools: Tool[] = [readTool, writeTool, editTool, globTool, grepToo
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-/** Escritura atómica: temp + rename. Evita archivos a medias si crashea. */
-async function atomicWrite(path: string, content: string): Promise<void> {
-  const tmp = `${path}.tmp-${process.pid}-${Date.now()}`;
-  await writeFile(tmp, content, "utf8");
-  await rename(tmp, path);
+/**
+ * Puente entre las tools y el motor de escritura con CAS.
+ * Traduce StaleContentError a ToolError para que el mensaje llegue al modelo
+ * como tool_result (is_error) y pueda reintentar solo.
+ */
+async function casWrite(
+  ctx: ToolContext,
+  opts: { path: string; rel: string; content: string; expected?: string | null },
+): Promise<void> {
+  try {
+    await fileMutation.writeIfUnchanged({
+      path: opts.path,
+      content: opts.content,
+      expected: opts.expected,
+      agentId: ctx.agentId ?? "agente",
+      onWait: (holder) => ctx.onWaitStart?.({ path: opts.rel, holder }),
+    });
+  } catch (err) {
+    if (err instanceof StaleContentError) throw new ToolError(err.message);
+    throw err;
+  } finally {
+    ctx.onWaitEnd?.();
+  }
 }
 
 function countOccurrences(haystack: string, needle: string): number {

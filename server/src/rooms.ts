@@ -2,6 +2,9 @@ import { createWorkspace, type Workspace } from "./engine/workspace.js";
 import { startPreview, type Preview } from "./engine/preview.js";
 import { spawn } from "node:child_process";
 import type { Message } from "./agent/providers/types.js";
+import { AgentRegistry } from "./engine/agents.js";
+import { RunCoordinator } from "./engine/coordinator.js";
+import { sweepOrphans, type Turn } from "./engine/turns.js";
 
 /** Un miembro humano conectado a la sala. */
 export interface Member {
@@ -27,12 +30,16 @@ export interface Room {
   workspace: Workspace;
   preview: Preview | null;
   members: Map<string, Member>;
-  /** Historial de chat + del agente (para continuar la conversación). */
-  history: Message[];
-  /** Está el agente ocupado ahora mismo. */
-  agentBusy: boolean;
+  /** Historial de chat POR AGENTE (cada agente tiene su propia conversación). */
+  histories: Map<string, Message[]>;
   /** Selección actual de cada miembro (socketId → elemento). Para mostrarlas a todos. */
   selections: Map<string, SelectedElement>;
+  /** Los agentes de esta sala, como jugadores visibles. */
+  agents: AgentRegistry;
+  /** Un drain activo por AGENTE (no por sala) → paralelo real. */
+  coordinator: RunCoordinator;
+  /** Turnos que quedaron a medias por un crash; el humano decide qué hacer. */
+  orphanTurns?: Turn[];
 }
 
 const rooms = new Map<string, Room>();
@@ -67,9 +74,10 @@ export async function createRoom(): Promise<Room> {
     workspace,
     preview: null,
     members: new Map(),
-    history: [],
-    agentBusy: false,
+    histories: new Map(),
     selections: new Map(),
+    agents: new AgentRegistry(),
+    coordinator: new RunCoordinator(),
   };
   rooms.set(id, room);
 
@@ -82,6 +90,14 @@ export async function createRoom(): Promise<Room> {
 /** npm install + arranca el preview de la sala. Best-effort, en background. */
 async function bootPreview(room: Room): Promise<void> {
   try {
+    // Barrido de huérfanos: turnos que quedaron "running" de un server muerto.
+    // NO se decide por el humano — solo se marcan y se avisan (ver DESIGN.md).
+    const orphans = await sweepOrphans(room.workspace.dir);
+    if (orphans.length > 0) {
+      console.log(`[sala ${room.id}] ${orphans.length} turno(s) huérfano(s) detectado(s)`);
+      room.orphanTurns = orphans;
+    }
+
     await runInstall(room.workspace.dir);
     room.preview = await startPreview(room.workspace);
     console.log(`[sala ${room.id}] preview listo en ${room.preview.url}`);
@@ -98,6 +114,36 @@ function runInstall(cwd: string): Promise<void> {
     );
     child.once("error", reject);
   });
+}
+
+/**
+ * Decide si un mensaje del chat es PLÁTICA o una ORDEN, y a quién va dirigida.
+ *
+ * Regla central (ver DESIGN.md): el chat es para humanos; el agente solo
+ * despierta si lo llaman. Sin esto no puedes hablar con tu compa sin que el
+ * agente se ponga a trabajar — y esa plática es el corazón del producto.
+ */
+export type ChatIntent =
+  | { kind: "talk" }
+  | { kind: "spawn"; task: string }
+  | { kind: "address"; agentName: string; task: string };
+
+export function parseIntent(text: string, hasAnchor: boolean): ChatIntent {
+  const trimmed = text.trim();
+  const m = trimmed.match(/^@([a-z0-9-]+)\s*([\s\S]*)$/i);
+
+  if (m) {
+    const target = m[1].toLowerCase();
+    const rest = m[2].trim();
+    // "@agente ..." (genérico) → agente nuevo. "@agente-2 ..." → ese agente.
+    if (target === "agente") return { kind: "spawn", task: rest || trimmed };
+    return { kind: "address", agentName: target, task: rest || trimmed };
+  }
+
+  // Un elemento anclado ya expresa la intención de ordenar: el click implica @.
+  if (hasAnchor) return { kind: "spawn", task: trimmed };
+
+  return { kind: "talk" };
 }
 
 export function getRoom(id: string): Room | undefined {

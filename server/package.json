@@ -8,7 +8,8 @@
     "start": "tsx src/index.ts",
     "typecheck": "tsc --noEmit",
     "demo:workspace": "tsx src/demos/workspace.ts",
-    "demo:agent": "tsx src/demos/agent.ts"
+    "demo:agent": "tsx src/demos/agent.ts",
+    "demo:concurrency": "tsx src/demos/concurrency.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.3.0",

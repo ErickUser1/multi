@@ -29,8 +29,29 @@ const ROOM_ID_RE = /^[a-z0-9-]{1,64}$/i;
  */
 const ROOT_PREFIXES = ["/@vite/", "/@react-refresh", "/@id/", "/@fs/", "/src/", "/node_modules/"];
 
-/** ¿Es una request al proxy del preview? Devuelve {roomId, rest} o null. */
-function parsePreviewUrl(url: string, referer?: string): { roomId: string; rest: string } | null {
+/** Nombre de la cookie que recuerda a qué sala pertenece esta pestaña del preview. */
+const ROOM_COOKIE = "multi_room";
+
+/** Lee el roomId de la cookie (si viene). */
+function roomFromCookie(cookieHeader?: string): string | null {
+  if (!cookieHeader) return null;
+  const m = cookieHeader.match(new RegExp(`${ROOM_COOKIE}=([a-z0-9-]{1,64})`, "i"));
+  return m ? m[1] : null;
+}
+
+/**
+ * ¿Es una request al proxy del preview? Devuelve {roomId, rest} o null.
+ *
+ * Resolver la sala de los assets de raíz tiene dos vías, por orden:
+ *  1. Referer — funciona para recursos pedidos por atributos (<script src>).
+ *  2. Cookie — necesaria porque los IMPORTS DE MÓDULOS ES (import "/src/x.js")
+ *     NO envían Referer por estándar. Sin esto, React nunca arranca y el
+ *     preview queda en blanco. La cookie se setea al servir la página.
+ */
+function parsePreviewUrl(
+  url: string,
+  headers: { referer?: string; cookie?: string },
+): { roomId: string; rest: string } | null {
   // Caso 1: URL explícita bajo /preview/:roomId/...
   if (url.startsWith(PREFIX)) {
     const after = url.slice(PREFIX.length);
@@ -41,13 +62,14 @@ function parsePreviewUrl(url: string, referer?: string): { roomId: string; rest:
     return { roomId, rest };
   }
 
-  // Caso 2: asset pedido desde la raíz por el dev server (ej. /@react-refresh).
-  // La sala se deduce del Referer (la página que lo pidió vive bajo /preview/:room/).
+  // Caso 2: asset pedido desde la raíz por el dev server (ej. /src/main.jsx).
   const isRootAsset = ROOT_PREFIXES.some((p) => url.startsWith(p));
-  if (!isRootAsset || !referer) return null;
-  const m = referer.match(/\/preview\/([a-z0-9-]{1,64})(?:\/|$)/i);
-  if (!m) return null;
-  return { roomId: m[1], rest: url };
+  if (!isRootAsset) return null;
+
+  const fromReferer = headers.referer?.match(/\/preview\/([a-z0-9-]{1,64})(?:\/|$)/i)?.[1];
+  const roomId = fromReferer ?? roomFromCookie(headers.cookie);
+  if (!roomId) return null;
+  return { roomId, rest: url };
 }
 
 /** Puerto del dev server de una sala, o null si aún no arrancó. */
@@ -63,7 +85,10 @@ function roomPreviewPort(roomId: string): number | null {
  */
 export function handlePreviewRequest(req: IncomingMessage, res: ServerResponse): boolean {
   const D = process.env.PROXY_DEBUG === "1";
-  const parsed = parsePreviewUrl(req.url ?? "", req.headers.referer);
+  const parsed = parsePreviewUrl(req.url ?? "", {
+    referer: req.headers.referer,
+    cookie: req.headers.cookie,
+  });
   if (D) console.log(`[proxy] IN url=${req.url} parsed=${JSON.stringify(parsed)}`);
   if (!parsed) return false;
 
@@ -116,6 +141,11 @@ export function handlePreviewRequest(req: IncomingMessage, res: ServerResponse):
         return;
       }
 
+      // Recordar la sala en una cookie: los imports de módulos ES no mandan
+      // Referer, así que sin esto los assets de raíz no se pueden atribuir a
+      // ninguna sala y el preview queda en blanco.
+      headers["set-cookie"] = `${ROOM_COOKIE}=${parsed.roomId}; Path=/; SameSite=Lax`;
+
       // HTML: bufferizar, transformar, reenviar.
       const chunks: Buffer[] = [];
       up.on("data", (c) => chunks.push(c));
@@ -162,7 +192,10 @@ export function handlePreviewRequest(req: IncomingMessage, res: ServerResponse):
  * crudo al dev server. Devuelve true si lo manejó.
  */
 export function handlePreviewUpgrade(req: IncomingMessage, socket: Duplex, head: Buffer): boolean {
-  const parsed = parsePreviewUrl(req.url ?? "", req.headers.referer);
+  const parsed = parsePreviewUrl(req.url ?? "", {
+    referer: req.headers.referer,
+    cookie: req.headers.cookie,
+  });
   if (!parsed) return false;
 
   const port = roomPreviewPort(parsed.roomId);

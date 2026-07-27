@@ -52,7 +52,9 @@ function hookPreviewProxy(): void {
   >;
   rawServer.removeAllListeners("request");
   rawServer.on("request", (req, res) => {
-    if (req.url?.startsWith("/preview/")) return void handlePreviewRequest(req, res);
+    // handlePreviewRequest decide si le toca (incluye assets de raíz como
+    // /@vite/client que resuelve por Referer). Si no, sigue el flujo normal.
+    if (handlePreviewRequest(req, res)) return;
     for (const l of origRequest) l(req, res);
   });
 
@@ -61,7 +63,7 @@ function hookPreviewProxy(): void {
   >;
   rawServer.removeAllListeners("upgrade");
   rawServer.on("upgrade", (req, socket, head) => {
-    if (req.url?.startsWith("/preview/")) return void handlePreviewUpgrade(req, socket, head);
+    if (handlePreviewUpgrade(req, socket, head)) return;
     for (const l of origUpgrade) l(req, socket, head);
   });
 }

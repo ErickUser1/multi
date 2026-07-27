@@ -20,15 +20,34 @@ const PREFIX = "/preview/";
 // borde público del proxy blinda contra SSRF / traversal por un id manipulado.
 const ROOM_ID_RE = /^[a-z0-9-]{1,64}$/i;
 
+/**
+ * Prefijos que Vite (y dev servers en general) piden desde la RAÍZ del origen,
+ * no bajo nuestro sub-path. Vite los inyecta con rutas absolutas y NO se pueden
+ * reconfigurar (`server.origin` solo afecta URLs de plugins, no las transforms
+ * core — ver vitejs/vite discussions #21676). La solución de la comunidad es
+ * proxearlos también, resolviendo la sala por el header Referer.
+ */
+const ROOT_PREFIXES = ["/@vite/", "/@react-refresh", "/@id/", "/@fs/", "/src/", "/node_modules/"];
+
 /** ¿Es una request al proxy del preview? Devuelve {roomId, rest} o null. */
-function parsePreviewUrl(url: string): { roomId: string; rest: string } | null {
-  if (!url.startsWith(PREFIX)) return null;
-  const after = url.slice(PREFIX.length);
-  const slash = after.indexOf("/");
-  const roomId = slash === -1 ? after : after.slice(0, slash);
-  const rest = slash === -1 ? "/" : after.slice(slash) || "/";
-  if (!ROOM_ID_RE.test(roomId)) return null; // id inválido → no es una URL de preview válida
-  return { roomId, rest };
+function parsePreviewUrl(url: string, referer?: string): { roomId: string; rest: string } | null {
+  // Caso 1: URL explícita bajo /preview/:roomId/...
+  if (url.startsWith(PREFIX)) {
+    const after = url.slice(PREFIX.length);
+    const slash = after.indexOf("/");
+    const roomId = slash === -1 ? after : after.slice(0, slash);
+    const rest = slash === -1 ? "/" : after.slice(slash) || "/";
+    if (!ROOM_ID_RE.test(roomId)) return null;
+    return { roomId, rest };
+  }
+
+  // Caso 2: asset pedido desde la raíz por el dev server (ej. /@react-refresh).
+  // La sala se deduce del Referer (la página que lo pidió vive bajo /preview/:room/).
+  const isRootAsset = ROOT_PREFIXES.some((p) => url.startsWith(p));
+  if (!isRootAsset || !referer) return null;
+  const m = referer.match(/\/preview\/([a-z0-9-]{1,64})(?:\/|$)/i);
+  if (!m) return null;
+  return { roomId: m[1], rest: url };
 }
 
 /** Puerto del dev server de una sala, o null si aún no arrancó. */
@@ -44,7 +63,7 @@ function roomPreviewPort(roomId: string): number | null {
  */
 export function handlePreviewRequest(req: IncomingMessage, res: ServerResponse): boolean {
   const D = process.env.PROXY_DEBUG === "1";
-  const parsed = parsePreviewUrl(req.url ?? "");
+  const parsed = parsePreviewUrl(req.url ?? "", req.headers.referer);
   if (D) console.log(`[proxy] IN url=${req.url} parsed=${JSON.stringify(parsed)}`);
   if (!parsed) return false;
 
@@ -143,7 +162,7 @@ export function handlePreviewRequest(req: IncomingMessage, res: ServerResponse):
  * crudo al dev server. Devuelve true si lo manejó.
  */
 export function handlePreviewUpgrade(req: IncomingMessage, socket: Duplex, head: Buffer): boolean {
-  const parsed = parsePreviewUrl(req.url ?? "");
+  const parsed = parsePreviewUrl(req.url ?? "", req.headers.referer);
   if (!parsed) return false;
 
   const port = roomPreviewPort(parsed.roomId);
@@ -182,19 +201,16 @@ export function handlePreviewUpgrade(req: IncomingMessage, socket: Duplex, head:
   return true;
 }
 
-/** Inyecta el inspector, reescribe rutas absolutas, para que todo pase por el proxy. */
-function transformHtml(html: string, basePath: string): string {
-  // Reescribir href="/..." y src="/..." → href="/preview/:room/..."
-  // (solo rutas absolutas que empiezan con / y no con //).
-  // LIMITACIÓN CONOCIDA (v1): este regex es textual, no parsea el HTML. Puede
-  // reescribir de más: URLs dentro de <script>/JSON inline (ej. <script
-  // type="application/json"> con datos precargados), o links externos a docs
-  // que el usuario puso a propósito. Si aparece un link roto o JSON corrompido
-  // en el preview, este regex es el primer sospechoso. Suficiente para Vite/React
-  // normal; el fix "bien" es un parser de HTML real (sobre-ingeniería para v1).
-  html = html.replace(/\b(href|src)=("|')\/(?!\/)/g, `$1=$2${basePath}/`);
-
-  // Inyectar el script inspector antes de </body> (o al final si no hay body).
+/**
+ * Inyecta el inspector en el HTML. NO reescribe rutas.
+ *
+ * Las rutas absolutas que emite el dev server (/@vite/client, /src/main.jsx,
+ * /node_modules/…) se dejan tal cual y se proxean desde la raíz resolviendo la
+ * sala por Referer (ver ROOT_PREFIXES). Reescribirlas era un juego de topos:
+ * había que cubrir atributos, imports inline, imports dentro de cada .js
+ * servido… La solución de la comunidad de Vite es proxear, no reescribir.
+ */
+function transformHtml(html: string, _basePath: string): string {
   const tag = `<script>${INSPECTOR_SCRIPT}</script>`;
   if (html.includes("</body>")) {
     html = html.replace("</body>", `${tag}</body>`);

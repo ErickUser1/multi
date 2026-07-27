@@ -14,7 +14,8 @@
     "demo:agent": "npm run demo:agent -w server",
     "typecheck": "npm run typecheck -w server",
     "demo:concurrency": "npm run demo:concurrency -w server",
-    "demo:persistence": "npm run demo:persistence -w server"
+    "demo:persistence": "npm run demo:persistence -w server",
+    "dev:test": "npm run dev:test -w server"
   },
   "engines": {
     "node": ">=20"

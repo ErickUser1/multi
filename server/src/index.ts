@@ -26,8 +26,8 @@ import { getHistory, setBookmark } from "./engine/history.js";
 import { handlePreviewRequest, handlePreviewUpgrade } from "./engine/proxy.js";
 import { runAgent } from "./agent/loop.js";
 import { AnthropicProvider } from "./agent/providers/anthropic.js";
-import { MockProvider } from "./agent/providers/mock.js";
 import type { ModelProvider } from "./agent/providers/types.js";
+import { createDevMock } from "./agent/providers/mock-scenarios.js";
 
 const PORT = Number(process.env.PORT ?? 4000);
 const WEB_ORIGIN = process.env.WEB_ORIGIN ?? "http://localhost:5173";
@@ -119,44 +119,32 @@ fastify.get<{ Params: { id: string } }>("/rooms/:id", async (req, reply) => {
 
 // ── El proveedor de modelo (compartido) ──────────────────────────────────────
 
+/**
+ * El proveedor de modelo. Siempre el real en uso normal.
+ *
+ * MULTI_TEST_MOCK=1 lo cambia por el agente simulado — lo usan SOLO los demos
+ * automatizados, para que las verificaciones no gasten API key. El nombre lleva
+ * "TEST" a propósito: nadie lo pone por accidente creyendo que es una opción
+ * normal, y el arranque lo grita.
+ */
 function makeProvider(): ModelProvider {
+  if (process.env.MULTI_TEST_MOCK === "1") {
+    console.warn("\n  *** AGENTE SIMULADO (MULTI_TEST_MOCK=1) — solo para pruebas ***\n");
+    return createDevMock();
+  }
+
   const key = process.env.ANTHROPIC_API_KEY;
   if (key) return new AnthropicProvider(key);
-  // Sin key: mock que edita App.jsx para demostrar el flujo.
-  console.warn("[aviso] sin ANTHROPIC_API_KEY — usando provider MOCK");
-  // El mock ESCRIBE el archivo (no lo edita buscando texto): así cada turno
-  // produce un cambio real y se puede ejercitar el historial varias veces.
-  // Con edit_file solo funcionaría la primera vez (el texto buscado ya no está).
-  return new MockProvider().scenario({
-    match: () => true,
-    reply: (userText) => [
-      { type: "text", text: "Voy a tocar el App.jsx…" },
-      {
-        type: "tool_use",
-        id: "",
-        name: "write_file",
-        input: {
-          path: "src/App.jsx",
-          content: [
-            "export default function App() {",
-            "  return (",
-            "    <main style={{ fontFamily: 'system-ui', padding: 48, textAlign: 'center' }}>",
-            "      <h1>Hola Multi</h1>",
-            `      <p>${escapeJsx(userText).slice(0, 120)}</p>`,
-            "    </main>",
-            "  )",
-            "}",
-            "",
-          ].join("\n"),
-        },
-      },
-    ],
-  });
-}
 
-/** Evita romper el JSX con caracteres que tienen significado ahí. */
-function escapeJsx(s: string): string {
-  return s.replace(/[<>{}]/g, "");
+  console.error(
+    [
+      "",
+      "  Falta ANTHROPIC_API_KEY.",
+      "  Ponla en server/.env:   ANTHROPIC_API_KEY=sk-ant-...",
+      "",
+    ].join("\n"),
+  );
+  process.exit(1);
 }
 const provider = makeProvider();
 

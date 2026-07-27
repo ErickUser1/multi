@@ -56,6 +56,9 @@ export async function createWorkspace(
 /** Siembra un proyecto Vite+React mínimo (proyecto de PRUEBA de la Fase 0). */
 async function seedViteReact(dir: string): Promise<void> {
   const files: Record<string, string> = {
+    // Sin esto, cada commit por turno intentaría meter node_modules (miles de
+    // archivos): los turnos tardan una eternidad o revientan, y nunca commitean.
+    ".gitignore": ["node_modules/", "dist/", ".vite/", "*.log", ""].join("\n"),
     "package.json": JSON.stringify(
       {
         name: "sala-app",

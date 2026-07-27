@@ -292,11 +292,28 @@ preview (lo que ves)  →  historial de versiones  →  diff del cambio
 ```
 Lovable hace exactamente esto y funciona con no-técnicos: la unidad NO es el diff, es la **versión**. Cada respuesta del agente genera una tarjeta con botón de revertir ahí mismo; un panel de History lista todas las versiones; clickeas una → **la previsualizas** → y solo entonces "Restore".
 
-Patrones suyos a copiar: (1) **revertir NO borra historia** — crea una entrada nueva y los cambios posteriores siguen disponibles para reaplicar (= nuestro revert como commit nuevo); (2) **preview antes de restaurar** (= arrastrar el scrubber y luego "Regresar aquí"); (3) **bookmarks** — marcar versiones que importan ("la que funcionaba", "antes del login"); lo teníamos como "marcar versión" sin darle peso, Lovable lo hace feature de primera clase.
+Patrones suyos a copiar: (1) **revertir NO borra historia** — crea una entrada nueva y los cambios posteriores siguen disponibles para reaplicar (= nuestro revert como commit nuevo); (2) **preview antes de restaurar** (= arrastrar el scrubber y luego "Regresar aquí"); (3) **bookmarks** — marcar versiones que importan ("la que funcionaba", "antes del login"); lo teníamos como "marcar versión" sin darle peso, Lovable lo hace feature de primera clase, con su propia pestaña.
+
+**Más patrones de su doc oficial:**
+- **"Ir al mensaje en el chat"** desde un punto del historial: salta a la conversación que produjo ese cambio (*"útil para recordar POR QUÉ pasó"*). Para nosotros es casi gratis: ya guardamos mensajes con timestamp y commits por turno. Cierra el círculo entre *qué cambió* y *por qué se pidió*.
+- **Confirmación antes de revertir**, mostrando la fecha de la versión y con opción de "ver en chat" antes de decidir. Evita accidentes.
+- **⚠️ EL REVERT NO TOCA LOS DATOS** (su `<Warning>`): *"revertir restaura solo el CÓDIGO... NO restaura ni revierte los datos de tu base de datos. Si mensajes posteriores agregaron registros o corrieron migraciones, revertir el código no deshace esos cambios."* **Crítico para nuestra Fase 6** (Supabase/back): cuando el agente cree tablas y datos, "regresar aquí" tendrá el mismo límite y hay que AVISARLO explícitamente, o alguien va a regresar el código creyendo que también vuelven sus datos.
+- **PENDIENTE — editar un mensaje pasado = "revertir y reenviar"**: en vez de "regresa" + "ahora pide otra cosa" (dos gestos), editas el mensaje que mandaste y el sistema vuelve a ese punto y reintenta con la nueva instrucción. Muy natural en un chat y no lo teníamos. Se retoma después del v1.
+- Su límite que superamos: *"¿Puedo revertir solo parte de una versión? **No.** Revert es todo o nada"* — su workaround es pedirle al chat que restaure esa parte. Nosotros tenemos `revertFile`: revert selectivo real.
 
 **Donde los superamos:** su revert es todo-o-nada por versión (restaura el proyecto entero). Nosotros ya diseñamos **revert selectivo por archivo** (patrón OpenCode) → podemos ofrecer "regresa solo este archivo" además de "regresa todo".
 
 Alcance: los diffs viven en la **Fase 5** (scrubber/historial), como el nivel más profundo. El dato ya existe: commit por turno + `filesInCommit` en `git.ts`; falta endpoint y visor.
+
+**PENDIENTE — previsualizar visualmente un estado anterior (la app viva del pasado).**
+Lovable SÍ lo tiene: *"clickea cualquier versión para abrirla en una vista de snapshot donde puedes mirar alrededor de ese estado de tu app sin cambiar nada"*, más el diff por separado. Les sale natural porque su infra ya buildea y hostea cada versión.
+
+El problema técnico: el proyecto en disco es CÓDIGO FUENTE (JSX/TS). El dev server lo traduce al vuelo; servir el árbol de un commit como archivos estáticos entrega JSX crudo que el navegador no ejecuta. Tres caminos:
+- **A. Build bajo demanda** (recomendado si se retoma): al previsualizar, correr el build de ese commit en la carpeta temporal y servir `dist/`. Fidelidad real, ~3-10s la primera vez y luego cacheado. Necesita reusar `node_modules` del workspace por symlink para no reinstalar por preview.
+- **B. Dev server efímero por versión**: más fiel, más pesado, ocupa puerto. Sobre-ingeniería para v1.
+- **C. Servir el árbol crudo**: barato pero pobre — solo sirve para ver estructura/contenido, no la app.
+
+**Decisión v1: NO se implementa.** El historial arranca con diff + "regresar aquí", que cubren el uso real (*"¿qué cambió?"* y *"devuélvemelo"*) — y "regresar aquí" sí muestra el estado vivo, porque restaura el working tree y el dev server normal se encarga. La previsualización visual es el lujo intermedio (ver sin comprometerse); se retoma con la opción A si se extraña al usar el producto. Es una feature opcional dentro de una opcional: no toca el preview del presente, ni los agentes, ni los commits.
 
 **Alcance — la 4b se parte en dos:**
 - **4b-mínima:** lista de agentes con sus 3 estados + atribución por agente en el chat + autocompletado de `@` + aviso de turnos huérfanos. SIN representación en el preview. Ya se ve el multi-agente funcionando.

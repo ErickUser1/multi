@@ -15,6 +15,7 @@ import {
 } from "./socket.js";
 import { AgentList } from "./AgentList.js";
 import { MentionMenu } from "./MentionMenu.js";
+import { Historial } from "./Historial.js";
 
 // El roomId vive en el hash de la URL: #/sala/taco-fiesta-42
 function readRoomFromHash(): string | null {
@@ -130,6 +131,8 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
   const [orphans, setOrphans] = useState<OrphanTurn[]>([]);
   /** Query del menú de menciones (null = cerrado). */
   const [mention, setMention] = useState<string | null>(null);
+  /** Se incrementa cuando el historial cambia, para que el scrubber recargue. */
+  const [histVersion, setHistVersion] = useState(0);
 
   // Modo inspect activo (para seleccionar elementos del preview).
   const [inspect, setInspect] = useState(false);
@@ -165,6 +168,9 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
     socket.on("presence", ({ members }: { members: Member[] }) => setMembers(members));
     socket.on("preview:ready", () => setPreviewReady(true));
     socket.on("agents", ({ agents }: { agents: Agent[] }) => setAgents(agents));
+    // Hay un punto nuevo en la línea de tiempo (commit, revert o bookmark).
+    socket.on("history:new", () => setHistVersion((v) => v + 1));
+    socket.on("history:changed", () => setHistVersion((v) => v + 1));
     socket.on("orphans", ({ turns }: { turns: OrphanTurn[] }) => setOrphans(turns));
 
     socket.on("chat:message", (m: ChatMessage) => {
@@ -446,6 +452,14 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
             </div>
           ))}
         </div>
+
+        {/* La línea de tiempo de la sala */}
+        <Historial
+          roomId={roomId}
+          version={histVersion}
+          onRevert={(hash, file) => socketRef.current?.emit("history:revert", { hash, file })}
+          onBookmark={(hash, label) => socketRef.current?.emit("history:bookmark", { hash, label })}
+        />
       </section>
     </div>
   );

@@ -21,7 +21,8 @@ import {
 import { getStorage } from "./storage/index.js";
 import { MAX_AGENTS_PER_ROOM } from "./engine/agents.js";
 import { startTurn, commitTurn, failTurn } from "./engine/turns.js";
-import { commitAll, discardChanges } from "./engine/git.js";
+import { commitAll, discardChanges, diffCommit, revertTo, revertFile } from "./engine/git.js";
+import { getHistory, setBookmark } from "./engine/history.js";
 import { handlePreviewRequest, handlePreviewUpgrade } from "./engine/proxy.js";
 import { runAgent } from "./agent/loop.js";
 import { AnthropicProvider } from "./agent/providers/anthropic.js";
@@ -85,6 +86,26 @@ fastify.post("/rooms", async () => {
   return { id: room.id };
 });
 
+// La línea de tiempo de una sala (alimenta el scrubber).
+fastify.get<{ Params: { id: string } }>("/rooms/:id/history", async (req, reply) => {
+  const room = getRoom(req.params.id) ?? (await wakeRoom(req.params.id));
+  if (!room) return reply.code(404).send({ error: "sala no encontrada" });
+  return { entries: await getHistory(room.workspace.dir) };
+});
+
+// El diff de un turno — opt-in, no se muestra por defecto.
+fastify.get<{ Params: { id: string; hash: string } }>(
+  "/rooms/:id/diff/:hash",
+  async (req, reply) => {
+    const room = getRoom(req.params.id);
+    if (!room) return reply.code(404).send({ error: "sala no encontrada" });
+    if (!/^[0-9a-f]{7,40}$/i.test(req.params.hash)) {
+      return reply.code(400).send({ error: "hash inválido" });
+    }
+    return { patch: await diffCommit(room.workspace.dir, req.params.hash) };
+  },
+);
+
 // Info de una sala (para saber la URL del preview al entrar).
 fastify.get<{ Params: { id: string } }>("/rooms/:id", async (req, reply) => {
   const room = getRoom(req.params.id);
@@ -103,22 +124,39 @@ function makeProvider(): ModelProvider {
   if (key) return new AnthropicProvider(key);
   // Sin key: mock que edita App.jsx para demostrar el flujo.
   console.warn("[aviso] sin ANTHROPIC_API_KEY — usando provider MOCK");
+  // El mock ESCRIBE el archivo (no lo edita buscando texto): así cada turno
+  // produce un cambio real y se puede ejercitar el historial varias veces.
+  // Con edit_file solo funcionaría la primera vez (el texto buscado ya no está).
   return new MockProvider().scenario({
     match: () => true,
-    reply: () => [
+    reply: (userText) => [
       { type: "text", text: "Voy a tocar el App.jsx…" },
       {
         type: "tool_use",
         id: "",
-        name: "edit_file",
+        name: "write_file",
         input: {
           path: "src/App.jsx",
-          old_string: "El motor funciona. Este preview se actualiza solo.",
-          new_string: "Cambiado desde la sala.",
+          content: [
+            "export default function App() {",
+            "  return (",
+            "    <main style={{ fontFamily: 'system-ui', padding: 48, textAlign: 'center' }}>",
+            "      <h1>Hola Multi</h1>",
+            `      <p>${escapeJsx(userText).slice(0, 120)}</p>`,
+            "    </main>",
+            "  )",
+            "}",
+            "",
+          ].join("\n"),
         },
       },
     ],
   });
+}
+
+/** Evita romper el JSX con caracteres que tienen significado ahí. */
+function escapeJsx(s: string): string {
+  return s.replace(/[<>{}]/g, "");
 }
 const provider = makeProvider();
 
@@ -248,6 +286,44 @@ io.on("connection", (socket) => {
       color: member.color,
       element: sel,
     });
+  });
+
+  // ── Historial: previsualizar, regresar, marcar ──────────────────────────
+
+  /**
+   * Regresar a un punto: SIEMPRE como commit nuevo, nunca borra historia.
+   * Puede ser total o de un solo archivo (revert selectivo).
+   */
+  socket.on(
+    "history:revert",
+    async ({ hash, file }: { hash: string; file?: string }) => {
+      const room = joinedRoom;
+      if (!room || !/^[0-9a-f]{7,40}$/i.test(hash)) return;
+      const member = room.members.get(socket.id);
+      const author = member?.name ?? "alguien";
+      try {
+        const newHash = file
+          ? await revertFile(room.workspace.dir, hash, file, { author })
+          : await revertTo(room.workspace.dir, hash, { author });
+        systemMsg(
+          room,
+          file
+            ? `${author} regresó ${file} a un estado anterior`
+            : `${author} regresó el proyecto a un estado anterior`,
+        );
+        io.to(room.id).emit("history:changed", { newHash });
+      } catch (err) {
+        systemMsg(room, `no se pudo regresar: ${String(err)}`, "#d95d63");
+      }
+    },
+  );
+
+  /** Marcar una versión que importa ("la que funcionaba"). */
+  socket.on("history:bookmark", async ({ hash, label }: { hash: string; label: string | null }) => {
+    const room = joinedRoom;
+    if (!room || !/^[0-9a-f]{7,40}$/i.test(hash)) return;
+    await setBookmark(room.workspace.dir, hash, label);
+    io.to(room.id).emit("history:changed", {});
   });
 
   // El humano decide qué hacer con el trabajo que quedó a medias por un crash.

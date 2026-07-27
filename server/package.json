@@ -10,7 +10,8 @@
     "demo:workspace": "tsx src/demos/workspace.ts",
     "demo:agent": "tsx src/demos/agent.ts",
     "demo:concurrency": "tsx src/demos/concurrency.ts",
-    "demo:persistence": "tsx src/demos/persistence.ts"
+    "demo:persistence": "tsx src/demos/persistence.ts",
+    "demo:historial": "tsx src/demos/historial.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.3.0",

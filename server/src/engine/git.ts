@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { mkdir } from "node:fs/promises";
 
 const execFileP = promisify(execFile);
 
@@ -83,6 +84,64 @@ export async function log(dir: string, limit = 100): Promise<CommitInfo[]> {
       const [hash, author, date, message] = line.split(SEP);
       return { hash, author, date, message };
     });
+}
+
+/** Diff de un commit contra su padre, en texto unificado. */
+export async function diffCommit(dir: string, hash: string): Promise<string> {
+  const { stdout } = await execFileP(
+    "git",
+    ["show", "--format=", "--patch", "--unified=3", hash],
+    { cwd: dir, maxBuffer: 5 * 1024 * 1024 },
+  ).catch(() => ({ stdout: "" }));
+  return stdout;
+}
+
+/**
+ * Extrae el árbol de un commit a un directorio, sin tocar el working tree.
+ * Así se puede PREVISUALIZAR un estado anterior mientras otros siguen
+ * trabajando en el presente.
+ */
+export async function extractTo(dir: string, hash: string, destDir: string): Promise<void> {
+  await mkdir(destDir, { recursive: true });
+  // git archive escribe el árbol del commit; tar lo desempaqueta en destino.
+  await execFileP("sh", ["-c", `git archive ${hash} | tar -x -C ${JSON.stringify(destDir)}`], {
+    cwd: dir,
+    maxBuffer: 50 * 1024 * 1024,
+  });
+}
+
+/**
+ * Restaura el proyecto al estado de un commit, pero como un COMMIT NUEVO.
+ * Nunca reescribe la historia: todo lo posterior sigue disponible para
+ * reaplicarse (patrón Lovable).
+ */
+export async function revertTo(
+  dir: string,
+  hash: string,
+  opts: { author: string; message?: string },
+): Promise<string | null> {
+  // Traer el árbol de ese commit al working tree, sin mover HEAD.
+  await execFileP("git", ["restore", "--source", hash, "--worktree", "--staged", "."], { cwd: dir });
+  return commitAll(dir, {
+    message: opts.message ?? `volver al estado de ${hash.slice(0, 7)}`,
+    author: opts.author,
+  });
+}
+
+/** Restaura UN archivo al estado de un commit (revert selectivo). */
+export async function revertFile(
+  dir: string,
+  hash: string,
+  file: string,
+  opts: { author: string },
+): Promise<string | null> {
+  await execFileP("git", ["restore", "--source", hash, "--worktree", "--staged", "--", file], {
+    cwd: dir,
+  });
+  return commitAll(dir, {
+    message: `volver ${file} al estado de ${hash.slice(0, 7)}`,
+    author: opts.author,
+  });
 }
 
 /** Archivos que cambiaron en un commit (para saber qué tocó cada turno). */

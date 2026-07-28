@@ -135,6 +135,17 @@ export async function wakeRoom(id: string): Promise<Room | null> {
   };
   rooms.set(id, room);
 
+  // Recuperar los agentes que ya vivían en la sala, con sus conversaciones.
+  // Sin esto cada reinicio del server borraba el equipo: el siguiente agente
+  // volvía a llamarse "agente-1" y el menú de menciones salía vacío.
+  const agentIds = await storage.listAgentIds(id);
+  if (agentIds.length > 0) {
+    room.agents.restore(agentIds);
+    for (const agentId of agentIds) {
+      room.histories.set(agentId, await storage.getAgentHistory(id, agentId));
+    }
+  }
+
   await storage.touchRoom(id);
   void bootPreview(room);
   return room;

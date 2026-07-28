@@ -119,6 +119,13 @@ export class SqliteStorage implements Storage {
       .run(roomId, agentId, JSON.stringify(messages), Date.now());
   }
 
+  async listAgentIds(roomId: string): Promise<string[]> {
+    const filas = this.db
+      .prepare(`SELECT agent_id FROM agent_histories WHERE room_id = ? ORDER BY agent_id`)
+      .all(roomId) as Array<{ agent_id: string }>;
+    return filas.map((f) => f.agent_id);
+  }
+
   async getAgentHistory(roomId: string, agentId: string): Promise<Message[]> {
     const row = this.db
       .prepare(`SELECT messages FROM agent_histories WHERE room_id = ? AND agent_id = ?`)

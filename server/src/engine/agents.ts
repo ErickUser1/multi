@@ -57,6 +57,34 @@ export class AgentRegistry {
     return agent;
   }
 
+  /**
+   * Repuebla el registro con los agentes que ya existían en la sala.
+   *
+   * Se llama al despertar una sala tras un reinicio del server. Sin esto el
+   * registro nace vacío con el contador en cero: el siguiente agente se vuelve
+   * a llamar "agente-1" (pisando al anterior en el chat), el menú de menciones
+   * sale vacío, y pierdes con quién venías conversando.
+   *
+   * Entran como `idle`: nadie está trabajando después de un reinicio — lo que
+   * hubiera quedado a medias lo recoge el barrido de turnos huérfanos.
+   */
+  restore(ids: string[]): void {
+    for (const id of ids) {
+      if (this.agents.has(id)) continue;
+      const n = Number(id.replace(/\D/g, "")) || this.counter + 1;
+      this.agents.set(id, {
+        id,
+        name: id,
+        color: AGENT_COLORS[(n - 1) % AGENT_COLORS.length],
+        state: "idle",
+        lastActiveAt: Date.now(),
+        activeMs: 0,
+      });
+      // El contador sigue desde el más alto: el próximo no repite nombre.
+      if (n > this.counter) this.counter = n;
+    }
+  }
+
   get(id: string): Agent | undefined {
     return this.agents.get(id);
   }

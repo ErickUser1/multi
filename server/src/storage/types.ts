@@ -42,6 +42,14 @@ export interface Storage {
   /** Historial de conversación de un agente (para que continúe donde iba). */
   saveAgentHistory(roomId: string, agentId: string, messages: Message[]): Promise<void>;
   getAgentHistory(roomId: string, agentId: string): Promise<Message[]>;
+  /**
+   * Los agentes que han existido en una sala.
+   *
+   * Sin esto, al reiniciar el server la sala despierta con el registro vacío y
+   * el contador en cero: el siguiente agente vuelve a llamarse "agente-1", el
+   * menú de menciones sale vacío, y se pierde con quién venías conversando.
+   */
+  listAgentIds(roomId: string): Promise<string[]>;
 
   close(): Promise<void>;
 }

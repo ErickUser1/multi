@@ -1,6 +1,7 @@
 import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { join } from "node:path";
+import { KeyedMutex } from "./keyed-mutex.js";
 
 const execFileP = promisify(execFile);
 
@@ -23,6 +24,13 @@ const execFileP = promisify(execFile);
 
 export const IMAGE_TAG = "multi-room:latest";
 const CONTAINER_PREFIX = "multi-room-";
+
+/**
+ * Un arranque a la vez por sala. Crear un contenedor no es atómico (se consulta
+ * el estado y luego se corre `docker run`), así que dos llamadas simultáneas
+ * pisan la misma ventana y la segunda choca por nombre duplicado.
+ */
+const arranques = new KeyedMutex();
 
 /** Tope de recursos por sala: una sala pesada no debe ahogar a las demás. */
 const MEMORY_LIMIT = process.env.MULTI_ROOM_MEMORY ?? "2g";
@@ -85,32 +93,56 @@ export async function startContainer(
 ): Promise<Container> {
   const name = CONTAINER_PREFIX + roomId;
 
-  const existing = await containerState(name);
-  if (existing === "running") {
+  // Serializado por sala: al despertar, `bootPreview` y el primer turno del
+  // agente pueden pedir el contenedor casi a la vez. Sin esto los dos ven "no
+  // existe", los dos hacen `docker run`, y el segundo choca con
+  // "Conflict. The container name is already in use" — la sala no arranca.
+  return arranques.run(name, async () => {
+    const existing = await containerState(name);
+    if (existing === "running") {
+      return { roomId, name, publishedPort: await readPublishedPort(name, devPort) };
+    }
+    // Un contenedor parado con la config vieja no sirve: se rehace.
+    if (existing !== null) await removeContainer(name);
+
+    try {
+      await execFileP("docker", [
+        "run",
+        "-d",
+        "--name", name,
+        // El proyecto vive en el host; adentro se ve como /work.
+        "-v", `${workspaceDir}:/work`,
+        "--workdir", "/work",
+        // Puerto 0 = que Docker elija uno libre del host. Evita colisiones entre salas.
+        "-p", `0:${devPort}`,
+        "--memory", MEMORY_LIMIT,
+        "--cpus", CPU_LIMIT,
+        // Sin privilegios extra y sin poder ganarlos (un sudo dentro no escala).
+        "--security-opt", "no-new-privileges",
+        // Si el server de Multi muere, el contenedor no se queda huérfano para siempre.
+        "--label", "multi.room=" + roomId,
+        IMAGE_TAG,
+      ], { timeout: 60_000 });
+    } catch (err) {
+      // Cinturón por si el nombre quedó tomado de todos modos (un contenedor
+      // que Docker seguía borrando, por ejemplo): se limpia y se reintenta una vez.
+      if (!String(err).includes("already in use")) throw err;
+      await removeContainer(name);
+      await execFileP("docker", [
+        "run", "-d", "--name", name,
+        "-v", `${workspaceDir}:/work`,
+        "--workdir", "/work",
+        "-p", `0:${devPort}`,
+        "--memory", MEMORY_LIMIT,
+        "--cpus", CPU_LIMIT,
+        "--security-opt", "no-new-privileges",
+        "--label", "multi.room=" + roomId,
+        IMAGE_TAG,
+      ], { timeout: 60_000 });
+    }
+
     return { roomId, name, publishedPort: await readPublishedPort(name, devPort) };
-  }
-  // Un contenedor parado con la config vieja no sirve: se rehace.
-  if (existing !== null) await removeContainer(name);
-
-  await execFileP("docker", [
-    "run",
-    "-d",
-    "--name", name,
-    // El proyecto vive en el host; adentro se ve como /work.
-    "-v", `${workspaceDir}:/work`,
-    "--workdir", "/work",
-    // Puerto 0 = que Docker elija uno libre del host. Evita colisiones entre salas.
-    "-p", `0:${devPort}`,
-    "--memory", MEMORY_LIMIT,
-    "--cpus", CPU_LIMIT,
-    // Sin privilegios extra y sin poder ganarlos (un sudo dentro no escala).
-    "--security-opt", "no-new-privileges",
-    // Si el server de Multi muere, el contenedor no se queda huérfano para siempre.
-    "--label", "multi.room=" + roomId,
-    IMAGE_TAG,
-  ], { timeout: 60_000 });
-
-  return { roomId, name, publishedPort: await readPublishedPort(name, devPort) };
+  });
 }
 
 /** Para y borra el contenedor de una sala. No falla si ya no existe. */

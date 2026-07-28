@@ -149,19 +149,39 @@ export async function startPreview(
     process.stdout.write(`${tag} proceso terminó (code ${code})\n`);
   });
 
-  // Esperar a que el dev server acepte conexiones en el puerto antes de reportar.
-  await waitForPort(port, { timeoutMs: 120_000, child });
+  // Esperar a que el dev server acepte conexiones antes de reportar.
+  //
+  // El tope es generoso a propósito: sobre /mnt/c en WSL, Vite puede tardar más
+  // de un minuto solo en arrancar (Windows traduciendo miles de lecturas de
+  // node_modules). Con un tope corto el proceso se quedaba vivo pero sin
+  // registrar — un dev server huérfano y un preview que nunca aparecía.
+  try {
+    await waitForPort(port, { timeoutMs: 300_000, child, container: !!container });
+  } catch (err) {
+    // Si no llegó a escuchar, no dejar el proceso suelto ocupando el puerto.
+    await stop();
+    throw err;
+  }
 
   return { roomId: workspace.roomId, port, url, process: child, stop };
 }
 
-/** Sondea el puerto hasta que acepte una conexión TCP (dev server listo). */
+/**
+ * Espera a que el dev server esté listo.
+ *
+ * Sin contenedor basta un connect TCP: si el puerto acepta, hay algo escuchando.
+ * CON contenedor no: Docker publica el puerto en el host desde que el contenedor
+ * arranca, así que el connect funciona aunque adentro no haya nada todavía. Por
+ * eso ahí se pide una respuesta HTTP de verdad.
+ */
 function waitForPort(
   port: number,
-  opts: { timeoutMs: number; child: ChildProcess },
+  opts: { timeoutMs: number; child: ChildProcess; container?: boolean },
 ): Promise<void> {
-  const { timeoutMs, child } = opts;
+  const { timeoutMs, child, container } = opts;
   const deadline = Date.now() + timeoutMs;
+
+  if (container) return waitForHttp(port, deadline, child);
 
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -198,4 +218,39 @@ function waitForPort(
     };
     attempt();
   });
+}
+
+/**
+ * Sondea con una petición HTTP real, para contenedores.
+ *
+ * El puerto publicado por Docker acepta conexiones desde el arranque del
+ * contenedor, así que un connect TCP no dice nada: hay que ver si algo del otro
+ * lado contesta HTTP. Un 404 o un 500 también valen — significa que el dev
+ * server está vivo, aunque esa ruta no exista.
+ */
+async function waitForHttp(
+  port: number,
+  deadline: number,
+  child: ChildProcess,
+): Promise<void> {
+  let murio: number | null | undefined;
+  child.once("exit", (code) => (murio = code));
+
+  for (;;) {
+    if (murio !== undefined) {
+      throw new Error(`dev server terminó antes de responder (code ${murio})`);
+    }
+    if (Date.now() > deadline) {
+      throw new Error(`timeout esperando el dev server en :${port}`);
+    }
+
+    try {
+      await fetch(`http://127.0.0.1:${port}/`, {
+        signal: AbortSignal.timeout(4000),
+      });
+      return; // cualquier respuesta HTTP significa que ya está sirviendo
+    } catch {
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+  }
 }

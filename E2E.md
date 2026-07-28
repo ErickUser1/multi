@@ -169,6 +169,26 @@ tus compas eso es intrascendente. En un servicio público abierto a desconocidos
 lo es — y es una de las razones por las que un hosting de paga acabaría poniendo su
 propia key y cobrando el uso, en vez de recibir las de otros.
 
+### Quién puede leer ese Map
+
+| | |
+|---|---|
+| El proceso del server | sí — necesita la key en claro para llamar a la API |
+| Quien hospeda | sí — `console.log`, debugger o dump del proceso |
+| Root de esa máquina | sí — puede leer la memoria de cualquier proceso |
+| Otros miembros de la sala | **no** — ningún evento emite keys, y el Map está indexado por `socketId` |
+| **Los agentes** | **no** — ejecutan dentro del contenedor, que no alcanza la memoria del server. Pedirle a un agente "muéstrame las keys" no sirve de nada: no están en su mundo |
+| El disco | **no** — nunca se escribe; al reiniciar desaparecen |
+| Los logs | **no** — no se loguea, ni truncada |
+
+El modelo de confianza es **"confías en quien hospeda"**, el mismo que con Vercel y
+tus variables de entorno. Trivialmente cierto en local (tú hospedas); deja de serlo
+en un cloud abierto.
+
+**Mitigación si algún día hospedas:** Anthropic permite crear keys con límite de
+gasto. Quien entre a un Multi ajeno debería usar una acotada, no la de su cuenta
+principal — convierte el peor caso de "me vaciaron la cuenta" en "perdí unos pesos".
+
 ---
 
 ## Dónde vive cada cosa

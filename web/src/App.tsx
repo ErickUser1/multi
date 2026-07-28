@@ -383,7 +383,10 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
 
         <div className="chat-scroll">
           {messages.map((m, i) => (
-            <ChatRow key={i} msg={m} />
+            // Mensajes seguidos del mismo autor se agrupan sin repetir avatar
+            // ni nombre (patrón Discord): el chat respira y se lee como
+            // conversación, no como lista de tarjetas.
+            <ChatRow key={i} msg={m} seguido={esSeguido(messages, i)} />
           ))}
           {/* Un bloque de streaming POR AGENTE: varios pueden hablar a la vez */}
           {Object.keys({ ...streaming, ...toolLines }).map((agentId) => {
@@ -548,8 +551,32 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
   );
 }
 
-function ChatRow({ msg }: { msg: ChatMessage }) {
+/**
+ * ¿Este mensaje continúa al anterior? Mismo autor, mismo rol, y ninguno de los
+ * dos es del sistema (los avisos siempre se ven aparte). Los anclados tampoco
+ * se agrupan: llevan su propia nota de contexto.
+ */
+function esSeguido(msgs: ChatMessage[], i: number): boolean {
+  if (i === 0) return false;
+  const prev = msgs[i - 1];
+  const m = msgs[i];
+  if (m.role === "system" || prev.role === "system") return false;
+  if (m.anchoredTo) return false;
+  return prev.from === m.from && prev.role === m.role;
+}
+
+function ChatRow({ msg, seguido }: { msg: ChatMessage; seguido?: boolean }) {
   const initial = msg.from.slice(0, msg.role === "agent" ? 2 : 1).toUpperCase();
+
+  // Continuación: solo el texto, alineado bajo el mensaje anterior.
+  if (seguido) {
+    return (
+      <div className="msg-seguido">
+        <div className="burbuja">{msg.text}</div>
+      </div>
+    );
+  }
+
   return (
     <div className={`msg ${msg.role === "system" ? "msg-system" : ""}`}>
       {msg.role !== "system" && (
@@ -563,6 +590,7 @@ function ChatRow({ msg }: { msg: ChatMessage }) {
             <span className="quien" style={{ color: msg.color }}>
               {msg.from}
             </span>
+            {msg.role === "agent" && <span className="tag-ai">agente</span>}
           </div>
         )}
         {msg.anchoredTo && <div className="anchor-note">sobre: {msg.anchoredTo}</div>}

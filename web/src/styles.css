@@ -26,6 +26,19 @@ body {
   overflow: hidden;
 }
 
+/* El grano del hero — el mismo de la landing, más sutil para no cansar la vista
+   en una pantalla donde se pasan horas. Va sobre todo pero no intercepta clicks
+   (el preview y los cursores tienen que seguir respondiendo). */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.035;
+  z-index: 90;
+  background-image: repeating-conic-gradient(#fff 0 0.0001%, transparent 0 0.0002%);
+}
+
 #root {
   height: 100vh;
 }
@@ -1060,4 +1073,36 @@ body {
 .key-olvidar:hover {
   color: #d95d63;
   border-color: #d95d63;
+}
+
+/* Mensajes seguidos del mismo autor (patrón Discord): sin avatar ni nombre.
+   La sangría de 62px alinea el texto bajo el mensaje de arriba
+   (16 de padding + 34 del avatar + 12 del gap). */
+.msg-seguido {
+  display: flex;
+  padding: 1px 16px 1px 62px;
+}
+.msg-seguido:hover {
+  background: rgba(255, 255, 255, 0.025);
+}
+.msg-seguido .burbuja {
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+/* El hover del boceto: da sensación de chat vivo al pasar el mouse. */
+.msg:hover {
+  background: rgba(255, 255, 255, 0.025);
+}
+
+/* Etiqueta junto al nombre del agente, para no confundirlo con un humano. */
+.tag-ai {
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  background: var(--ambar);
+  color: #3d2a12;
+  padding: 2px 5px;
+  border-radius: 2px;
+  text-transform: uppercase;
 }

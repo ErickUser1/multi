@@ -528,12 +528,16 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
 
           {/* Cursores de otros sobre el escenario */}
           {Object.values(cursors).map((c) => (
-            <div key={c.socketId} className="remote-cursor" style={{ left: c.x, top: c.y }}>
-              <svg width="16" height="16" viewBox="0 0 16 16">
-                <path d="M1 1 L1 12 L4 9 L6 13 L8 12 L6 8 L10 8 Z" fill={c.color} />
-              </svg>
-              <span className="cursor-name" style={{ background: c.color }}>
-                {c.name}
+            // `color` en el contenedor: la flecha y la etiqueta lo heredan por
+            // currentColor, así cada quien trae el suyo sin repetirlo.
+            <div
+              key={c.socketId}
+              className="remote-cursor"
+              style={{ left: c.x, top: c.y, color: c.color }}
+            >
+              <span className="cursor-flecha" />
+              <span className="cursor-name">
+                <span>{c.name}</span>
               </span>
             </div>
           ))}

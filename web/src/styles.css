@@ -654,25 +654,41 @@ body::after {
   border-color: var(--lavanda);
 }
 
-/* cursores de otros sobre el escenario */
+/* Cursores de otros sobre el escenario (estilo Figma, del boceto).
+   La flecha es puro CSS: dos bordes formando un triángulo, girado. Toma el color
+   de la persona por currentColor, así flecha y etiqueta van siempre a juego. */
 .remote-cursor {
   position: absolute;
   pointer-events: none;
   z-index: 20;
   transition: left 0.05s linear, top 0.05s linear;
+  white-space: nowrap;
+}
+.cursor-flecha {
+  width: 0;
+  height: 0;
+  border-left: 10px solid currentColor;
+  border-bottom: 10px solid transparent;
+  border-top: 4px solid currentColor;
+  transform: rotate(-8deg);
+  display: inline-block;
 }
 .cursor-name {
-  position: absolute;
-  left: 12px;
-  top: 10px;
-  font-size: 9px;
+  font-size: 8.5px;
   font-weight: 700;
-  letter-spacing: 1px;
+  letter-spacing: 1.5px;
   text-transform: uppercase;
-  color: #fff;
-  padding: 2px 6px;
-  border-radius: 3px;
-  white-space: nowrap;
+  color: #2b2e4c;
+  background: currentColor;
+  padding: 3px 8px;
+  border-radius: 2px;
+  margin-left: 1px;
+  vertical-align: top;
+}
+/* El texto va oscuro sobre el color de la persona: los colores de la paleta son
+   claros, así que negro encima se lee mejor que blanco. */
+.cursor-name span {
+  color: #2b2e4c;
 }
 
 /* badges de selección de otros */

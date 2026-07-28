@@ -139,6 +139,38 @@ tiene que hacer el sistema operativo.
 
 ---
 
+## Dónde corre el loop y por dónde va la key
+
+El loop corre **en el server**, siempre. No podría correr en el navegador aunque
+se quisiera: necesita el filesystem del workspace, git y `docker exec`.
+
+La API key no viaja en cada mensaje. Se manda **una vez al conectar el socket**, y
+el server la guarda en memoria amarrada a ese `socketId`:
+
+```
+navegador                          server
+─────────                          ──────
+al conectar:
+  emit("auth:key", {key})  ──────► keys.ts: Map<socketId, key>
+
+cada turno:
+  emit("chat", {text})     ──────► providerFor(socket.id)
+                                     ↓ busca la key por socketId
+                                   new AnthropicProvider(key)
+                                     ↓
+                                   runAgent({ provider, ... })  ← el loop, aquí
+                                     ↓
+                                   fetch → api.anthropic.com
+```
+
+**La consecuencia que hay que decir en voz alta:** quien hospeda Multi tiene, en
+memoria de su proceso, las keys de quienes entran a sus salas. En tu máquina con
+tus compas eso es intrascendente. En un servicio público abierto a desconocidos no
+lo es — y es una de las razones por las que un hosting de paga acabaría poniendo su
+propia key y cobrando el uso, en vez de recibir las de otros.
+
+---
+
 ## Dónde vive cada cosa
 
 | | |

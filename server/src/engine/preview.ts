@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { Workspace } from "./workspace.js";
-import { spawnInContainer } from "./container.js";
+import { spawnInContainer, execInContainer } from "./container.js";
 
 export interface Preview {
   roomId: string;
@@ -105,6 +105,16 @@ export async function startPreview(
   // Dentro del contenedor el puerto lo fija el contenedor; fuera, lo elegimos.
   const port = container ? container.publishedPort : await nextPort();
   const { command, args, portEnv } = launch;
+
+  // Matar dev servers previos DENTRO del contenedor antes de arrancar otro.
+  //
+  // Sin esto se acumulan: el viejo sigue en el puerto interno que Docker publica,
+  // el nuevo ve el puerto ocupado y salta a otro (Vite lo hace solo), y acabas
+  // viendo el estado VIEJO mientras el agente escribe en el nuevo. Pasó de
+  // verdad: 5 procesos peleando y un preview que no reflejaba los cambios.
+  if (container) {
+    await killDevServersIn(container.roomId, container.internalPort);
+  }
 
   const child = container
     ? spawnInContainer(
@@ -252,5 +262,45 @@ async function waitForHttp(
     } catch {
       await new Promise((r) => setTimeout(r, 1000));
     }
+  }
+}
+
+/**
+ * Mata los dev servers que hayan quedado corriendo dentro del contenedor.
+ *
+ * Un preview huérfano no solo gasta memoria: ocupa el puerto interno que Docker
+ * publica, así que el siguiente arranca en otro puerto y queda invisible. El
+ * usuario ve el estado viejo y cree que el agente no hizo nada.
+ *
+ * Best-effort: si falla, el arranque sigue — es limpieza, no un requisito.
+ */
+async function killDevServersIn(roomId: string, puerto: number): Promise<void> {
+  try {
+    // Matar por PUERTO, no por nombre de proceso: un `pkill node` se lleva
+    // también al que estamos por arrancar (y a cualquier script del agente).
+    // Lo que estorba es quien ocupa el puerto, no "los procesos de node".
+    //
+    // Se lee /proc en vez de usar fuser o lsof: no vienen en la imagen y no
+    // vale la pena engordarla. /proc/net/tcp lista los sockets en escucha con
+    // su inodo; ese inodo aparece en los descriptores del proceso dueño.
+    const script = [
+      // El puerto va en hexadecimal en /proc/net/tcp, y 0A = LISTEN.
+      `hex=$(printf '%04X' ${puerto})`,
+      `inodos=$(awk -v p=":$hex" '$2 ~ p && $4 == "0A" {print $10}' /proc/net/tcp)`,
+      `for i in $inodos; do`,
+      `  for pid in $(ls /proc | grep '^[0-9]*$'); do`,
+      `    if ls -l /proc/$pid/fd 2>/dev/null | grep -q "socket:\\[$i\\]"; then`,
+      `      kill -9 $pid 2>/dev/null`,
+      `    fi`,
+      `  done`,
+      `done`,
+      `true`,
+    ].join("; ");
+
+    await execInContainer(roomId, script, { timeoutMs: 20_000, maxOutput: 500 });
+    // Gracia breve para que suelte el puerto antes de arrancar el nuevo.
+    await new Promise((r) => setTimeout(r, 1500));
+  } catch {
+    // Sin contenedor vivo: no hay nada que limpiar.
   }
 }

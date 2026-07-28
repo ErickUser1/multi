@@ -1174,3 +1174,53 @@ body::after {
 .mention-nuevo {
   border-top: 1px solid var(--linea);
 }
+
+/* Campos del panel de credenciales (proveedor / key / modelo). */
+.key-campo {
+  display: block;
+  margin-top: 11px;
+}
+.key-campo > span {
+  display: block;
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin-bottom: 4px;
+}
+.key-campo .key-input {
+  width: 100%;
+}
+.key-select {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--linea);
+  background: var(--fondo2);
+  color: var(--texto);
+  font-family: inherit;
+  font-size: 12px;
+}
+.key-select:focus {
+  outline: none;
+  border-color: var(--lavanda);
+}
+
+.key-panel .key-guardar {
+  width: 100%;
+  margin-top: 13px;
+}
+
+.key-puesta-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.key-puesta-modelo {
+  font-size: 10px;
+  color: var(--dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

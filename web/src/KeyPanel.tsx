@@ -1,12 +1,16 @@
 import { useState } from "react";
 
 /**
- * Tu API key.
+ * Tu proveedor de modelo y tu API key.
  *
- * Es TUYA, no de la sala: se configura una vez y sirve en todas. Vive en este
+ * Es TUYO, no de la sala: se configura una vez y sirve en todas. Vive en este
  * navegador (localStorage), así que sigue ahí mañana y en la sala que crees
  * después. Sin cuentas todavía, el navegador es el único lugar donde puede
  * vivir algo "del usuario".
+ *
+ * Cada quien puede traer un proveedor distinto — uno con Claude, otro con un
+ * modelo gratis, otro con Ollama en su máquina. En un proyecto que cualquiera
+ * puede correr, obligar a un solo proveedor es obligar a un gasto.
  *
  * Entras a una sala solo con tu nombre: ver el preview, leer el chat y platicar
  * no cuestan nada. La key hace falta únicamente para pedirle cosas a un agente,
@@ -15,30 +19,89 @@ import { useState } from "react";
  * Sobre guardarla: localStorage está atado al origen, así que solo esta página
  * la lee (el preview vive en otro puerto = otro origen, no la alcanza). Es el
  * mismo nivel que tu .env o el token del CLI de gh: en claro, en tu máquina.
- * Por eso existe "Olvidar" — para prestar la compu o compartir pantalla — y por
- * eso nunca se muestra completa.
+ * Por eso existe "Olvidar" — para compartir pantalla o usar una compu ajena — y
+ * por eso nunca se muestra completa.
  */
 
-const STORAGE_KEY = "multi.anthropic_key";
+const STORAGE_KEY = "multi.credencial";
 
-/** La key guardada en este navegador, si hay. */
-export function loadStoredKey(): string | null {
+export interface Credencial {
+  provider: string;
+  key: string;
+  model?: string;
+}
+
+/**
+ * Los proveedores, con cómo se ve su key y qué modelos sugerir. Espejo de
+ * `server/src/agent/providers/profiles.ts` — el server valida, esto solo guía.
+ */
+const PROVEEDORES: Record<
+  string,
+  { label: string; hint: string; url?: string; modelos: string[] }
+> = {
+  anthropic: {
+    label: "Anthropic (Claude)",
+    hint: "sk-ant-…",
+    url: "https://console.anthropic.com/settings/keys",
+    modelos: ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5-20251001"],
+  },
+  openrouter: {
+    label: "OpenRouter (muchos modelos)",
+    hint: "sk-or-v1-…",
+    url: "https://openrouter.ai/keys",
+    modelos: [
+      "google/gemma-4-26b-a4b-it:free",
+      "anthropic/claude-opus-5",
+      "google/gemini-2.5-pro",
+      "openai/gpt-5",
+      "deepseek/deepseek-chat",
+    ],
+  },
+  openai: {
+    label: "OpenAI",
+    hint: "sk-…",
+    url: "https://platform.openai.com/api-keys",
+    modelos: ["gpt-5", "gpt-5-mini"],
+  },
+  groq: {
+    label: "Groq (rápido)",
+    hint: "gsk_…",
+    url: "https://console.groq.com/keys",
+    modelos: ["llama-3.3-70b-versatile"],
+  },
+  deepseek: {
+    label: "DeepSeek",
+    hint: "sk-…",
+    url: "https://platform.deepseek.com/api_keys",
+    modelos: ["deepseek-chat", "deepseek-reasoner"],
+  },
+  ollama: {
+    label: "Ollama (en tu máquina)",
+    hint: "cualquier cosa: Ollama no pide key",
+    modelos: ["gemma3", "qwen2.5-coder"],
+  },
+};
+
+export function loadStoredCredencial(): Credencial | null {
   try {
-    return localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const c = JSON.parse(raw);
+    return typeof c?.key === "string" && typeof c?.provider === "string" ? c : null;
   } catch {
-    return null; // modo privado o storage bloqueado
+    return null; // modo privado, storage bloqueado o guardado corrupto
   }
 }
 
-function storeKey(key: string): void {
+function store(c: Credencial): void {
   try {
-    localStorage.setItem(STORAGE_KEY, key);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(c));
   } catch {
-    // Sin storage la key sigue funcionando en esta sesión; solo no persiste.
+    // Sin storage la credencial sigue sirviendo en esta sesión; solo no persiste.
   }
 }
 
-function forgetKey(): void {
+function forget(): void {
   try {
     localStorage.removeItem(STORAGE_KEY);
   } catch {
@@ -48,42 +111,45 @@ function forgetKey(): void {
 
 /** "sk-ant-…4f2a" — suficiente para reconocerla, inútil para copiarla. */
 function enmascarar(key: string): string {
-  return `sk-ant-…${key.slice(-4)}`;
+  return key.length > 8 ? `${key.slice(0, 7)}…${key.slice(-4)}` : "…";
 }
 
 export function KeyPanel(props: {
-  /** La key que está en uso (ya validada por el server), o null. */
-  keyActual: string | null;
-  /** Se abre solo cuando el server avisó que hace falta. */
+  actual: Credencial | null;
   abiertoPorDefecto: boolean;
   error: string | null;
-  onGuardar: (key: string) => void;
+  onGuardar: (c: Credencial) => void;
   onOlvidar: () => void;
 }) {
   const [abierto, setAbierto] = useState(props.abiertoPorDefecto);
-  const [valor, setValor] = useState("");
+  const [provider, setProvider] = useState(props.actual?.provider ?? "openrouter");
+  const [key, setKey] = useState("");
+  const [model, setModel] = useState(props.actual?.model ?? "");
+
+  const perfil = PROVEEDORES[provider] ?? PROVEEDORES.openrouter;
 
   const guardar = () => {
-    const k = valor.trim();
+    const k = key.trim();
     if (!k) return;
-    storeKey(k);
-    props.onGuardar(k);
-    setValor(""); // no se queda en el DOM más de lo necesario
+    const c: Credencial = { provider, key: k, model: model.trim() || perfil.modelos[0] };
+    store(c);
+    props.onGuardar(c);
+    setKey(""); // no se queda en el DOM más de lo necesario
   };
 
   const olvidar = () => {
-    forgetKey();
+    forget();
     props.onOlvidar();
   };
 
   if (!abierto) {
     return (
       <button
-        className={`key-chip ${props.keyActual ? "listo" : "falta"}`}
+        className={`key-chip ${props.actual ? "listo" : "falta"}`}
         onClick={() => setAbierto(true)}
-        title={props.keyActual ? "tu key está puesta" : "necesaria para invocar agentes"}
+        title={props.actual ? `${props.actual.provider} · ${props.actual.model ?? ""}` : "necesaria para invocar agentes"}
       >
-        {props.keyActual ? "tu key" : "poner mi key"}
+        {props.actual ? PROVEEDORES[props.actual.provider]?.label.split(" ")[0] ?? "listo" : "poner mi key"}
       </button>
     );
   }
@@ -91,58 +157,100 @@ export function KeyPanel(props: {
   return (
     <div className="key-panel">
       <div className="key-cab">
-        <span>Tu API key</span>
+        <span>Tu modelo</span>
         <button className="key-x" onClick={() => setAbierto(false)}>
           cerrar
         </button>
       </div>
 
-      {props.keyActual ? (
+      {props.actual ? (
         <>
           <div className="key-puesta">
-            <code>{enmascarar(props.keyActual)}</code>
+            <div className="key-puesta-info">
+              <code>{enmascarar(props.actual.key)}</code>
+              <span className="key-puesta-modelo">
+                {PROVEEDORES[props.actual.provider]?.label ?? props.actual.provider}
+                {props.actual.model ? ` · ${props.actual.model}` : ""}
+              </span>
+            </div>
             <button className="key-olvidar" onClick={olvidar}>
-              Olvidar
+              Cambiar
             </button>
           </div>
           <p className="key-nota">
-            Guardada en este navegador: sirve en todas tus salas y sigue aquí mañana.
-            Nadie más en la sala la ve. Bórrala si vas a prestar la compu o compartir pantalla.
+            Guardado en este navegador: sirve en todas tus salas y sigue aquí mañana.
+            Nadie más en la sala lo ve.
           </p>
         </>
       ) : (
         <>
-          <p className="key-nota">
-            Cada quien usa la suya: lo que le pidas al agente lo pagas tú, no la sala.
-            Se guarda en este navegador, así la pones una sola vez.
-          </p>
+          <label className="key-campo">
+            <span>Proveedor</span>
+            <select
+              className="key-select"
+              value={provider}
+              onChange={(e) => {
+                setProvider(e.target.value);
+                setModel(""); // el modelo del anterior no aplica al nuevo
+              }}
+            >
+              {Object.entries(PROVEEDORES).map(([id, p]) => (
+                <option key={id} value={id}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+          </label>
 
-          <div className="key-fila">
+          <label className="key-campo">
+            <span>Key</span>
             <input
               className="key-input"
               type="password"
-              placeholder="sk-ant-..."
-              value={valor}
-              onChange={(e) => setValor(e.target.value)}
+              placeholder={perfil.hint}
+              value={key}
+              onChange={(e) => setKey(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") guardar();
                 if (e.key === "Escape") setAbierto(false);
               }}
               autoFocus
             />
-            <button className="key-guardar" onClick={guardar} disabled={!valor.trim()}>
-              Guardar
-            </button>
-          </div>
+          </label>
 
-          <a
-            className="key-link"
-            href="https://console.anthropic.com/settings/keys"
-            target="_blank"
-            rel="noreferrer"
-          >
-            ¿De dónde saco una?
-          </a>
+          <label className="key-campo">
+            <span>Modelo</span>
+            {/* Editable a propósito: OpenRouter tiene cientos y no cabe listarlos. */}
+            <input
+              className="key-input"
+              list="modelos-sugeridos"
+              placeholder={perfil.modelos[0]}
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") guardar();
+              }}
+            />
+            <datalist id="modelos-sugeridos">
+              {perfil.modelos.map((m) => (
+                <option key={m} value={m} />
+              ))}
+            </datalist>
+          </label>
+
+          <p className="key-nota">
+            Cada quien usa el suyo: lo que le pidas al agente lo pagas tú, no la sala.
+          </p>
+
+          <button className="key-guardar" onClick={guardar} disabled={!key.trim()}>
+            Guardar
+          </button>
+
+          {perfil.url && (
+            <a className="key-link" href={perfil.url} target="_blank" rel="noreferrer">
+              ¿De dónde saco una key de {perfil.label.split(" ")[0]}?
+            </a>
+          )}
         </>
       )}
 

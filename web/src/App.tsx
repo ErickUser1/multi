@@ -17,7 +17,7 @@ import { AgentList } from "./AgentList.js";
 import { MentionMenu } from "./MentionMenu.js";
 import { Historial } from "./Historial.js";
 import { BackCanvas, type Endpoint } from "./BackCanvas.js";
-import { KeyPanel, loadStoredKey } from "./KeyPanel.js";
+import { KeyPanel, loadStoredCredencial, type Credencial } from "./KeyPanel.js";
 
 // El roomId vive en el hash de la URL: #/sala/taco-fiesta-42
 function readRoomFromHash(): string | null {
@@ -203,7 +203,7 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
    * Mi API key. Se lee del navegador al montar: se configura UNA vez y sirve en
    * todas las salas. null = todavía no hay (puedes entrar y platicar igual).
    */
-  const [miKey, setMiKey] = useState<string | null>(() => loadStoredKey());
+  const [miCred, setMiCred] = useState<Credencial | null>(() => loadStoredCredencial());
   /** El server rechazó la key o avisó que hace falta. */
   const [keyError, setKeyError] = useState<string | null>(null);
   /** Abrir el panel solo: pasa cuando intentas invocar sin key. */
@@ -234,8 +234,8 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
     socket.on("connect", () => {
       socket.emit("join", { roomId, name });
       // La key ya configurada viaja sola: no se pide de nuevo en cada sala.
-      const guardada = loadStoredKey();
-      if (guardada) socket.emit("auth:key", { key: guardada });
+      const guardada = loadStoredCredencial();
+      if (guardada) socket.emit("auth:key", guardada);
     });
 
     socket.on("joined", (p: JoinedPayload) => {
@@ -521,17 +521,17 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
                 panel para que se abra solo en ese momento. */}
             <KeyPanel
               key={keyAbrir ? "abierto" : "cerrado"}
-              keyActual={miKey}
+              actual={miCred}
               abiertoPorDefecto={keyAbrir}
               error={keyError}
-              onGuardar={(k) => {
-                socketRef.current?.emit("auth:key", { key: k });
-                setMiKey(k);
+              onGuardar={(c) => {
+                socketRef.current?.emit("auth:key", c);
+                setMiCred(c);
                 setKeyAbrir(false);
               }}
               onOlvidar={() => {
                 socketRef.current?.emit("auth:forget");
-                setMiKey(null);
+                setMiCred(null);
                 setKeyError(null);
               }}
             />

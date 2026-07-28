@@ -21,7 +21,8 @@ import {
   type SelectedElement,
 } from "./rooms.js";
 import { getStorage } from "./storage/index.js";
-import { setKey, getKey, clearKey } from "./keys.js";
+import { setCredential, getCredential, clearCredential } from "./keys.js";
+import { makeProvider, esProviderId, PERFILES } from "./agent/providers/profiles.js";
 import { MAX_AGENTS_PER_ROOM } from "./engine/agents.js";
 import { startTurn, commitTurn, failTurn } from "./engine/turns.js";
 import { commitAll, discardChanges, diffCommit, revertTo, revertFile } from "./engine/git.js";
@@ -30,7 +31,6 @@ import { buildApiMap } from "./engine/api-map.js";
 import { handlePreviewRequest, handlePreviewUpgrade } from "./engine/proxy.js";
 import { isDockerAvailable, ensureImage, sweepOrphanContainers } from "./engine/container.js";
 import { runAgent } from "./agent/loop.js";
-import { AnthropicProvider } from "./agent/providers/anthropic.js";
 import type { ModelProvider } from "./agent/providers/types.js";
 import { createDevMock } from "./agent/providers/mock-scenarios.js";
 
@@ -143,23 +143,39 @@ if (TEST_MOCK) {
 }
 
 /**
- * Key de respaldo de la sala. Solo tiene sentido cuando corres Multi para ti
- * (es tu máquina y tu key); en cuanto invitas gente, cada quien trae la suya o
- * te gastan el saldo.
+ * Credencial de respaldo. Solo tiene sentido cuando corres Multi para ti (es tu
+ * máquina y tu key); en cuanto invitas gente, cada quien trae la suya o te
+ * gastan el saldo.
+ *
+ * `MULTI_PROVIDER` permite que el respaldo no sea Anthropic: quien corra Multi
+ * con OpenRouter o con Ollama local no debería tener que tocar código.
  */
-const FALLBACK_KEY = process.env.ANTHROPIC_API_KEY;
+const FALLBACK = (() => {
+  const id = process.env.MULTI_PROVIDER ?? "anthropic";
+  if (!esProviderId(id)) return null;
+  const apiKey = process.env.MULTI_API_KEY ?? process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return null;
+  return { provider: id, apiKey, model: process.env.MULTI_MODEL };
+})();
 
 /**
  * El proveedor de modelo de QUIEN pidió el turno.
  *
- * La key es de la persona, no del server: cada quien paga lo que pide. Si no
- * tiene y hay una de respaldo en el `.env`, se usa esa (modo "corro Multi para
- * mí"). Si no hay ninguna, el turno no arranca y se le dice a esa persona.
+ * La credencial es de la persona, no del server: cada quien paga lo que pide y
+ * con el proveedor que quiera (uno con Claude, otro con un modelo gratis, otro
+ * con Ollama en su máquina). Si no tiene y hay respaldo en el `.env`, se usa ese
+ * (modo "corro Multi para mí"). Si no hay ninguno, el turno no arranca y se le
+ * dice a esa persona.
  */
 function providerFor(socketId: string): ModelProvider | null {
   if (TEST_MOCK) return createDevMock();
-  const key = getKey(socketId) ?? FALLBACK_KEY;
-  return key ? new AnthropicProvider(key) : null;
+  const cred = getCredential(socketId) ?? FALLBACK;
+  if (!cred) return null;
+  try {
+    return makeProvider(cred.provider, cred.apiKey, cred.model);
+  } catch {
+    return null; // key vacía o perfil mal formado: se trata como "sin credencial"
+  }
 }
 
 // ── Socket.IO ─────────────────────────────────────────────────────────────
@@ -398,8 +414,8 @@ io.on("connection", (socket) => {
    * no se emite a la sala, no se escribe en disco, no entra al contenedor.
    * La confirmación va únicamente a quien la mandó.
    */
-  socket.on("auth:key", (payload: { key?: unknown }) => {
-    const res = setKey(socket.id, payload?.key);
+  socket.on("auth:key", (payload: Record<string, unknown>) => {
+    const res = setCredential(socket.id, payload);
     if (!res.ok) {
       socket.emit("error:key", { message: res.message });
       return;
@@ -415,7 +431,7 @@ io.on("connection", (socket) => {
 
   /** Olvidar mi key (prestar la compu, compartir pantalla). */
   socket.on("auth:forget", () => {
-    clearKey(socket.id);
+    clearCredential(socket.id);
     if (joinedRoom) {
       const member = joinedRoom.members.get(socket.id);
       if (member) member.canInvoke = false;
@@ -424,7 +440,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", () => {
-    clearKey(socket.id); // la key del server se va con el socket
+    clearCredential(socket.id); // la key del server se va con el socket
     if (joinedRoom) {
       removeMember(joinedRoom, socket.id);
       joinedRoom.selections.delete(socket.id);
@@ -657,8 +673,8 @@ try {
   const salas = await loadRoomIndex();
   const modoKeys = TEST_MOCK
     ? "agente simulado"
-    : FALLBACK_KEY
-      ? "key de respaldo en .env + key propia por persona"
+    : FALLBACK
+      ? `respaldo: ${PERFILES[FALLBACK.provider].label} + key propia por persona`
       : "cada quien trae su key";
   console.log(
     `Multi server en http://localhost:${PORT}  (${modoKeys}, ${salas} sala(s) guardada(s))`,

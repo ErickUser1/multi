@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { SERVER_URL } from "./socket.js";
 
 /**
  * Tu proveedor de modelo y tu API key.
@@ -45,23 +46,27 @@ const PROVEEDORES: Record<
     url: "https://console.anthropic.com/settings/keys",
     modelos: ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5-20251001"],
   },
+  // Verificados contra https://openrouter.ai/api/v1/models (julio 2026). Los
+  // gratis van primero: son la puerta de entrada para quien no quiere pagar.
   openrouter: {
     label: "OpenRouter (muchos modelos)",
     hint: "sk-or-v1-…",
     url: "https://openrouter.ai/keys",
     modelos: [
+      "nvidia/nemotron-3-ultra-550b-a55b:free",
+      "google/gemma-4-31b-it:free",
       "google/gemma-4-26b-a4b-it:free",
       "anthropic/claude-opus-5",
-      "google/gemini-2.5-pro",
-      "openai/gpt-5",
-      "deepseek/deepseek-chat",
+      "openai/gpt-5.6-terra",
+      "google/gemini-3.1-pro-preview",
+      "deepseek/deepseek-v4-pro",
     ],
   },
   openai: {
     label: "OpenAI",
     hint: "sk-…",
     url: "https://platform.openai.com/api-keys",
-    modelos: ["gpt-5", "gpt-5-mini"],
+    modelos: ["gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.6-sol"],
   },
   groq: {
     label: "Groq (rápido)",
@@ -125,13 +130,39 @@ export function KeyPanel(props: {
   const [provider, setProvider] = useState(props.actual?.provider ?? "openrouter");
   const [key, setKey] = useState("");
   const [model, setModel] = useState(props.actual?.model ?? "");
+  /** Catálogo real del proveedor (si publica uno). Vacío = usar los sugeridos. */
+  const [catalogo, setCatalogo] = useState<string[]>([]);
 
   const perfil = PROVEEDORES[provider] ?? PROVEEDORES.openrouter;
+
+  // El catálogo se pide al proveedor en vez de mantener una lista a mano, que
+  // envejece: OpenRouter tenía 341 modelos el día que se escribió esto.
+  useEffect(() => {
+    let vigente = true;
+    setCatalogo([]);
+    fetch(`${SERVER_URL}/providers/${provider}/models`)
+      .then((r) => r.json())
+      .then((d: { models?: Array<{ id: string; free?: boolean }> }) => {
+        if (!vigente || !d.models?.length) return;
+        // Los gratis primero: es lo que busca quien no quiere pagar.
+        const ordenados = [...d.models].sort((a, b) => Number(b.free) - Number(a.free));
+        setCatalogo(ordenados.map((m) => m.id));
+      })
+      .catch(() => {
+        /* sin catálogo se usan los sugeridos del perfil */
+      });
+    return () => {
+      vigente = false;
+    };
+  }, [provider]);
+
+  /** Lo que se ofrece en el desplegable: el catálogo real, o los sugeridos. */
+  const sugerencias = catalogo.length > 0 ? catalogo : perfil.modelos;
 
   const guardar = () => {
     const k = key.trim();
     if (!k) return;
-    const c: Credencial = { provider, key: k, model: model.trim() || perfil.modelos[0] };
+    const c: Credencial = { provider, key: k, model: model.trim() || sugerencias[0] || perfil.modelos[0] };
     store(c);
     props.onGuardar(c);
     setKey(""); // no se queda en el DOM más de lo necesario
@@ -224,7 +255,7 @@ export function KeyPanel(props: {
             <input
               className="key-input"
               list="modelos-sugeridos"
-              placeholder={perfil.modelos[0]}
+              placeholder={sugerencias[0] ?? perfil.modelos[0]}
               value={model}
               onChange={(e) => setModel(e.target.value)}
               onKeyDown={(e) => {
@@ -232,7 +263,7 @@ export function KeyPanel(props: {
               }}
             />
             <datalist id="modelos-sugeridos">
-              {perfil.modelos.map((m) => (
+              {sugerencias.map((m) => (
                 <option key={m} value={m} />
               ))}
             </datalist>

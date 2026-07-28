@@ -105,6 +105,38 @@ fastify.get<{ Params: { id: string } }>("/rooms/:id/api-map", async (req, reply)
   return await buildApiMap(room.workspace.dir);
 });
 
+/**
+ * Los modelos que ofrece un proveedor, traídos de él mismo.
+ *
+ * Una lista escrita a mano envejece: OpenRouter tenía 341 modelos el día que se
+ * escribió esto y en unos meses serán otros. Los perfiles siguen sirviendo como
+ * sugerencia (y para cuando el proveedor no publica catálogo), pero si se puede
+ * preguntar, se pregunta.
+ */
+fastify.get<{ Params: { id: string } }>("/providers/:id/models", async (req, reply) => {
+  if (req.params.id !== "openrouter") {
+    // Los demás no publican catálogo abierto: se queda con los sugeridos.
+    return { models: [] };
+  }
+  try {
+    const r = await fetch("https://openrouter.ai/api/v1/models", {
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!r.ok) return { models: [] };
+    const data = (await r.json()) as { data?: Array<{ id: string; context_length?: number }> };
+    return {
+      models: (data.data ?? []).map((m) => ({
+        id: m.id,
+        free: m.id.endsWith(":free"),
+        context: m.context_length ?? 0,
+      })),
+    };
+  } catch {
+    // Sin internet o el proveedor caído: la UI se queda con los sugeridos.
+    return reply.send({ models: [] });
+  }
+});
+
 // El diff de un turno — opt-in, no se muestra por defecto.
 fastify.get<{ Params: { id: string; hash: string } }>(
   "/rooms/:id/diff/:hash",

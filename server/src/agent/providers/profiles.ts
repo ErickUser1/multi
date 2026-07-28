@@ -35,19 +35,23 @@ export const PERFILES = {
     label: "OpenRouter",
     keyHint: "sk-or-v1-…",
     keyUrl: "https://openrouter.ai/keys",
-    // Un modelo gratis primero: es la puerta de entrada para quien no quiere pagar.
+    // Los gratis primero: son la puerta de entrada para quien no quiere pagar.
+    // Verificados contra su API de modelos (julio 2026).
     modelosSugeridos: [
+      "nvidia/nemotron-3-ultra-550b-a55b:free",
+      "google/gemma-4-31b-it:free",
       "google/gemma-4-26b-a4b-it:free",
       "anthropic/claude-opus-5",
-      "openai/gpt-5",
-      "deepseek/deepseek-chat",
+      "openai/gpt-5.6-terra",
+      "google/gemini-3.1-pro-preview",
+      "deepseek/deepseek-v4-pro",
     ],
   },
   openai: {
     label: "OpenAI",
     keyHint: "sk-…",
     keyUrl: "https://platform.openai.com/api-keys",
-    modelosSugeridos: ["gpt-5", "gpt-5-mini"],
+    modelosSugeridos: ["gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.6-sol"],
   },
   groq: {
     label: "Groq",

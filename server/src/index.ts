@@ -21,6 +21,7 @@ import {
   type SelectedElement,
 } from "./rooms.js";
 import { getStorage } from "./storage/index.js";
+import { setKey, getKey, clearKey } from "./keys.js";
 import { MAX_AGENTS_PER_ROOM } from "./engine/agents.js";
 import { startTurn, commitTurn, failTurn } from "./engine/turns.js";
 import { commitAll, discardChanges, diffCommit, revertTo, revertFile } from "./engine/git.js";
@@ -131,33 +132,35 @@ fastify.get<{ Params: { id: string } }>("/rooms/:id", async (req, reply) => {
 // ── El proveedor de modelo (compartido) ──────────────────────────────────────
 
 /**
- * El proveedor de modelo. Siempre el real en uso normal.
- *
- * MULTI_TEST_MOCK=1 lo cambia por el agente simulado — lo usan SOLO los demos
+ * MULTI_TEST_MOCK=1 cambia el agente por uno simulado — lo usan SOLO los demos
  * automatizados, para que las verificaciones no gasten API key. El nombre lleva
  * "TEST" a propósito: nadie lo pone por accidente creyendo que es una opción
  * normal, y el arranque lo grita.
  */
-function makeProvider(): ModelProvider {
-  if (process.env.MULTI_TEST_MOCK === "1") {
-    console.warn("\n  *** AGENTE SIMULADO (MULTI_TEST_MOCK=1) — solo para pruebas ***\n");
-    return createDevMock();
-  }
-
-  const key = process.env.ANTHROPIC_API_KEY;
-  if (key) return new AnthropicProvider(key);
-
-  console.error(
-    [
-      "",
-      "  Falta ANTHROPIC_API_KEY.",
-      "  Ponla en server/.env:   ANTHROPIC_API_KEY=sk-ant-...",
-      "",
-    ].join("\n"),
-  );
-  process.exit(1);
+const TEST_MOCK = process.env.MULTI_TEST_MOCK === "1";
+if (TEST_MOCK) {
+  console.warn("\n  *** AGENTE SIMULADO (MULTI_TEST_MOCK=1) — solo para pruebas ***\n");
 }
-const provider = makeProvider();
+
+/**
+ * Key de respaldo de la sala. Solo tiene sentido cuando corres Multi para ti
+ * (es tu máquina y tu key); en cuanto invitas gente, cada quien trae la suya o
+ * te gastan el saldo.
+ */
+const FALLBACK_KEY = process.env.ANTHROPIC_API_KEY;
+
+/**
+ * El proveedor de modelo de QUIEN pidió el turno.
+ *
+ * La key es de la persona, no del server: cada quien paga lo que pide. Si no
+ * tiene y hay una de respaldo en el `.env`, se usa esa (modo "corro Multi para
+ * mí"). Si no hay ninguna, el turno no arranca y se le dice a esa persona.
+ */
+function providerFor(socketId: string): ModelProvider | null {
+  if (TEST_MOCK) return createDevMock();
+  const key = getKey(socketId) ?? FALLBACK_KEY;
+  return key ? new AnthropicProvider(key) : null;
+}
 
 // ── Socket.IO ─────────────────────────────────────────────────────────────
 
@@ -221,6 +224,17 @@ io.on("connection", (socket) => {
     const intent = parseIntent(text, !!anchor);
     if (intent.kind === "talk") return; // plática entre humanos: nadie despierta
 
+    // El turno corre con la key de QUIEN lo pide: cada quien paga lo suyo.
+    const provider = providerFor(socket.id);
+    if (!provider) {
+      // Solo a esta persona: que le falte key a alguien no es asunto de la sala.
+      socket.emit("error:key", {
+        message:
+          "Para pedirle algo a un agente necesitas tu propia API key de Anthropic. Pégala arriba y vuelve a intentar.",
+      });
+      return;
+    }
+
     // Anclaje: prependemos el elemento como texto legible (cuidado 3).
     const withAnchor = (t: string) => (anchor ? `${anchorText(anchor)}\n\n${t}` : t);
 
@@ -231,7 +245,7 @@ io.on("connection", (socket) => {
         systemMsg(room, `no existe "${intent.agentName}" en esta sala`);
         return;
       }
-      void dispatchAgent(room, target.id, withAnchor(intent.task));
+      void dispatchAgent(room, target.id, withAnchor(intent.task), provider);
     } else {
       // "@agente ..." o mensaje anclado → agente NUEVO (paralelo real).
       const agent = room.agents.spawn(intent.task);
@@ -240,7 +254,7 @@ io.on("connection", (socket) => {
         return;
       }
       io.to(room.id).emit("agents", { agents: room.agents.list() });
-      void dispatchAgent(room, agent.id, withAnchor(intent.task));
+      void dispatchAgent(room, agent.id, withAnchor(intent.task), provider);
     }
 
     // Al mandar mensaje anclado, limpiar la selección de este miembro (cuidado 4).
@@ -352,7 +366,38 @@ io.on("connection", (socket) => {
     io.to(room.id).emit("orphans", { turns: [] });
   });
 
+  /**
+   * Guardar la API key de esta persona. Solo en memoria, solo para su socket:
+   * no se emite a la sala, no se escribe en disco, no entra al contenedor.
+   * La confirmación va únicamente a quien la mandó.
+   */
+  socket.on("auth:key", (payload: { key?: unknown }) => {
+    const res = setKey(socket.id, payload?.key);
+    if (!res.ok) {
+      socket.emit("error:key", { message: res.message });
+      return;
+    }
+    socket.emit("auth:ok");
+    // Los demás solo se enteran de QUE puede invocar agentes, nunca de la key.
+    if (joinedRoom) {
+      const member = joinedRoom.members.get(socket.id);
+      if (member) member.canInvoke = true;
+      io.to(joinedRoom.id).emit("presence", { members: membersList(joinedRoom) });
+    }
+  });
+
+  /** Olvidar mi key (prestar la compu, compartir pantalla). */
+  socket.on("auth:forget", () => {
+    clearKey(socket.id);
+    if (joinedRoom) {
+      const member = joinedRoom.members.get(socket.id);
+      if (member) member.canInvoke = false;
+      io.to(joinedRoom.id).emit("presence", { members: membersList(joinedRoom) });
+    }
+  });
+
   socket.on("disconnect", () => {
+    clearKey(socket.id); // la key del server se va con el socket
     if (joinedRoom) {
       removeMember(joinedRoom, socket.id);
       joinedRoom.selections.delete(socket.id);
@@ -398,7 +443,12 @@ const pendingByAgent = new Map<string, string[]>();
  * Si el agente ya está corriendo, el mensaje se acumula y se atiende en UNA
  * sola re-ejecución al terminar (coalescing).
  */
-async function dispatchAgent(room: Room, agentId: string, userText: string): Promise<void> {
+async function dispatchAgent(
+  room: Room,
+  agentId: string,
+  userText: string,
+  provider: ModelProvider,
+): Promise<void> {
   const key = `${room.id}:${agentId}`;
   const queue = pendingByAgent.get(key) ?? [];
   queue.push(userText);
@@ -410,7 +460,7 @@ async function dispatchAgent(room: Room, agentId: string, userText: string): Pro
     if (pending.length === 0) return;
     // Coalescing: varios mensajes acumulados se atienden en un solo turno.
     const task = pending.join("\n\n");
-    await runAgentTurn(room, agentId, task, signal);
+    await runAgentTurn(room, agentId, task, signal, provider);
   });
 }
 
@@ -420,6 +470,7 @@ async function runAgentTurn(
   agentId: string,
   task: string,
   signal: AbortSignal,
+  provider: ModelProvider,
 ): Promise<void> {
   const agent = room.agents.get(agentId);
   if (!agent) return;
@@ -577,8 +628,13 @@ try {
   // Las salas no se despiertan al arrancar: sería carísimo levantar N dev
   // servers. Cada una despierta cuando alguien entra (wakeRoom).
   const salas = await loadRoomIndex();
+  const modoKeys = TEST_MOCK
+    ? "agente simulado"
+    : FALLBACK_KEY
+      ? "key de respaldo en .env + key propia por persona"
+      : "cada quien trae su key";
   console.log(
-    `Multi server en http://localhost:${PORT}  (provider: ${provider.name}, ${salas} sala(s) guardada(s))`,
+    `Multi server en http://localhost:${PORT}  (${modoKeys}, ${salas} sala(s) guardada(s))`,
   );
 } catch (err) {
   fastify.log.error(err);

@@ -18,6 +18,12 @@ export interface Member {
   socketId: string;
   name: string;
   color: string;
+  /**
+   * Si esta persona puede invocar agentes (trajo su API key). Se muestra en la
+   * presencia para saber quién puede pedirle cosas al agente y quién solo mira.
+   * Es un booleano a propósito: la key jamás sale del server.
+   */
+  canInvoke?: boolean;
 }
 
 /** Un elemento del preview seleccionado (capturado por el inspector). */

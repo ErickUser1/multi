@@ -17,6 +17,7 @@ import { AgentList } from "./AgentList.js";
 import { MentionMenu } from "./MentionMenu.js";
 import { Historial } from "./Historial.js";
 import { BackCanvas, type Endpoint } from "./BackCanvas.js";
+import { KeyPanel, loadStoredKey } from "./KeyPanel.js";
 
 // El roomId vive en el hash de la URL: #/sala/taco-fiesta-42
 function readRoomFromHash(): string | null {
@@ -138,6 +139,15 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
   const [apiVersion, setApiVersion] = useState(0);
   /** Qué tab del escenario se ve. */
   const [tab, setTab] = useState<"app" | "back">("app");
+  /**
+   * Mi API key. Se lee del navegador al montar: se configura UNA vez y sirve en
+   * todas las salas. null = todavía no hay (puedes entrar y platicar igual).
+   */
+  const [miKey, setMiKey] = useState<string | null>(() => loadStoredKey());
+  /** El server rechazó la key o avisó que hace falta. */
+  const [keyError, setKeyError] = useState<string | null>(null);
+  /** Abrir el panel solo: pasa cuando intentas invocar sin key. */
+  const [keyAbrir, setKeyAbrir] = useState(false);
 
   // Modo inspect activo (para seleccionar elementos del preview).
   const [inspect, setInspect] = useState(false);
@@ -161,7 +171,12 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
     const socket = connectSocket();
     socketRef.current = socket;
 
-    socket.on("connect", () => socket.emit("join", { roomId, name }));
+    socket.on("connect", () => {
+      socket.emit("join", { roomId, name });
+      // La key ya configurada viaja sola: no se pide de nuevo en cada sala.
+      const guardada = loadStoredKey();
+      if (guardada) socket.emit("auth:key", { key: guardada });
+    });
 
     socket.on("joined", (p: JoinedPayload) => {
       setMembers(p.members);
@@ -228,6 +243,13 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
     });
 
     socket.on("error:join", ({ message }: { message: string }) => alert(message));
+
+    // Solo a mí: mi key faltaba o el server la rechazó. Abre el panel.
+    socket.on("error:key", ({ message }: { message: string }) => {
+      setKeyError(message);
+      setKeyAbrir(true);
+    });
+    socket.on("auth:ok", () => setKeyError(null));
 
     return () => {
       socket.disconnect();
@@ -430,6 +452,26 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
                 {m.name.slice(0, 1).toUpperCase()}
               </div>
             ))}
+            {/* La `key` cambia cuando el server pide la API key: remonta el
+                panel para que se abra solo en ese momento. */}
+            {/* La `key` cambia cuando el server pide la API key: remonta el
+                panel para que se abra solo en ese momento. */}
+            <KeyPanel
+              key={keyAbrir ? "abierto" : "cerrado"}
+              keyActual={miKey}
+              abiertoPorDefecto={keyAbrir}
+              error={keyError}
+              onGuardar={(k) => {
+                socketRef.current?.emit("auth:key", { key: k });
+                setMiKey(k);
+                setKeyAbrir(false);
+              }}
+              onOlvidar={() => {
+                socketRef.current?.emit("auth:forget");
+                setMiKey(null);
+                setKeyError(null);
+              }}
+            />
             <button className="invitar" onClick={copyLink}>
               Copiar link
             </button>

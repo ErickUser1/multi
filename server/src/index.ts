@@ -245,16 +245,43 @@ io.on("connection", (socket) => {
         systemMsg(room, `no existe "${intent.agentName}" en esta sala`);
         return;
       }
+
+      // Interrumpir si está trabajando: cualquiera en la sala puede corregir el
+      // rumbo sin esperar. Si tu compa le pidió el front rojo y tú ves que va
+      // mal, decir "mejor azul" tiene que parar lo que hace AHORA — esperar 30
+      // segundos a que termine algo que ya sabes que está mal es tiempo tirado.
+      // Lo que alcanzó a escribir se queda en disco (el turno se marca fallido);
+      // el mensaje nuevo arranca un turno fresco sobre ese estado.
+      if (target.state !== "idle") {
+        room.coordinator.interrupt(`${room.id}:${target.id}`);
+        systemMsg(room, `${member.name} interrumpió a ${target.name}`, member.color);
+      }
+
       void dispatchAgent(room, target.id, withAnchor(intent.task), provider);
     } else {
-      // "@agente ..." o mensaje anclado → agente NUEVO (paralelo real).
-      const agent = room.agents.spawn(intent.task);
-      if (!agent) {
-        systemMsg(room, `ya hay ${MAX_AGENTS_PER_ROOM} agentes trabajando; espera a que alguno termine`);
-        return;
+      // "@agente ..." (genérico) o mensaje anclado.
+      //
+      // Si ya hay un agente libre, le hablamos a ÉL en vez de crear otro: es
+      // con quien venías conversando y trae el contexto. Crear uno nuevo cada
+      // vez dejaba agentes olvidados y arrancaba de cero sin saber qué se había
+      // hecho antes. Para trabajo en paralelo se menciona por nombre.
+      const libre = room.agents.list().find((a) => a.state === "idle");
+      if (libre) {
+        void dispatchAgent(room, libre.id, withAnchor(intent.task), provider);
+      } else {
+        const agent = room.agents.spawn(intent.task);
+        if (!agent) {
+          systemMsg(
+            room,
+            `ya hay ${MAX_AGENTS_PER_ROOM} agentes trabajando; espera a que alguno termine`,
+          );
+          return;
+        }
+        io.to(room.id).emit("agents", { agents: room.agents.list() });
+        // Que quede claro que nació uno nuevo, en vez de que aparezca sin más.
+        systemMsg(room, `entró ${agent.name} a la sala`, agent.color);
+        void dispatchAgent(room, agent.id, withAnchor(intent.task), provider);
       }
-      io.to(room.id).emit("agents", { agents: room.agents.list() });
-      void dispatchAgent(room, agent.id, withAnchor(intent.task), provider);
     }
 
     // Al mandar mensaje anclado, limpiar la selección de este miembro (cuidado 4).

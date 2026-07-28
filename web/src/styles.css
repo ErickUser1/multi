@@ -1168,3 +1168,9 @@ body::after {
   font-size: 11px;
   color: #d95d63;
 }
+
+/* "@agente" (crear otro) va al final y separado: lo normal es seguirle hablando
+   a quien ya está, no abrir uno nuevo cada vez. */
+.mention-nuevo {
+  border-top: 1px solid var(--linea);
+}

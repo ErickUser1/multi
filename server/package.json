@@ -15,6 +15,7 @@
     "demo:back": "tsx src/demos/back-visual.ts",
     "demo:aislamiento": "tsx src/demos/aislamiento.ts",
     "demo:keys": "tsx src/demos/keys.ts",
+    "demo:menciones": "tsx src/demos/menciones.ts",
     "dev:test": "MULTI_TEST_MOCK=1 CHOKIDAR_USEPOLLING=1 tsx watch src/index.ts"
   },
   "dependencies": {

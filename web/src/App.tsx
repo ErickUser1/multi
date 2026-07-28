@@ -62,6 +62,9 @@ export function App() {
 
 function Landing() {
   const [busy, setBusy] = useState(false);
+  const [pegando, setPegando] = useState(false);
+  const [link, setLink] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   const nueva = async () => {
     setBusy(true);
@@ -74,6 +77,22 @@ function Landing() {
     }
   };
 
+  /**
+   * Entrar con lo que te pasó tu compa.
+   *
+   * Normalmente el link se abre y ya (el id vive en el hash), pero llega por
+   * WhatsApp o Discord y a veces se copia mal, se parte, o te pasan solo el
+   * nombre de la sala. Acepta las tres formas en vez de exigir la URL exacta.
+   */
+  const entrar = () => {
+    const id = extraerRoomId(link);
+    if (!id) {
+      setError("no encontré el nombre de la sala ahí");
+      return;
+    }
+    window.location.hash = `#/sala/${id}`;
+  };
+
   return (
     <div className="center-screen">
       <div className="card">
@@ -82,10 +101,51 @@ function Landing() {
         <button className="cta" onClick={nueva} disabled={busy}>
           {busy ? "creando sala…" : "Crear una sala"}
         </button>
-        <p className="hint">o pega el link que te pasó tu compa</p>
+
+        {pegando ? (
+          <div className="entrar-bloque">
+            <input
+              className="name-input"
+              placeholder="pega el link o el nombre de la sala"
+              value={link}
+              onChange={(e) => {
+                setLink(e.target.value);
+                setError(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") entrar();
+                if (e.key === "Escape") setPegando(false);
+              }}
+              autoFocus
+            />
+            <button className="entrar-btn" onClick={entrar} disabled={!link.trim()}>
+              Entrar
+            </button>
+            {error && <p className="entrar-error">{error}</p>}
+          </div>
+        ) : (
+          <button className="hint hint-btn" onClick={() => setPegando(true)}>
+            o entra con el link que te pasó tu compa
+          </button>
+        )}
       </div>
     </div>
   );
+}
+
+/**
+ * Saca el id de la sala de lo que sea que hayan pegado: la URL completa, solo el
+ * fragmento `#/sala/x`, o el nombre pelón. Los ids son de la forma
+ * `palabra-palabra-numero`.
+ */
+function extraerRoomId(raw: string): string | null {
+  const texto = raw.trim();
+  if (!texto) return null;
+  const enRuta = texto.match(/\/sala\/([\w-]+)/);
+  if (enRuta) return enRuta[1];
+  // Solo el nombre: debe parecer un id de sala, no una frase cualquiera.
+  if (/^[a-z]+-[a-z]+-\d+$/i.test(texto)) return texto;
+  return null;
 }
 
 // ── Pantalla: pedir nombre ─────────────────────────────────────────────────

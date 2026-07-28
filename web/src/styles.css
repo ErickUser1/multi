@@ -1122,3 +1122,49 @@ body::after {
   border-radius: 2px;
   text-transform: uppercase;
 }
+
+/* Entrar con el link que te pasaron. Aparece al hacer click en la pista, para
+   que la pantalla siga siendo "crear una sala" y no un formulario. */
+.hint-btn {
+  background: none;
+  border: 0;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--linea);
+}
+.hint-btn:hover {
+  color: var(--texto);
+}
+
+.entrar-bloque {
+  margin-top: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.entrar-btn {
+  border: 1px solid var(--linea);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--texto);
+  font-family: inherit;
+  font-size: 12px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 10px;
+  cursor: pointer;
+}
+.entrar-btn:hover:not(:disabled) {
+  border-color: var(--lavanda);
+}
+.entrar-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.entrar-error {
+  font-size: 11px;
+  color: #d95d63;
+}

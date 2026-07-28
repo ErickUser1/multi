@@ -24,11 +24,18 @@ export function MentionMenu(props: {
     hint: hintDe(a),
     color: a.color,
     nuevo: false,
+    ocupado: a.state !== "idle",
   }));
 
   const opciones = [
     ...existentes,
-    { name: "agente", hint: "lanzar otro en paralelo", color: "#ffc37a", nuevo: true },
+    {
+      name: "agente",
+      hint: "lanzar uno nuevo, en paralelo",
+      color: "#ffc37a",
+      nuevo: true,
+      ocupado: false,
+    },
   ].filter((o) => o.name.toLowerCase().startsWith(q));
 
   if (opciones.length === 0) return null;
@@ -45,6 +52,10 @@ export function MentionMenu(props: {
             @{o.name}
           </span>
           <span className="mention-hint">{o.hint}</span>
+          {/* A los que trabajan SÍ se les puede hablar: el mensaje los
+              interrumpe y atienden lo nuevo. Se avisa para que no parezca
+              que hay que esperar. */}
+          {o.ocupado && <span className="mention-tag">interrumpir</span>}
         </div>
       ))}
     </div>
@@ -53,10 +64,10 @@ export function MentionMenu(props: {
 
 /** Qué está haciendo, en términos de si le puedes hablar ahora. */
 function hintDe(a: Agent): string {
-  if (a.state === "idle") return a.task ? `libre · antes: ${truncate(a.task, 24)}` : "libre";
+  if (a.state === "idle") return a.task ? `libre · antes: ${truncate(a.task, 22)}` : "libre";
   if (a.state === "waiting") return "esperando su turno";
   if (a.state === "stuck") return "atorado";
-  return a.task ? truncate(a.task) : "trabajando";
+  return a.task ? `trabajando en ${truncate(a.task, 22)}` : "trabajando";
 }
 
 function truncate(s: string, n = 34): string {

@@ -307,13 +307,21 @@ io.on("connection", (socket) => {
 
       void dispatchAgent(room, target.id, withAnchor(intent.task), provider);
     } else {
-      // "@agente ..." (genérico) o mensaje anclado.
+      // "@agente ..." = quiero uno NUEVO, siempre. Es la forma de lanzar trabajo
+      // en paralelo, y el menú lo ofrece con esas palabras ("lanzar otro").
+      // Reutilizar al que estuviera libre hacía que el botón mintiera: pedías
+      // otro agente y te contestaba el mismo.
       //
-      // Si ya hay un agente libre, le hablamos a ÉL en vez de crear otro: es
-      // con quien venías conversando y trae el contexto. Crear uno nuevo cada
-      // vez dejaba agentes olvidados y arrancaba de cero sin saber qué se había
-      // hecho antes. Para trabajo en paralelo se menciona por nombre.
-      const libre = room.agents.list().find((a) => a.state === "idle");
+      // Para seguirle hablando a uno existente se le menciona por su nombre
+      // (@agente-1), que el menú lista arriba con lo que hizo.
+      //
+      // Excepción: un mensaje anclado sin @ no expresa "quiero otro agente" —
+      // solo señala un elemento y pide algo. Ahí sí conviene el que ya está.
+      const soloAnclado = !text.trim().startsWith("@");
+      const libre = soloAnclado
+        ? room.agents.list().find((a) => a.state === "idle")
+        : undefined;
+
       if (libre) {
         void dispatchAgent(room, libre.id, withAnchor(intent.task), provider);
       } else {

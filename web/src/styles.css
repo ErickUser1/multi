@@ -1224,3 +1224,19 @@ body::after {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* "interrumpir" junto a un agente ocupado: se le PUEDE hablar aunque esté
+   trabajando — el mensaje lo detiene y atiende lo nuevo. Sin esta marca parece
+   que hay que esperar a que termine. */
+.mention-tag {
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--ambar);
+  border: 1px solid var(--ambar);
+  border-radius: 2px;
+  padding: 1px 5px;
+  margin-left: auto;
+  flex-shrink: 0;
+}

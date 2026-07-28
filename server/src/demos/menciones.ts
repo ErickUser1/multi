@@ -61,20 +61,20 @@ async function main() {
   check("y terminó (quedó libre)", agentes[0]?.state === "idle", agentes[0]?.state);
   const primero = agentes[0]?.id;
 
-  console.log("\n2. El segundo @agente le habla AL MISMO, no crea otro");
+  console.log("\n2. El segundo @agente crea OTRO (es la forma de ir en paralelo)");
   socket.emit("chat", { text: "@agente segundo encargo" });
   await sleep(25000);
   check(
-    "sigue habiendo 1 agente",
-    agentes.length === 1,
+    "ahora hay 2 agentes",
+    agentes.length === 2,
     `hay ${agentes.length}: ${agentes.map((a) => a.id).join(", ")}`,
   );
-  check("y es el mismo de antes", agentes[0]?.id === primero, `${primero} vs ${agentes[0]?.id}`);
+  check("el primero sigue existiendo", agentes.some((a) => a.id === primero));
 
-  console.log("\n3. Mencionarlo por nombre también funciona");
-  socket.emit("chat", { text: `@${agentes[0].name} tercer encargo` });
+  console.log("\n3. Mencionar por NOMBRE le habla a ese, sin crear otro");
+  socket.emit("chat", { text: `@${primero} tercer encargo` });
   await sleep(25000);
-  check("no se creó otro", agentes.length === 1, `hay ${agentes.length}`);
+  check("siguen siendo 2", agentes.length === 2, `hay ${agentes.length}`);
 
   console.log("\n4. Otra persona puede interrumpirlo a media chamba");
   const compa: Socket = ioClient(SERVER, { transports: ["websocket"] });
@@ -93,13 +93,15 @@ async function main() {
   });
 
   // Yo lanzo trabajo y el compa corrige a mitad, sin esperar a que termine.
+  const antesDeLanzar = agentes.length;
   socket.emit("chat", { text: "@agente ponlo rojo" });
   await sleep(3000);
-  const trabajando = agentes.some((a) => a.state !== "idle");
-  check("el agente está trabajando", trabajando, agentes.map((a) => a.state).join(","));
+  const trabajador = agentes.find((a) => a.state !== "idle");
+  check("hay un agente trabajando", !!trabajador, agentes.map((a) => `${a.id}:${a.state}`).join(","));
 
-  compa.emit("chat", { text: `@${agentes[0].name} mejor azul` });
-  await sleep(2000);
+  // Mencionarlo POR NOMBRE: eso es lo que interrumpe (@agente crearía otro).
+  compa.emit("chat", { text: `@${trabajador?.name} mejor azul` });
+  await sleep(2500);
   check(
     "la sala ve que lo interrumpieron",
     avisos.some((t) => t.includes("interrumpió")),
@@ -107,8 +109,13 @@ async function main() {
   );
 
   await sleep(30000);
-  check("el agente terminó y quedó libre", agentes[0]?.state === "idle", agentes[0]?.state);
-  check("y sigue habiendo uno solo", agentes.length === 1, `hay ${agentes.length}`);
+  check(
+    "interrumpir NO creó otro agente",
+    agentes.length === antesDeLanzar + 1,
+    `${antesDeLanzar} -> ${agentes.length}`,
+  );
+  check("todos quedaron libres", agentes.every((a) => a.state === "idle"),
+    agentes.map((a) => `${a.id}:${a.state}`).join(","));
 
   compa.disconnect();
   socket.disconnect();

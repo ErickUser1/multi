@@ -227,7 +227,26 @@ export function execInContainer(
 /** Arranca un proceso largo (el dev server) adentro. Devuelve el hijo para poder matarlo. */
 export function spawnInContainer(roomId: string, command: string, env: Record<string, string>) {
   const name = CONTAINER_PREFIX + roomId;
-  const envArgs = Object.entries(env).flatMap(([k, v]) => ["-e", `${k}=${v}`]);
+
+  /**
+   * El workspace está montado desde el host, y los eventos de cambio de archivo
+   * (inotify) NO cruzan esa frontera — menos aún desde /mnt/c en WSL, donde ya
+   * vienen atravesando Windows. Sin esto el dev server nunca se entera de que el
+   * agente escribió algo, y el preview se queda congelado: hay que reiniciarlo a
+   * mano para ver cada cambio, que es justo lo contrario del producto.
+   *
+   * Va por entorno, no en el vite.config: el motor no debe depender de que el
+   * agente escriba la config correcta, y estas variables las respetan también
+   * Next, Nuxt, Astro y demás (todos usan chokidar por debajo).
+   */
+  const watchEnv = {
+    CHOKIDAR_USEPOLLING: "1",
+    CHOKIDAR_INTERVAL: "300",
+    WATCHPACK_POLLING: "true", // webpack (Next)
+    ...env,
+  };
+
+  const envArgs = Object.entries(watchEnv).flatMap(([k, v]) => ["-e", `${k}=${v}`]);
   return spawn("docker", ["exec", "-i", ...envArgs, name, "sh", "-c", command], {
     stdio: ["ignore", "pipe", "pipe"],
   });

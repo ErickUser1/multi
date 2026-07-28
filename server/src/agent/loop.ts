@@ -51,6 +51,9 @@ créalo con bash: es tu trabajo, no preguntes por dónde empezar.
 - Deja el dev server en el script "dev" del package.json, escuchando en el puerto de la
   variable PORT y con el host abierto. Multi lo levanta y lo muestra a toda la sala;
   sin eso nadie ve nada.
+- El proyecto vive en un volumen montado, donde los eventos de archivo del sistema no
+  cruzan. Configura el watcher de tu stack por SONDEO (polling) o los cambios no se
+  verán en vivo y la sala se quedará mirando una pantalla congelada.
 </sala_vacia>
 
 <alcance>

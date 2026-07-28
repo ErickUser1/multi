@@ -8,6 +8,11 @@ import type { ToolSpec } from "../providers/types.js";
 export interface ToolContext {
   /** Raíz del workspace de la sala. Ninguna tool puede salir de aquí. */
   workspaceDir: string;
+  /**
+   * Dónde se ejecutan los comandos de bash (contenedor de la sala o, sin Docker,
+   * la máquina del server). Si falta, bash corre local — es lo que usan los demos.
+   */
+  runner?: import("../../engine/runner.js").Runner;
   /** Emite un evento observable (ej. file:changed). Opcional (CLI no lo usa). */
   emit?: (event: ToolEvent) => void;
   /** Quién está usando las tools. Para el CAS ("lo tocó Agente-1") y los locks. */

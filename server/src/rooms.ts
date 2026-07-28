@@ -1,6 +1,12 @@
 import { createWorkspace, type Workspace } from "./engine/workspace.js";
 import { startPreview, detectLaunch, type Preview } from "./engine/preview.js";
-import { spawn } from "node:child_process";
+import {
+  isDockerAvailable,
+  startContainer,
+  stopContainer,
+  type Container,
+} from "./engine/container.js";
+import { containerRunner, localRunner, type Runner } from "./engine/runner.js";
 import type { Message } from "./agent/providers/types.js";
 import { AgentRegistry } from "./engine/agents.js";
 import { RunCoordinator } from "./engine/coordinator.js";
@@ -32,6 +38,10 @@ export interface Room {
   preview: Preview | null;
   /** Hay un arranque de preview en curso (evita dos npm install a la vez). */
   previewBooting?: boolean;
+  /** El contenedor que aísla esta sala. null si se está corriendo sin Docker. */
+  container?: Container | null;
+  /** Dónde se ejecutan los comandos del agente (contenedor o local). */
+  runner?: Runner;
   members: Map<string, Member>;
   /** Historial de chat POR AGENTE (cada agente tiene su propia conversación). */
   histories: Map<string, Message[]>;
@@ -170,9 +180,19 @@ export async function maybeStartPreview(room: Room): Promise<string | null> {
 
   room.previewBooting = true;
   try {
+    const runner = await ensureRunner(room);
     // El agente pudo instalar deps él mismo; esto las completa si faltan.
-    await runInstall(room.workspace.dir);
-    room.preview = await startPreview(room.workspace, launch);
+    // Corre por el runner: dentro del contenedor si lo hay.
+    await runner.exec("npm install", { timeoutMs: 600_000, maxOutput: 4000 });
+
+    room.preview = room.container?.publishedPort
+      ? await startPreview(room.workspace, launch, {
+          roomId: room.id,
+          internalPort: INTERNAL_DEV_PORT,
+          publishedPort: room.container.publishedPort,
+        })
+      : await startPreview(room.workspace, launch);
+
     console.log(`[sala ${room.id}] preview listo en ${room.preview.url}`);
     return room.preview.url;
   } catch (err) {
@@ -183,14 +203,38 @@ export async function maybeStartPreview(room: Room): Promise<string | null> {
   }
 }
 
-function runInstall(cwd: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const child = spawn("npm", ["install"], { cwd, stdio: "ignore" });
-    child.once("exit", (code) =>
-      code === 0 ? resolve() : reject(new Error(`npm install salió con code ${code}`)),
-    );
-    child.once("error", reject);
-  });
+/**
+ * El puerto donde escucha el dev server DENTRO del contenedor.
+ *
+ * Fijo a propósito: adentro cada sala está sola, así que no hay con quién
+ * chocar. Docker lo publica en un puerto libre del host, y ese es el que varía.
+ */
+const INTERNAL_DEV_PORT = 5173;
+
+/**
+ * El runner de la sala: dónde corren los comandos del agente.
+ *
+ * Con Docker, arranca (o reusa) el contenedor de la sala. Sin Docker, cae al
+ * runner local — el server ya avisó al arrancar que no hay aislamiento.
+ */
+export async function ensureRunner(room: Room): Promise<Runner> {
+  if (room.runner) return room.runner;
+
+  if (await isDockerAvailable()) {
+    try {
+      room.container = await startContainer(room.id, room.workspace.dir, INTERNAL_DEV_PORT);
+      room.runner = containerRunner(room.id);
+      console.log(`[sala ${room.id}] contenedor listo (${room.container.name})`);
+      return room.runner;
+    } catch (err) {
+      // Que Docker exista pero falle NO debe dejar la sala muerta: se avisa
+      // fuerte y se sigue sin aislamiento, igual que si no estuviera instalado.
+      console.error(`[sala ${room.id}] no se pudo crear el contenedor, sigue SIN aislar:`, err);
+    }
+  }
+
+  room.runner = localRunner(room.workspace.dir);
+  return room.runner;
 }
 
 /**
@@ -232,12 +276,18 @@ export function allRooms(): Room[] {
 }
 
 /**
- * Apaga los previews de todas las salas. Se llama al apagar el server para no
- * dejar procesos vite huérfanos ocupando puertos (causaba 502 en el proxy al
- * reiniciar: el asignador reusaba un puerto que un vite muerto seguía tomando).
+ * Apaga los previews y contenedores de todas las salas. Se llama al apagar el
+ * server para no dejar procesos huérfanos ocupando puertos (causaba 502 en el
+ * proxy al reiniciar: el asignador reusaba un puerto que un vite muerto seguía
+ * tomando) ni contenedores comiendo RAM.
  */
 export async function stopAllPreviews(): Promise<void> {
-  await Promise.all(allRooms().map((r) => r.preview?.stop() ?? Promise.resolve()));
+  await Promise.all(
+    allRooms().map(async (r) => {
+      await r.preview?.stop();
+      if (r.container) await stopContainer(r.id);
+    }),
+  );
 }
 
 export function addMember(room: Room, socketId: string, name: string): Member {

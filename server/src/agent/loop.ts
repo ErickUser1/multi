@@ -111,6 +111,8 @@ export async function runAgent(opts: {
   /** Avisos de espera de lock (para mostrar "esperando a X" — dos relojes). */
   onWaitStart?: (info: { path: string; holder?: string }) => void;
   onWaitEnd?: () => void;
+  /** Dónde corren los comandos de bash. Sin esto, corren en la máquina del server. */
+  runner?: ToolContext["runner"];
 }): Promise<RunResult> {
   const { provider, workspaceDir, userMessage, model, maxTokens, callbacks = {}, signal } = opts;
 
@@ -121,6 +123,7 @@ export async function runAgent(opts: {
 
   const toolCtx: ToolContext = {
     workspaceDir,
+    runner: opts.runner,
     emit: callbacks.onToolEvent,
     agentId: opts.agentId,
     onWaitStart: opts.onWaitStart,

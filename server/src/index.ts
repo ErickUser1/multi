@@ -15,6 +15,7 @@ import {
   parseIntent,
   wakeRoom,
   maybeStartPreview,
+  ensureRunner,
   loadRoomIndex,
   type Room,
   type SelectedElement,
@@ -26,6 +27,7 @@ import { commitAll, discardChanges, diffCommit, revertTo, revertFile } from "./e
 import { getHistory, setBookmark } from "./engine/history.js";
 import { buildApiMap } from "./engine/api-map.js";
 import { handlePreviewRequest, handlePreviewUpgrade } from "./engine/proxy.js";
+import { isDockerAvailable, ensureImage, sweepOrphanContainers } from "./engine/container.js";
 import { runAgent } from "./agent/loop.js";
 import { AnthropicProvider } from "./agent/providers/anthropic.js";
 import type { ModelProvider } from "./agent/providers/types.js";
@@ -438,6 +440,9 @@ async function runAgentTurn(
     const result = await runAgent({
       provider,
       workspaceDir: room.workspace.dir,
+      // Los comandos del agente corren en el contenedor de la sala (o local si
+      // no hay Docker). El agente no distingue: es la misma tool.
+      runner: await ensureRunner(room),
       messages: history,
       userMessage: task,
       signal,
@@ -537,7 +542,36 @@ async function shutdown(signal: string): Promise<void> {
 process.on("SIGINT", () => void shutdown("SIGINT"));
 process.on("SIGTERM", () => void shutdown("SIGTERM"));
 
+/**
+ * Prepara el aislamiento. Con Docker: barre contenedores de una corrida anterior
+ * y construye la imagen si falta. Sin Docker: lo avisa fuerte.
+ *
+ * No degradar en silencio: correr sin aislamiento es una decisión que el dueño
+ * de la máquina debe estar tomando a sabiendas, no descubrir después.
+ */
+async function setupIsolation(): Promise<void> {
+  if (!(await isDockerAvailable())) {
+    console.warn(
+      [
+        "",
+        "  *** SIN AISLAMIENTO: no hay Docker disponible ***",
+        "  Los comandos del agente corren en ESTA máquina, no en un contenedor.",
+        "  Para ti solo puede estar bien; si vas a invitar a alguien a una sala,",
+        "  esa persona le estará dando órdenes a un agente con acceso a tu equipo.",
+        "",
+      ].join("\n"),
+    );
+    return;
+  }
+
+  const barridos = await sweepOrphanContainers();
+  if (barridos > 0) console.log(`[docker] ${barridos} contenedor(es) de una corrida anterior, borrados`);
+
+  await ensureImage(join(process.cwd(), ".."));
+}
+
 try {
+  await setupIsolation();
   await fastify.listen({ port: PORT, host: "0.0.0.0" });
   hookPreviewProxy();
   // Las salas no se despiertan al arrancar: sería carísimo levantar N dev

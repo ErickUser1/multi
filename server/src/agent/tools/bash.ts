@@ -1,15 +1,17 @@
-import { spawn } from "node:child_process";
 import { type Tool, ToolError, reqString } from "./base.js";
+import { localRunner } from "../../engine/runner.js";
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 const MAX_OUTPUT = 30_000; // truncar salidas enormes para no reventar el contexto
 
 /**
- * Bash — ejecuta comandos de shell DENTRO del workspace de la sala.
+ * Bash — ejecuta comandos de shell en el entorno de la sala.
  * Para procesos: npm install, git, arrancar builds. NO para editar archivos
  * (eso va por edit_file, que es preciso y observable).
  *
- * cwd fijado al workspace: los comandos corren scoped a la sala.
+ * Dónde corre lo decide el `runner` del contexto: normalmente el contenedor de
+ * la sala; sin Docker, la máquina del server. Aquí no se distingue — de eso se
+ * trata la interfaz.
  */
 export const bashTool: Tool = {
   spec: {
@@ -31,51 +33,27 @@ export const bashTool: Tool = {
 
     ctx.emit?.({ type: "tool:bash", command });
 
-    return new Promise<string>((resolve, reject) => {
-      // shell:true para soportar pipes/&&; cwd fijo al workspace.
-      const child = spawn(command, {
-        cwd: ctx.workspaceDir,
-        shell: true,
-        env: process.env,
-      });
+    const runner = ctx.runner ?? localRunner(ctx.workspaceDir);
 
-      let stdout = "";
-      let stderr = "";
-      let killed = false;
+    let result;
+    try {
+      result = await runner.exec(command, { timeoutMs, maxOutput: MAX_OUTPUT });
+    } catch (err) {
+      throw new ToolError(`no se pudo ejecutar el comando: ${String(err)}`);
+    }
 
-      const timer = setTimeout(() => {
-        killed = true;
-        child.kill("SIGKILL");
-      }, timeoutMs);
+    if (result.timedOut) {
+      throw new ToolError(`comando excedió el timeout de ${timeoutMs}ms`);
+    }
 
-      child.stdout?.on("data", (d) => {
-        if (stdout.length < MAX_OUTPUT) stdout += d.toString();
-      });
-      child.stderr?.on("data", (d) => {
-        if (stderr.length < MAX_OUTPUT) stderr += d.toString();
-      });
-
-      child.once("error", (err) => {
-        clearTimeout(timer);
-        reject(new ToolError(`no se pudo ejecutar el comando: ${String(err)}`));
-      });
-
-      child.once("exit", (code) => {
-        clearTimeout(timer);
-        if (killed) {
-          reject(new ToolError(`comando excedió el timeout de ${timeoutMs}ms`));
-          return;
-        }
-        const out = truncate(stdout);
-        const err = truncate(stderr);
-        const parts: string[] = [];
-        if (out) parts.push(out);
-        if (err) parts.push(`[stderr]\n${err}`);
-        parts.push(`[exit code: ${code}]`);
-        // Un exit != 0 NO es un throw: el modelo debe ver el error y decidir.
-        resolve(parts.join("\n"));
-      });
-    });
+    const out = truncate(result.stdout);
+    const err = truncate(result.stderr);
+    const parts: string[] = [];
+    if (out) parts.push(out);
+    if (err) parts.push(`[stderr]\n${err}`);
+    parts.push(`[exit code: ${result.code}]`);
+    // Un exit != 0 NO es un throw: el modelo debe ver el error y decidir.
+    return parts.join("\n");
   },
 };
 

@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { Workspace } from "./workspace.js";
+import { spawnInContainer } from "./container.js";
 
 export interface Preview {
   roomId: string;
@@ -89,19 +90,34 @@ export async function detectLaunch(dir: string): Promise<Launch | null> {
  * lee lo que el proyecto declara. El motor solo "prende el server y reporta la
  * URL"; quién la muestra (iframe) es otra pieza.
  *
- * Corre como PROCESO SEPARADO (no embebido) para aislamiento: si un preview
- * crashea, no tumba el server de Multi. Alineado con el futuro contenedor por sala.
+ * Corre como PROCESO SEPARADO (no embebido): si un preview crashea, no tumba el
+ * server de Multi.
+ *
+ * Con `container`, el dev server corre ADENTRO del contenedor de la sala y se
+ * llega a él por el puerto que Docker publicó en el host. La URL que se reporta
+ * es de host en los dos casos, así que el proxy no se entera de la diferencia.
  */
-export async function startPreview(workspace: Workspace, launch: Launch): Promise<Preview> {
-  const port = await nextPort();
+export async function startPreview(
+  workspace: Workspace,
+  launch: Launch,
+  container?: { roomId: string; internalPort: number; publishedPort: number },
+): Promise<Preview> {
+  // Dentro del contenedor el puerto lo fija el contenedor; fuera, lo elegimos.
+  const port = container ? container.publishedPort : await nextPort();
   const { command, args, portEnv } = launch;
 
-  const child = spawn(command, args, {
-    cwd: workspace.dir,
-    env: { ...process.env, ...(portEnv ? { [portEnv]: String(port) } : {}) },
-    // stdout/stderr capturados para logs y para detectar arranque; sin shell.
-    stdio: ["ignore", "pipe", "pipe"],
-  });
+  const child = container
+    ? spawnInContainer(
+        container.roomId,
+        [command, ...args].join(" "),
+        portEnv ? { [portEnv]: String(container.internalPort) } : {},
+      )
+    : spawn(command, args, {
+        cwd: workspace.dir,
+        env: { ...process.env, ...(portEnv ? { [portEnv]: String(port) } : {}) },
+        // stdout/stderr capturados para logs y para detectar arranque; sin shell.
+        stdio: ["ignore", "pipe", "pipe"],
+      });
 
   const tag = `[preview ${workspace.roomId}:${port}]`;
   child.stdout?.on("data", (d) => process.stdout.write(`${tag} ${d}`));
@@ -110,7 +126,8 @@ export async function startPreview(workspace: Workspace, launch: Launch): Promis
   const url = `http://localhost:${port}`;
 
   const stop = async (): Promise<void> => {
-    usedPorts.delete(port);
+    // En contenedor el puerto lo administra Docker, no nuestro registro.
+    if (!container) usedPorts.delete(port);
     if (child.killed) return;
     child.kill("SIGTERM");
     // Gracia breve; si no muere, SIGKILL.
@@ -128,7 +145,7 @@ export async function startPreview(workspace: Workspace, launch: Launch): Promis
 
   // Si el proceso muere solo (crash de install/dev), liberar el puerto.
   child.once("exit", (code) => {
-    usedPorts.delete(port);
+    if (!container) usedPorts.delete(port);
     process.stdout.write(`${tag} proceso terminó (code ${code})\n`);
   });
 

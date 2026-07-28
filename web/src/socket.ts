@@ -1,6 +1,19 @@
 import { io, type Socket } from "socket.io-client";
 
-const SERVER_URL = import.meta.env.VITE_SERVER_URL ?? "http://localhost:4000";
+/**
+ * A dónde le habla la Sala.
+ *
+ * Si la sirvió el propio server (build servido desde Fastify, que es como se
+ * comparte por un túnel), el server ES este mismo origen. Solo en desarrollo —
+ * cuando corre en el :5173 de Vite — hay que apuntar al :4000 aparte.
+ *
+ * Sin esto, una Sala abierta por un link de ngrok intentaría hablarle al
+ * localhost:4000 DE QUIEN LA ABRE, que no existe: tu compa vería la sala en
+ * blanco.
+ */
+const SERVER_URL =
+  import.meta.env.VITE_SERVER_URL ??
+  (import.meta.env.DEV ? "http://localhost:4000" : window.location.origin);
 
 // ── Tipos de los mensajes que fluyen por el socket ──────────────────────────
 

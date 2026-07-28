@@ -1,5 +1,6 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
+import fastifyStatic from "@fastify/static";
 import { Server as SocketServer } from "socket.io";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -82,6 +83,40 @@ function hookPreviewProxy(): void {
 }
 
 // ── HTTP ────────────────────────────────────────────────────────────────────
+
+/**
+ * ESTE server (Fastify, :4000) sirve también la Sala cuando hay un build.
+ *
+ * Por qué: para que alguien de fuera entre hace falta UNA sola URL. Hoy son dos
+ * puertos (la Sala en :5173, el server en :4000) y eso serían dos túneles —
+ * ngrok gratis da uno. Con todo en el mismo origen, además, desaparecen los
+ * problemas de CORS y de la cookie del proxy.
+ *
+ * Cuándo se activa: solo si `web/dist` existe, o sea después de compilar el
+ * front. Mientras desarrollas no hay build, esto no corre, y sigues usando Vite
+ * en :5173 con su HMR. Es el reparto normal: en dev el front tiene su propio
+ * server para el hot reload; al publicar, lo sirve el backend.
+ *
+ * Va en un contexto propio para poder poner un notFound que devuelva
+ * index.html: la Sala enruta en el cliente (#/sala/x), así que una ruta
+ * desconocida debe caer en la app, no en un 404 (patrón de @fastify/static).
+ */
+const WEB_DIST = join(process.cwd(), "..", "web", "dist");
+const SIRVE_WEB = existsSync(join(WEB_DIST, "index.html"));
+
+if (SIRVE_WEB) {
+  await fastify.register(async (ctx) => {
+    await ctx.register(fastifyStatic, { root: WEB_DIST, wildcard: false });
+    ctx.setNotFoundHandler((req, reply) => {
+      // Las rutas de API que no existen sí son 404: no tiene sentido
+      // devolverles el HTML de la app.
+      if (req.url.startsWith("/rooms") || req.url.startsWith("/preview")) {
+        return reply.code(404).send({ error: "no encontrado" });
+      }
+      return reply.code(200).type("text/html").sendFile("index.html");
+    });
+  });
+}
 
 fastify.get("/health", async () => ({ status: "ok", service: "multi-server" }));
 

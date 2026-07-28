@@ -8,16 +8,26 @@
     "web"
   ],
   "scripts": {
-    "dev:server": "npm run dev -w server",
+    "start": "npm run build && npm run serve",
+    "build": "npm run build -w web",
+    "serve": "npm run start -w server",
+    "compartir": "node scripts/compartir.mjs",
+    "dev": "npm run dev -w server",
     "dev:web": "npm run dev -w web",
+    "typecheck": "npm run typecheck -w server && npm run typecheck -w web",
     "demo:workspace": "npm run demo:workspace -w server",
     "demo:agent": "npm run demo:agent -w server",
-    "typecheck": "npm run typecheck -w server",
     "demo:concurrency": "npm run demo:concurrency -w server",
     "demo:persistence": "npm run demo:persistence -w server",
+    "demo:historial": "npm run demo:historial -w server",
+    "demo:back": "npm run demo:back -w server",
+    "demo:aislamiento": "npm run demo:aislamiento -w server",
+    "demo:keys": "npm run demo:keys -w server",
+    "demo:menciones": "npm run demo:menciones -w server",
+    "demo:providers": "npm run demo:providers -w server",
     "dev:test": "npm run dev:test -w server"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   }
 }

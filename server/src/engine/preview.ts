@@ -90,7 +90,7 @@ export async function detectLaunch(dir: string): Promise<Launch | null> {
  * URL"; quién la muestra (iframe) es otra pieza.
  *
  * Corre como PROCESO SEPARADO (no embebido) para aislamiento: si un preview
- * crashea, no tumba el server de Multi. Alineado con el futuro Docker/openvscode.
+ * crashea, no tumba el server de Multi. Alineado con el futuro contenedor por sala.
  */
 export async function startPreview(workspace: Workspace, launch: Launch): Promise<Preview> {
   const port = await nextPort();

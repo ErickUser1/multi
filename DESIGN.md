@@ -137,9 +137,9 @@ La sala y el chat los clona cualquiera en un fin de semana; el motor es lo difí
 
 ## Arquitectura técnica de implementación (definida 2026-07-24)
 
-### Modelo mental: un IDE en la nube con la abstracción escondida
+### Modelo mental: un proyecto real por debajo, con la abstracción escondida
 
-El producto es un IDE completo por debajo, con la cabina tapada. **Dos capas + el agente como puente:**
+Debajo de la sala hay un proyecto de verdad: una carpeta con su git, sus dependencias y su dev server. Lo que se esconde no es el proyecto, es la ceremonia de operarlo. **Dos capas + el agente como puente:**
 
 ```
 ┌────────────────────────────────────────────┐
@@ -150,12 +150,14 @@ El producto es un IDE completo por debajo, con la cabina tapada. **Dos capas + e
 │  loop + tools; viven en la sala, operan     │    cursor/nombre/color
 │  el motor                                   │
 ├────────────────────────────────────────────┤
-│  MOTOR IDE (openvscode-server)             │  ← real y completo, escondido:
-│  filesystem, terminal, dev server, LSP, git │    workspace compartido por sala
+│  EL MOTOR                                   │  ← carpeta por sala + git propio,
+│  workspace + git + dev server + proxy       │    dev server y proxy inyector
 └────────────────────────────────────────────┘
 ```
 
-- **El motor NO se construye ni se forkea.** Se instancia **openvscode-server** (Gitpod): VS Code upstream completo como servidor por API, misma arquitectura que Codespaces. Forkear (como Cursor/Windsurf) cuesta un equipo dedicado a re-mergear upstream mensual y sirve solo si tu producto ES el editor — nosotros lo escondemos. Da motor completo, invisible y **multi-stack gratis** (corre cualquier dev server que el agente scaffoldee; el usuario nunca se casa con un stack — el agente pregunta o infiere, como Claude Code).
+- **El motor son las tools del agente sobre un filesystem real, no un editor.** Un editor (VS Code, openvscode-server) es un VISOR para humanos: los archivos existen en disco con o sin él, y el agente escribe con sus tools directo al filesystem — igual que Claude Code, que no depende de que tengas un editor abierto. Confundir el visor con el motor lleva a construir infraestructura que nadie necesita.
+- **De ahí sale el multi-stack gratis:** el motor no sabe de frameworks. Corre lo que el agente scaffoldee y proxea el puerto que levante. El usuario nunca se casa con un stack — el agente pregunta o infiere, como Claude Code.
+- **openvscode-server sigue teniendo un lugar, pero es otro: "abrir el cofre"** — dejar que quien quiera se asome al código en un editor real dentro de la sala. Es una feature de UI opcional (el equivalente a que tú abras la carpeta en tu editor), no una pieza del motor. Nada depende de ella; hoy el acceso al código se cubre con el historial y sus diffs.
 - **Los agentes son REACTIVOS, no autónomos.** El humano los dispara (escribir en chat / seleccionar+hablar); el agente entra al loop, trabaja, y duerme hasta el siguiente trigger. Autonomía solo de EJECUCIÓN dentro de una tarea (decide qué archivos crear, qué instalar), nunca de iniciativa (el QUÉ siempre lo pone el humano). Regla: humano inicia, agente ejecuta y se detiene, cero acción no solicitada.
 - **Auto-verify (robar de Claude Code Desktop Preview) — refinamiento del motor, va con Fase 4+:** tras editar, el agente verifica que NO rompió el preview antes de decir "listo": revisa que cargue, checa errores de consola/build, y si rompió algo lo arregla solo. Importa MÁS en Multi que en Claude Code: si el agente rompe el preview, 2-3 personas ven la pantalla en blanco a la vez → se acaba el "videojuego". Es la implementación concreta del principio "el preview nunca muere". Mecanismo: la tool Bash corre build/lint + el agente lee logs del preview. NO es v1-mínimo (ahí el agente edita y ya); es la capa de robustez.
 - **Coordinación entre agentes = por el workspace compartido**, no por protocolo. Agente-back crea la tabla, agente-front la lee del mismo filesystem. La visibilidad es la coordinación.
@@ -183,7 +185,7 @@ Se descartó el enfoque v0-primero: se construye v1 completo directo.
 
 **Incluye:**
 - Sala en vivo: entrar con link + nombre, chat, presencia, cursores de todos (humanos y agentes)
-- Motor openvscode-server con workspace por sala + preview en vivo (dev server en iframe, HMR broadcasteado)
+- Motor: workspace por sala (carpeta + git propio) + preview en vivo (dev server en iframe, HMR broadcasteado)
 - Agente(s) a mano: loop + tools + 3 providers; **multi-agente en paralelo** con cursores
 - Click-to-select: script inyectado → socket → selección compartida + mensaje anclado
 - Back desabstraído (canvas de schema/endpoints con semáforo mock/real)
@@ -191,7 +193,7 @@ Se descartó el enfoque v0-primero: se construye v1 completo directo.
 - Manual vivo destilado (mecánica abajo)
 - Persistencia Supabase
 
-**Orden de construcción:** (0) levantar openvscode-server, proyecto de prueba corriendo → (1) agente + tools tocan el motor, ves un archivo cambiar → (2) sala mínima: preview iframe + chat, le hablas al agente y el preview se actualiza → (3) presencia + cursores + click-to-select → (4) multi-agente paralelo → (5) back visual → (6) persistencia.
+**Orden de construcción:** (0) workspace por sala + dev server corriendo → (1) agente + tools tocan el motor, ves un archivo cambiar → (2) sala mínima: preview iframe + chat, le hablas al agente y el preview se actualiza → (3) presencia + cursores + click-to-select → (4) multi-agente paralelo → (5) back visual → (6) persistencia.
 
 **Demo de éxito:** (multiplayer) dos laptops, un link, "ponlo verde" → el otro lo ve al instante. (solo) entras solo, pides el menú, y MIENTRAS el agente lo construye en vivo seleccionas el título y disparas otro cambio — diriges un equipo, no esperas un spinner.
 
@@ -332,7 +334,7 @@ El problema técnico: el proyecto en disco es CÓDIGO FUENTE (JSX/TS). El dev se
 - **Un `schema.sql` que el agente mantenga** — es una copia sincronizada a mano, y las copias se desincronizan. Sería un artefacto que existe solo para que la pantalla se vea bien: el mismo error del mock incrustado (ver `multi-mocks-aparte`).
 - **Leer el archivo del ORM** (`schema.prisma`, `models.py`) — no cubre a quien corre queries directos en el dashboard de Supabase. Ese flujo es legítimo, deja la base perfecta y el proyecto sin rastro alguno.
 
-**A dónde habíamos llegado:** todos los caminos anteriores leen *representaciones* del esquema, y una representación puede mentir. La única fuente que no puede mentir sobre sí misma es **la base viva**. Y no hace falta que Multi escriba un cliente por cada motor: **el agente ya tiene las creds del `.env` y una terminal** — puede preguntarle a la base y reportar el resultado, igual que hace el setup del front. La agnosticidad no la da un detector nuestro; ya la tiene el motor (IDE + agente que instala y corre lo que sea).
+**A dónde habíamos llegado:** todos los caminos anteriores leen *representaciones* del esquema, y una representación puede mentir. La única fuente que no puede mentir sobre sí misma es **la base viva**. Y no hace falta que Multi escriba un cliente por cada motor: **el agente ya tiene las creds del `.env` y una terminal** — puede preguntarle a la base y reportar el resultado, igual que hace el setup del front. La agnosticidad no la da un detector nuestro; ya la tiene el motor (un filesystem real + un agente que instala y corre lo que sea).
 
 **Cuidados si se retoma:** (1) preguntarle a la base cuesta conexión — refrescar al cerrar un turno que tocó datos o bajo demanda, no en cada `file:changed`; (2) si no hay creds o la base está apagada, decirlo ("no me pude conectar"), nunca mostrar vacío que parezca "no hay tablas"; (3) estructura sí, datos no por default — en una sala compartida las filas pueden ser sensibles; (4) si el canvas refleja lo que el agente reporta, un cambio no reportado lo deja viejo en silencio: atarlo al cierre de turno.
 
@@ -474,7 +476,7 @@ Jugada: código abierto → comunidad gigante → cobrar por hosting gestionado 
 | | **Capa social/descubrimiento (v2)** — valor añadido, no mutila el core |
 | | **Modelos premium / más tokens incluidos** · **salas privadas / permisos** |
 
-**Encaje perfecto para Multi:** correr openvscode-server + agentes + quemar tokens de IA a escala es un infierno técnico y un costo real por usuario. "Yo pongo la infra + absorbo el costo de tokens, tú solo úsalo" es un valor obvio y honesto — idéntico a Supabase. NUNCA guardar detrás del muro la esencia (ej. "el tercer amigo" o "multiplayer de más de 2" mataría la magia); sí guardar escala/equipos/enterprise.
+**Encaje perfecto para Multi:** correr un contenedor aislado por sala + agentes + quemar tokens de IA a escala es un infierno técnico y un costo real por usuario. "Yo pongo la infra + absorbo el costo de tokens, tú solo úsalo" es un valor obvio y honesto — idéntico a Supabase. NUNCA guardar detrás del muro la esencia (ej. "el tercer amigo" o "multiplayer de más de 2" mataría la magia); sí guardar escala/equipos/enterprise.
 
 **Secuencia obligatoria (el orden manda):** (1) producto que engancha —validar que 2 compas lo amen— ANTES de abrir; (2) open source → comunidad crece; (3) % pequeño (1–5%) paga hosting; (4) SaaS con usuarios reales. Open source sobre un producto que nadie ama = comunidad de cero. Esto refina el umbral de salto Wienops→Multi: la señal no es solo "usuarios", es "comunidad creciendo Y gente pagando hosting".
 

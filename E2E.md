@@ -3,7 +3,7 @@
 Este documento describe **lo que el código hace hoy**, no lo que se planea. Es el
 mapa para entender el sistema completo: de una sala vacía a un proyecto hecho.
 
-El diseño y el porqué de cada decisión están en [DESIGN.md](DESIGN.md).
+Lo que falta y por qué está en [ROADMAP.md](ROADMAP.md).
 
 ---
 

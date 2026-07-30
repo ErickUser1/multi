@@ -4,9 +4,10 @@ node_modules/
 # workspaces de salas (proyectos de usuarios, cada uno con su propio git)
 workspaces/
 
-# env — API keys jamás al repo
+# env — API keys jamás al repo. El .example SÍ sube: es la referencia.
 .env
 .env.*
+!.env.example
 
 # builds
 dist/
@@ -18,3 +19,18 @@ dist/
 # os
 .DS_Store
 Thumbs.db
+
+# Material de trabajo del diseño, no del producto: son referencias ajenas
+# (Pinterest y demás) y no deben viajar en un repo público.
+moodboard/
+variants/
+
+# El cuaderno de diseño: dudas, vueltas y decisiones a medio cocer. Sirve para
+# pensar, no para documentar. Lo que un contribuidor necesita está en README,
+# CONTRIBUTING, E2E y ROADMAP.
+DESIGN.md
+soul.md
+
+# Bocetos HTML de la UI. Sirvieron para diseñar la Sala; el código real vive
+# en web/. Se quedan fuera para no confundir a quien llegue al repo.
+app/

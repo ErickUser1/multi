@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # node:sqlite necesita 22+. Es la persistencia del proyecto.
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck del server y de la Sala
+        run: npm run typecheck
+
+      - name: Que la Sala compile
+        run: npm run build
+
+  # Los demos del motor que no necesitan API key ni red: prueban la traducción
+  # de formatos entre proveedores y el analizador del back. Los que levantan
+  # salas o contenedores quedan fuera — necesitan Docker y varios minutos.
+  demos:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run demo:providers
+      - run: npm run demo:back

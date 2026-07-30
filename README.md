@@ -1,72 +1,37 @@
+<div align="center">
+
 # Multi
 
-**Construir en paralelo sin divergir.** Una sala en vivo donde varias personas y varios agentes de IA trabajan sobre el mismo proyecto, viendo lo mismo al mismo tiempo.
+**Multiplayer AI coding. Open source.**
 
-Se siente como entrar a un Discord: llegas por un link, ya hay gente adentro, y lo que pasa se ve pasar. Solo que en vez de jugar, están construyendo.
+A live room where several people and several agents build the same project, seeing the same thing at the same time.
 
----
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![Node 22+](https://img.shields.io/badge/node-22%2B-green.svg)
 
-## El problema
-
-Dos personas van a construir algo. Sacan requerimientos, se reparten: *"tú la sección de pedidos, yo la de usuarios"*. Cada uno se va a su rama, su editor, su agente.
-
-Tres días después se muestran lo que hicieron.
-
-```
-SIN MULTI                          CON MULTI
-──────────────────────             ──────────────────────
-sacan requerimientos               sacan requerimientos
-"tú X, yo Y"                       los dos en la misma sala
-      ↓                                   ↓
-3 días cada uno, a solas           ves lo que hace mientras lo hace
-      ↓                                   ↓
-"listo, mira"                      "espérate, eso no era"
-      ↓                                   ↓
-"…no era eso"  →  iterar           (la divergencia no llega a existir)
-```
-
-El costo no es el merge — eso git lo resuelve. El costo es que **la divergencia se descubre al final**, cuando ya hay tres días de trabajo apoyados en un supuesto equivocado. Y con agentes es peor: producen más código, más rápido, en direcciones que nadie está viendo.
-
-Las herramientas de IA para construir software son de un jugador: tú, tu agente, tu contexto. Cuando entra otra persona, lo único que se comparte son capturas de pantalla y buena voluntad.
-
-Multi hace que el proyecto sea el lugar donde están, no el archivo que se pasan.
-
-<sub>Nació de un caso real: dos amigos, uno en Lovable y otro en Claude Code, dos backends que no se conocían, y una app armada con pegamento al final.</sub>
-
----
-
-## Cómo se siente
+</div>
 
 ```
 ┌─────────────────────┬──────────────────────────────────────────┐
-│  taco-crew-21       │  [ SELECCIONAR ELEMENTO ]      D  E  +   │
-│  3 EN LA SALA       ├──────────────────────────────────────────┤
-│                     │  LA APP    EL BACK                       │
+│  taco-crew-21       │  [ SELECT ELEMENT ]            D  E  +   │
+│  3 IN THE ROOM      ├──────────────────────────────────────────┤
+│                     │  THE APP    THE BACK                     │
 │  ● agente-1         │ ┌──────────────────────────────────────┐ │
-│    escribiendo Nav  │ │                                      │ │
-│  ○ agente-2 libre   │ │     tu app, moviéndose en vivo       │ │
+│    writing Nav.tsx  │ │                                      │ │
+│  ○ agente-2 idle    │ │      your app, moving live           │ │
 │                     │ │                                      │ │
 │  ─────────────────  │ │        ↖ erick                       │ │
-│  D  Donscanor       │ │                    ↖ el compa        │ │
-│    @agente haz el   │ │                                      │ │
-│    header rojo      │ └──────────────────────────────────────┘ │
-│                     │  HISTORIAL  ● ● ● ● ●            AHORA   │
+│  D  Donscanor       │ │                    ↖ your teammate   │ │
+│    @agente make the │ │                                      │ │
+│    header red       │ └──────────────────────────────────────┘ │
+│                     │  HISTORY  ● ● ● ● ●               NOW    │
 │  AI agente-1        │                                          │
-│    Listo, ya quedó  │                                          │
+│    Done.            │                                          │
 └─────────────────────┴──────────────────────────────────────────┘
 ```
 
-- **Le hablas a un agente con `@agente`.** Sin la mención, el chat es entre humanos: puedes platicar sin que nadie se ponga a trabajar.
-- **Cualquiera puede interrumpir a cualquier agente.** Si tu compa le pidió el header rojo y tú ves que va mal, `@agente-1 mejor azul` lo detiene ahí mismo.
-- **Varios agentes a la vez.** `@agente` lanza uno nuevo; trabajan en paralelo y el motor evita que se pisen.
-- **Señalas y hablas.** Clickeas un botón del preview y todos ven qué seleccionaste; lo que pidas se aplica a ese elemento.
-- **El historial es de la sala.** Cada turno de agente es un punto al que puedes volver, con el diff y con lo que se pidió.
 
----
-
-## Correrlo
-
-Necesitas [Node 22+](https://nodejs.org) y, si quieres aislamiento, [Docker](https://docs.docker.com/get-started/get-docker/).
+## Install
 
 ```bash
 git clone https://github.com/ErickHub192/multi
@@ -75,117 +40,58 @@ npm install
 npm start
 ```
 
-Abre **http://localhost:4000** y crea una sala. Al pedirle algo a un agente te va a pedir tu API key — eso es todo el setup.
+Open **http://localhost:4000**, create a room, ask an agent for something. It'll ask for your API key — that's the whole setup.
 
-### Meter a alguien más a la sala
+Needs [Node 22+](https://nodejs.org), and [Docker](https://docs.docker.com/get-started/get-docker/) for isolation.
+
+### Bring someone in
 
 ```bash
 npm run compartir
 ```
 
-Compila, levanta el server, abre un túnel y te imprime un link público. Se lo pasas a quien quieras y entra directo, sin instalar nada.
+Prints a public link. Send it and they walk in — nothing to install on their side.
 
-> Mientras eso corre tu máquina está expuesta a internet, y **cualquiera con el link entra a cualquier sala**. Los ids son impredecibles, pero no hay más puerta que esa. Cierra con `Ctrl+C` al terminar, y saca tu key del `.env` si no quieres que la usen.
+> While that runs your machine is on the internet, and anyone with the link can enter any room. `Ctrl+C` when you're done.
 
-### Desarrollo
+## Why
 
-```bash
-npm run dev       # el server, en :4000
-npm run dev:web   # la Sala con HMR, en :5173
-```
+Every work tool of the last two decades won by going multiplayer. Google Docs beat Word. Figma beat Photoshop.
 
----
+AI coding hasn't had that moment. You open a chat, type a prompt, get an answer in a box only you can see. Two people building the same thing means two private threads, two agents, and finding out you diverged three days later.
 
-## Tu modelo, tu cuenta
+Multi makes the project the place you're in, not the file you pass around.
 
-Multi no trae modelo incluido ni cobra por tokens: **cada quien pone su propia key**, y paga solo lo que le pide al agente. En una sala, uno puede estar con Claude, otro con un modelo gratis y otro con un modelo local — no se estorban.
+<sub>The idea comes from <a href="https://www.ycombinator.com/rfs">Multiplayer AI</a> (Aaron Epstein, YC RFS).</sub>
 
-Soportados: **Anthropic**, **OpenRouter** (y por ahí Gemini, GPT, DeepSeek, Llama, Gemma), **OpenAI**, **Groq**, **DeepSeek** y **Ollama** en tu máquina.
+## How it feels
 
-Tu key vive en tu navegador y en la memoria del server mientras estás conectado. No se escribe en disco, no entra al contenedor, y nadie más en la sala la ve. Si vas a compartir pantalla, hay un botón para olvidarla.
+- **`@agente` to talk to an agent.** Without the mention, the chat is just people — you can think out loud without anyone starting to work.
+- **Anyone can interrupt any agent.** Your teammate asked for a red header, you see it going wrong: `@agente-1 make it blue` stops it right there.
+- **Several agents at once.** They work in parallel; the engine keeps them from stepping on each other.
+- **Point and talk.** Click an element in the preview — everyone sees your selection, and what you ask applies to it.
+- **The history belongs to the room.** Every agent turn is a point you can go back to.
 
-Si prefieres una key de respaldo para toda la sala, copia `server/.env.example` a `server/.env`. No es obligatorio.
+## Your model, your account
 
----
+Everyone brings their own key and pays only for what they ask. In one room, one person can be on Claude, another on a free model, another on a local one.
 
-## Cómo funciona por dentro
+Anthropic · OpenRouter · OpenAI · Groq · DeepSeek · Ollama
 
-```
-┌─────────────────────────────────────────────┐
-│  LA SALA                                    │  humanos y agentes conviven
-│  chat, preview vivo, cursores, presencia    │  lo social y visible
-├─────────────────────────────────────────────┤
-│  AGENTES (N, reactivos, en paralelo)        │  cada uno un jugador
-│  loop + tools; viven en la sala,            │  con nombre y color
-│  operan el motor                            │
-├─────────────────────────────────────────────┤
-│  EL MOTOR                                   │  carpeta por sala con su
-│  workspace + git + dev server + proxy       │  propio git, aislada en
-│                                             │  un contenedor
-└─────────────────────────────────────────────┘
-```
+Your key lives in your browser and in the server's memory while you're connected — never on disk, never inside the container, never visible to anyone else in the room.
 
-Cuatro decisiones que explican casi todo:
+## Under the hood
 
-**El agente se escribió a mano.** Sin frameworks de agentes y sin SDK del modelo: un `while` con un `switch` que manda mensajes, recibe `tool_use`, ejecuta y repite. Los clientes HTTP hablan con las APIs directo.
+Each room is a folder with its own git, isolated in its own container. The agent is hand-written — no agent framework, no model SDK — and rooms start empty: it scaffolds whatever stack you ask for.
 
-**La sala nace vacía.** Cero plantilla. El agente scaffoldea el proyecto con el stack que le pidas — si no le dices, elige uno y lo menciona. El motor no sabe de frameworks: lee el `package.json` para saber cómo levantar el proyecto, y el proxy inyecta el inspector sin importar el stack.
+Full walkthrough in **[E2E.md](E2E.md)** · What's missing and why in **[ROADMAP.md](ROADMAP.md)** · Both in Spanish.
 
-**Dos canales, dos velocidades.** El preview se actualiza en cuanto se escribe un archivo, sin esperar commits (si esperara, la sala se sentiría muerta entre turnos). El historial guarda un commit por *turno* — cinco archivos tocados son un punto, no cinco.
+## Language
 
-**Los conflictos los resuelve el modelo, no tú.** Si dos agentes tocan el mismo archivo, el segundo recibe "esto cambió, léelo otra vez" y reaplica su cambio sobre lo nuevo. No hay modal de conflicto: los dos cambios sobreviven.
+The UI, code, comments and commits are in Spanish. This README is in English so the project can be found, but if you open `keyed-mutex.ts` you'll read *"misma clave hace fila."*
 
-El recorrido completo, con las piezas y qué está verificado, está en **[E2E.md](E2E.md)**.
+Deliberate, not an oversight. PRs in either language — just keep the file you touch consistent with itself.
 
----
+## Contributing
 
-## Aislamiento
-
-Cada sala corre en su propio contenedor de Docker. El agente puede instalar lo que necesite y correr lo que sea, pero encerrado en el workspace de esa sala: tu disco, tu home y tus llaves no existen para él.
-
-Eso importa aquí más que en un agente de un solo usuario: **quien manda el comando no es el dueño de la máquina donde corre.** Si invitas a alguien a tu sala, su agente ejecuta en tu equipo.
-
-Sin Docker, Multi arranca igual — pero avisa fuerte que no hay aislamiento, porque correr así con invitados es una decisión que debes estar tomando a sabiendas.
-
----
-
-## Probarlo
-
-```bash
-npm run typecheck
-
-npm run demo:aislamiento   # el agente no puede salir de su sala
-npm run demo:concurrency   # CAS, mutex y coordinador con agentes en paralelo
-npm run demo:historial     # diffs, bookmarks y volver a un punto
-npm run demo:keys          # las keys son de cada persona
-npm run demo:menciones     # a quién le hablas y cómo interrumpir
-npm run demo:providers     # la traducción de formatos entre proveedores
-npm run demo:back          # el mapa de endpoints
-```
-
-Son demos, no unit tests: cada una ejercita el flujo real e imprime qué pasó. El criterio es "se ve funcionando".
-
----
-
-## Estado
-
-Funciona de punta a punta: entras a una sala vacía, pides un proyecto, el agente lo construye, el preview aparece solo y de ahí iteras en vivo con quien esté contigo.
-
-Lo que falta, con el contexto de por qué no se hizo, está en [ROADMAP.md](ROADMAP.md):
-
-- **El back visual completo** — hoy muestra endpoints; falta lo que la app *guarda* (las tablas), que es lo que un compa necesita para no chocar contigo.
-- **Migrar el runtime a Bun** — el arranque tarda ~5 min en WSL sobre `/mnt/c`; medido, Bun es 9× más rápido ahí.
-- **Cursor del agente sobre el preview** — requiere mapear archivo → elemento visual.
-- **Hosting** — apagar salas inactivas, HTTPS con dominio propio.
-
----
-
-## Contribuir
-
-Se aceptan PRs. Lo que ayuda a que se revisen rápido está en [CONTRIBUTING.md](CONTRIBUTING.md).
-
----
-
-## Licencia
-
-MIT — ver [LICENSE](LICENSE).
+See [CONTRIBUTING.md](CONTRIBUTING.md). MIT licensed.

@@ -1,56 +1,56 @@
-# Contribuir
+# Contributing
 
-Se aceptan PRs. Esto es lo que ayuda a que se revisen rápido.
+PRs are welcome. Here's what helps them get reviewed fast.
 
-## Correrlo
+## Running it
 
 ```bash
 npm install
-npm run dev       # el server, en :4000
-npm run dev:web   # la Sala con HMR, en :5173
+npm run dev       # the server, on :4000
+npm run dev:web   # the Room with HMR, on :5173
 ```
 
-No necesitas API key para trabajar en el motor: los demos usan un agente simulado (`MULTI_TEST_MOCK=1`). Sí la necesitas para probar el comportamiento del agente real.
+You don't need an API key to work on the engine: the demos use a mock agent (`MULTI_TEST_MOCK=1`). You do need one to test real agent behavior.
 
-## Antes de mandar el PR
+## Before sending the PR
 
 ```bash
 npm run typecheck
 ```
 
-Y corre el demo de lo que tocaste. Si toca concurrencia, `demo:concurrency`; si toca el aislamiento, `demo:aislamiento`. La lista está en el README.
+And run the demo for whatever you touched. If it touches concurrency, `demo:concurrency`; if it touches isolation, `demo:aislamiento`. The full list is in the README.
 
-## Dónde vive cada cosa
+## Where things live
 
 | | |
 |---|---|
-| `server/src/agent/loop.ts` | el loop del agente |
-| `server/src/agent/tools/` | las 6 tools |
-| `server/src/agent/providers/` | clientes HTTP de los modelos |
-| `server/src/engine/file-mutation.ts` | CAS: escribir solo si nadie tocó el archivo |
-| `server/src/engine/keyed-mutex.ts` | fila por clave (rutas, repos, contenedores) |
-| `server/src/engine/coordinator.ts` | un turno activo por agente → paralelo real |
-| `server/src/engine/container.ts` `runner.ts` | aislamiento por sala |
-| `server/src/engine/preview.ts` | levantar el dev server del proyecto |
-| `server/src/engine/proxy.ts` `inspector.ts` | proxy que inyecta el click-to-select |
+| `server/src/agent/loop.ts` | the agent loop |
+| `server/src/agent/tools/` | the 6 tools |
+| `server/src/agent/providers/` | HTTP clients for the models |
+| `server/src/engine/file-mutation.ts` | CAS: write only if nobody touched the file |
+| `server/src/engine/keyed-mutex.ts` | queue by key (paths, repos, containers) |
+| `server/src/engine/coordinator.ts` | one active turn per agent → real parallelism |
+| `server/src/engine/container.ts` `runner.ts` | per-room isolation |
+| `server/src/engine/preview.ts` | spinning up the project's dev server |
+| `server/src/engine/proxy.ts` `inspector.ts` | proxy that injects click-to-select |
 | `server/src/engine/git.ts` `history.ts` | commits, diffs, revert, bookmarks |
-| `server/src/storage/` | SQLite tras una interfaz |
-| `web/src/App.tsx` | la Sala |
+| `server/src/storage/` | SQLite behind an interface |
+| `web/src/App.tsx` | the Room |
 
-El recorrido completo del sistema está en [E2E.md](E2E.md).
+The full system walkthrough is in [E2E.md](E2E.md).
 
-## Cosas que conviene saber
+## Things worth knowing
 
-**Todo recurso compartido necesita su lock.** El producto es concurrente por diseño — varios agentes, varias personas, un solo proyecto. Los archivos, el índice de git, los contenedores y los puertos ya pasan por `KeyedMutex`. Si agregas otro recurso compartido, dale su lock desde el principio: los bugs de concurrencia aparecen en producción, no en tu máquina.
+**Every shared resource needs its lock.** The product is concurrent by design — several agents, several people, one project. Files, the git index, containers, and ports already go through `KeyedMutex`. If you add another shared resource, give it a lock from the start: concurrency bugs show up in production, not on your machine.
 
-**El motor no sabe de frameworks.** La sala nace vacía y el agente scaffoldea lo que le pidan. Si necesitas que algo funcione con un stack, resuélvelo leyendo lo que el proyecto declara o poniéndole la restricción al agente por el prompt — no cableando `vite` en el motor.
+**The engine doesn't know about frameworks.** The room starts empty and the agent scaffolds whatever stack it's asked for. If you need something to work with a given stack, solve it by reading what the project declares or constraining the agent through the prompt — not by hardcoding `vite` into the engine.
 
-**Los errores de concurrencia van al modelo.** Si un agente intenta escribir un archivo que cambió, el mensaje es para él ("léelo otra vez"), no un modal para el humano. Esa asimetría es a propósito.
+**Concurrency errors go to the model.** If an agent tries to write a file that changed, the message is for it ("read it again"), not a modal for the human. That asymmetry is deliberate.
 
-**Sin emojis en el código ni en la salida.** Ni en logs, ni en mensajes de la UI.
+**No emojis in code or output.** Not in logs, not in UI messages.
 
-**Los comentarios explican el porqué, no el qué.** Si un comentario describe lo que el código ya dice, sobra. Si explica una decisión, un bug que se atajó o una restricción del entorno, vale oro.
+**Comments explain why, not what.** If a comment describes what the code already says, cut it. If it explains a decision, a bug that got caught, or a constraint of the environment, it's worth keeping.
 
-## Reportar algo
+## Reporting something
 
-Si es un bug, di qué esperabas y qué pasó. Si tienes el log del server, mucho mejor — buena parte de los problemas de este proyecto han salido de ahí y no de leer el código.
+If it's a bug, say what you expected and what happened. If you have the server log, even better — most of this project's problems have come from reading that, not from reading the code.

@@ -1,239 +1,239 @@
-# Cómo funciona Multi, de punta a punta
+markdown
+# How Multi works, end to end
 
-Este documento describe **lo que el código hace hoy**, no lo que se planea. Es el
-mapa para entender el sistema completo: de una sala vacía a un proyecto hecho.
+This document describes **what the code does today**, not what's planned. It's the
+map for understanding the whole system: from an empty room to a finished project.
 
-Lo que falta y por qué está en [ROADMAP.md](ROADMAP.md).
+What's missing and why is in [ROADMAP.md](ROADMAP.md).
 
 ---
 
-## El recorrido completo
+## The full walkthrough
 
-```
 ┌──────────────────────────────────────────────────────────────────────────────────┐
-│  E2E — DE UNA SALA VACÍA A UN PROYECTO HECHO                                     │
+│ E2E — FROM AN EMPTY ROOM TO A FINISHED PROJECT │
 └──────────────────────────────────────────────────────────────────────────────────┘
 
-① ENTRAR
-  Creas la sala  →  POST /rooms  →  carpeta + git init + .gitignore
-                                     (VACÍA: cero plantilla)
-  Pasas el link  →  tu compa entra con su nombre
-                    su key guardada viaja sola (localStorage)
-                                     │
-  Los dos ven: chat, cursores, "la sala está vacía"
+① JOIN
+You create the room → POST /rooms → folder + git init + .gitignore
+(EMPTY: zero template)
+You share the link → your teammate joins with their name
+their key stays local (localStorage)
+│
+Both see: chat, cursors, "the room is empty"
 
-② PEDIR EL PROYECTO
-  "@agente hazme una app de notas"
-        │
-        ├── ¿plática u orden?  ── sin @ → nadie despierta
-        │   (sin esto no puedes hablar con tu compa sin invocar al agente)
-        │
-        ├── ¿tienes key?  ── no → error:key SOLO a ti, la sala no se entera
-        │
-        └── spawn de un agente  →  aparece en la lista con su color
+② ASK FOR THE PROJECT
+"@agente build me a notes app"
+│
+├── chat or order? ── no @ → nobody wakes up
+│ (without this you can't talk to your teammate without invoking the agent)
+│
+├── do you have a key? ── no → error:key ONLY to you, the room doesn't know
+│
+└── spawn an agent → shows up in the list with its color
 
-③ LA PRIMERA VEZ QUE UN AGENTE TRABAJA
-  ensureRunner  →  docker run  →  contenedor de la sala
-                                   workspace montado en /work
-                                   2gb, 2 cpus, sin privilegios
+③ THE FIRST TIME AN AGENT WORKS
+ensureRunner → docker run → the room's container
+workspace mounted at /work
+2gb, 2 cpus, no privileges
 
-④ EL LOOP (while + switch, sin framework)
-  ┌────────────────────────────────────────────────────────────┐
-  │  provider.stream(system, messages, tools)                  │
-  │        │                                                    │
-  │        ├─ text_delta ──→ agent:delta ──→ streaming en el   │
-  │        │                                  chat de TODOS     │
-  │        │                                                    │
-  │        └─ stop_reason?                                      │
-  │             ├─ end_turn ──────────────→ SALE del loop      │
-  │             └─ tool_use ──┐                                 │
-  │                           ▼                                 │
-  │              Promise.all(TODAS las tools a la vez)          │
-  │                  read/grep/glob  →  directo al disco        │
-  │                  write/edit      →  CAS + mutex  (⑤)        │
-  │                  bash            →  docker exec  (aislado)  │
-  │                           │                                 │
-  │                  tool_result ──→ vuelve arriba              │
-  └────────────────────────────────────────────────────────────┘
-                    (máx 50 vueltas)
+④ THE LOOP (while + switch, no framework)
+┌────────────────────────────────────────────────────────────┐
+│ provider.stream(system, messages, tools) │
+│ │ │
+│ ├─ text_delta ──→ agent:delta ──→ streaming to │
+│ │ EVERYONE'S chat │
+│ │ │
+│ └─ stop_reason? │
+│ ├─ end_turn ──────────────→ EXITS the loop │
+│ └─ tool_use ──┐ │
+│ ▼ │
+│ Promise.all(ALL the tools at once) │
+│ read/grep/glob → straight to disk │
+│ write/edit → CAS + mutex (⑤) │
+│ bash → docker exec (isolated) │
+│ │ │
+│ tool_result ──→ back to the top │
+└────────────────────────────────────────────────────────────┘
+(max 50 turns)
 
-⑤ CUANDO DOS AGENTES CHOCAN
-  Agente-1 → Menu.jsx  ─┐  claves distintas
-  Agente-2 → App.jsx   ─┘  → los dos a la vez, sin esperar
+⑤ WHEN TWO AGENTS COLLIDE
+Agent-1 → Menu.jsx ─┐ different keys
+Agent-2 → App.jsx ─┘ → both at once, no waiting
 
-  Agente-1 → Menu.jsx  ─┐  misma clave
-  Agente-2 → Menu.jsx  ─┘  → el 2 hace fila
-                              │
-                       KeyedMutex: cada escritura pasa entera, sin mezclarse
-                              │
-                       CAS: ¿lo que leíste sigue ahí?
-                              ├─ sí  → escribe (temp + rename, atómico)
-                              └─ no  → StaleContentError AL MODELO:
-                                       "cambió, léelo otra vez"
-                                       → el agente reaplica encima
-                                       → los DOS cambios sobreviven
+Agent-1 → Menu.jsx ─┐ same key
+Agent-2 → Menu.jsx ─┘ → the 2nd one queues
+│
+KeyedMutex: each write goes through whole, no interleaving
+│
+CAS: is what you read still there?
+├─ yes → write (temp + rename, atomic)
+└─ no → StaleContentError TO THE MODEL:
+"it changed, read it again"
+→ the agent reapplies on top
+→ BOTH changes survive
 
-  Mientras espera: "Agente-2 esperando a Agente-1 (Menu.jsx)"
-  Esa espera NO cuenta para el timeout — es fila, no trabajo.
+While waiting: "Agent-2 waiting on Agent-1 (Menu.jsx)"
+That wait does NOT count toward the timeout — it's a queue, not stuck work.
 
-⑥ DOS CANALES, DOS VELOCIDADES
-  ┌─ TIEMPO REAL ────────────────┐   ┌─ GUARDADO ──────────────────┐
-  │ cada write → file:changed    │   │ al CERRAR el turno:         │
-  │ → HMR → el preview se mueve  │   │ UN commit (5 archivos = 1)  │
-  │ NO espera commits            │   │ → history:new → historial   │
-  └──────────────────────────────┘   └─────────────────────────────┘
-       "ahora"                              "memoria"
+⑥ TWO CHANNELS, TWO SPEEDS
+┌─ REAL TIME ───────────────────┐ ┌─ SAVED ──────────────────────┐
+│ every write → file:changed │ │ when the turn CLOSES: │
+│ → HMR → the preview moves │ │ ONE commit (5 files = 1) │
+│ does NOT wait on commits │ │ → history:new → history │
+└────────────────────────────────┘ └───────────────────────────────┘
+"now" "memory"
 
-⑦ EL PREVIEW APARECE SOLO
-  al cerrar el turno → detectLaunch: ¿ya hay package.json con "dev"?
-       ├─ no  → sigue esperando (normal)
-       └─ sí  → npm install (adentro) → dev server (adentro)
-                → Docker publica el puerto → el proxy inyecta el inspector
-                → preview:ready → TODOS lo ven aparecer
+⑦ THE PREVIEW APPEARS ON ITS OWN
+when the turn closes → detectLaunch: is there already a package.json with "dev"?
+├─ no → keeps waiting (normal)
+└─ yes → npm install (inside) → dev server (inside)
+→ Docker publishes the port → the proxy injects the inspector
+→ preview:ready → EVERYONE sees it appear
 
-⑧ ITERAR — el bucle real del producto
-  Alguien clickea un botón del preview
-       → el inspector (inyectado) manda selector + tag por postMessage
-       → todos ven "beto seleccionó <button>"
-  "este botón en rojo"  (anclado)
-       → el agente recibe el selector en su prompt
-       → encuentra el código, lo cambia
-       → ⑥ otra vez: los dos lo ven en rojo
+⑧ ITERATE — the product's real loop
+Someone clicks a button in the preview
+→ the (injected) inspector sends selector + tag via postMessage
+→ everyone sees "beto selected <button>"
+"make this button red" (anchored)
+→ the agent gets the selector in its prompt
+→ finds the code, changes it
+→ ⑥ again: both see it turn red
 
-⑨ SI ALGO SALE MAL
-  Historial → arrastras al punto anterior → "Regresar aquí"
-  → revert como commit NUEVO (nunca borra historia)
-  → todos vuelven a ese estado
+⑨ IF SOMETHING GOES WRONG
+History → drag to a previous point → "Go back here"
+→ revert as a NEW commit (never erases history)
+→ everyone returns to that state
 
-⑩ CERRAR
-  Ctrl+C → previews muertos, contenedores borrados
-  Al volver: la sala sigue (SQLite), el chat sigue, el proyecto sigue (git)
-             el preview re-arranca solo
-```
+⑩ SHUTTING DOWN
+Ctrl+C → previews killed, containers removed
+Coming back: the room persists (SQLite), the chat persists, the project persists (git)
+the preview restarts on its own
 
----
-
-## Las cinco piezas que sostienen todo
-
-**El loop es un `while` con un `switch`.** Sin frameworks de agentes, sin SDK del
-modelo. Manda mensajes, recibe `tool_use`, ejecuta, repite hasta `end_turn`. Las
-tools de un mismo mensaje corren en paralelo (`Promise.all`).
-
-**El error de concurrencia va al MODELO, no al humano.** Si el archivo cambió, el
-agente recibe "léelo otra vez" y reaplica su cambio sobre lo nuevo. Nadie ve un
-modal de conflicto. Esto reemplazó al merge estructural que teníamos diseñado: es
-más barato hacer que el agente reintente que mergear texto.
-
-**Dos canales independientes.** El preview no espera commits (si esperara, la sala
-se sentiría muerta entre turnos) y el historial no guarda cada tecla (un turno que
-toca 5 archivos es UN punto en la línea de tiempo, no cinco).
-
-**El motor no sabe de stacks.** La sala nace vacía; el agente scaffoldea lo que le
-pidan. El preview lee el `package.json` para saber cómo levantarlo, y el proxy
-inyecta el inspector sin importar el framework.
-
-**El contenedor hace verdad lo que las tools prometen.** `safePath` ya impedía que
-`write_file` saliera del workspace, pero a un shell no se le puede acotar desde el
-código: `cwd` dice dónde empieza, no hasta dónde llega. Encerrarlo de verdad lo
-tiene que hacer el sistema operativo.
 
 ---
 
-## Dónde corre el loop y por dónde va la key
+## The five pieces that hold it all up
 
-El loop corre **en el server**, siempre. No podría correr en el navegador aunque
-se quisiera: necesita el filesystem del workspace, git y `docker exec`.
+**The loop is a `while` with a `switch`.** No agent frameworks, no model SDK. Sends
+messages, receives `tool_use`, executes, repeats until `end_turn`. Tools from the
+same message run in parallel (`Promise.all`).
 
-La API key no viaja en cada mensaje. Se manda **una vez al conectar el socket**, y
-el server la guarda en memoria amarrada a ese `socketId`:
+**The concurrency error goes to the MODEL, not the human.** If the file changed,
+the agent gets "read it again" and reapplies its change on top of the new content.
+Nobody sees a conflict modal. This replaced the structural merge we'd originally
+designed: it's cheaper to have the agent retry than to merge text.
 
-```
-navegador                          server
-─────────                          ──────
-al conectar:
-  emit("auth:key", {key})  ──────► keys.ts: Map<socketId, key>
+**Two independent channels.** The preview doesn't wait on commits (if it did, the
+room would feel dead between turns) and the history doesn't save every keystroke
+(a turn that touches 5 files is ONE point on the timeline, not five).
 
-cada turno:
-  emit("chat", {text})     ──────► providerFor(socket.id)
-                                     ↓ busca la key por socketId
-                                   new AnthropicProvider(key)
-                                     ↓
-                                   runAgent({ provider, ... })  ← el loop, aquí
-                                     ↓
-                                   fetch → api.anthropic.com
-```
+**The engine doesn't know about stacks.** The room starts empty; the agent
+scaffolds whatever it's asked for. The preview reads `package.json` to know how to
+launch it, and the proxy injects the inspector regardless of framework.
 
-**La consecuencia que hay que decir en voz alta:** quien hospeda Multi tiene, en
-memoria de su proceso, las keys de quienes entran a sus salas. En tu máquina con
-tus compas eso es intrascendente. En un servicio público abierto a desconocidos no
-lo es — y es una de las razones por las que un hosting de paga acabaría poniendo su
-propia key y cobrando el uso, en vez de recibir las de otros.
+**The container makes true what the tools promise.** `safePath` already stopped
+`write_file` from leaving the workspace, but a shell can't be constrained from
+code: `cwd` says where it starts, not how far it can reach. Actually locking it
+down has to be the operating system's job.
 
-### Quién puede leer ese Map
+---
+
+## Where the loop runs and where the key travels
+
+The loop runs **on the server**, always. It couldn't run in the browser even if we
+wanted it to: it needs the workspace filesystem, git, and `docker exec`.
+
+The API key doesn't travel with every message. It's sent **once, when the socket
+connects**, and the server keeps it in memory tied to that `socketId`:
+
+browser server
+─────── ──────
+on connect:
+emit("auth:key", {key}) ──────► keys.ts: Map<socketId, key>
+
+every turn:
+emit("chat", {text}) ──────► providerFor(socket.id)
+↓ looks up the key by socketId
+new AnthropicProvider(key)
+↓
+runAgent({ provider, ... }) ← the loop, here
+↓
+fetch → api.anthropic.com
+
+
+**The consequence worth saying out loud:** whoever hosts Multi has, in their
+process's memory, the keys of everyone who joins their rooms. On your own machine
+with your teammates, that's harmless. On a public service open to strangers, it
+isn't — and it's one of the reasons a paid hosting offering would end up supplying
+its own key and charging for usage, instead of taking other people's.
+
+### Who can read that Map
 
 | | |
 |---|---|
-| El proceso del server | sí — necesita la key en claro para llamar a la API |
-| Quien hospeda | sí — `console.log`, debugger o dump del proceso |
-| Root de esa máquina | sí — puede leer la memoria de cualquier proceso |
-| Otros miembros de la sala | **no** — ningún evento emite keys, y el Map está indexado por `socketId` |
-| **Los agentes** | **no** — ejecutan dentro del contenedor, que no alcanza la memoria del server. Pedirle a un agente "muéstrame las keys" no sirve de nada: no están en su mundo |
-| El disco | **no** — nunca se escribe; al reiniciar desaparecen |
-| Los logs | **no** — no se loguea, ni truncada |
+| The server process | yes — it needs the key in the clear to call the API |
+| Whoever hosts it | yes — `console.log`, a debugger, or a process dump |
+| Root on that machine | yes — can read the memory of any process |
+| Other members of the room | **no** — no event emits keys, and the Map is indexed by `socketId` |
+| **The agents** | **no** — they run inside the container, which can't reach the server's memory. Asking an agent "show me the keys" gets you nowhere: they're not in its world |
+| Disk | **no** — never written; they're gone on restart |
+| Logs | **no** — never logged, not even truncated |
 
-El modelo de confianza es **"confías en quien hospeda"**, el mismo que con Vercel y
-tus variables de entorno. Trivialmente cierto en local (tú hospedas); deja de serlo
-en un cloud abierto.
+The trust model is **"you trust whoever's hosting it"** — the same one you already
+accept with Vercel and your environment variables. Trivially true locally (you're
+the host); stops being true on an open cloud.
 
-**Mitigación si algún día hospedas:** Anthropic permite crear keys con límite de
-gasto. Quien entre a un Multi ajeno debería usar una acotada, no la de su cuenta
-principal — convierte el peor caso de "me vaciaron la cuenta" en "perdí unos pesos".
+**Mitigation if you ever host it publicly:** Anthropic lets you create keys with a
+spending limit. Anyone joining someone else's Multi should use a capped one, not
+their main account's key — it turns the worst case of "my account got drained"
+into "I lost a few bucks."
 
 ---
 
-## Dónde vive cada cosa
+## Where things live
 
 | | |
 |---|---|
-| `server/src/agent/loop.ts` | el loop |
-| `server/src/agent/tools/` | las 6 tools |
-| `server/src/agent/providers/` | cliente HTTP a Anthropic (SSE a mano) |
+| `server/src/agent/loop.ts` | the loop |
+| `server/src/agent/tools/` | the 6 tools |
+| `server/src/agent/providers/` | HTTP client to Anthropic (hand-rolled SSE) |
 | `server/src/engine/file-mutation.ts` | CAS |
-| `server/src/engine/keyed-mutex.ts` | fila por ruta |
-| `server/src/engine/coordinator.ts` | un drain por agente → paralelo real |
-| `server/src/engine/turns.ts` | turnos durables + barrido de huérfanos |
+| `server/src/engine/keyed-mutex.ts` | queue by path |
+| `server/src/engine/coordinator.ts` | one drain per agent → real parallelism |
+| `server/src/engine/turns.ts` | durable turns + orphan sweep |
 | `server/src/engine/git.ts` `history.ts` | commits, diffs, revert, bookmarks |
-| `server/src/engine/preview.ts` | levantar el dev server |
-| `server/src/engine/proxy.ts` `inspector.ts` | proxy que inyecta el click-to-select |
-| `server/src/engine/container.ts` `runner.ts` | aislamiento por sala |
-| `server/src/keys.ts` | API key por persona (memoria, nunca en disco) |
-| `server/src/storage/` | SQLite tras una interfaz (puerta a Postgres) |
-| `web/src/App.tsx` | la sala |
+| `server/src/engine/preview.ts` | spinning up the dev server |
+| `server/src/engine/proxy.ts` `inspector.ts` | proxy that injects click-to-select |
+| `server/src/engine/container.ts` `runner.ts` | per-room isolation |
+| `server/src/keys.ts` | per-person API key (memory, never on disk) |
+| `server/src/storage/` | SQLite behind an interface (a door to Postgres) |
+| `web/src/App.tsx` | the room |
 
 ---
 
-## Qué está verificado
+## What's verified
 
-| Qué | Cómo |
+| What | How |
 |---|---|
-| Motor: workspace vacío → preview + HMR | `npm run demo:workspace` |
-| Concurrencia: CAS, mutex, coordinador | `npm run demo:concurrency` — 17/17 |
-| Historial: diffs, bookmarks, revert | `npm run demo:historial` — 9/9 |
-| Persistencia: sobrevive al reinicio | `npm run demo:persistence` |
-| Back visual: endpoints y semáforo | `npm run demo:back` — 12/12 |
-| Aislamiento: el agente no sale de su sala | `npm run demo:aislamiento` — 10/10 |
-| Keys por persona | `npm run demo:keys` — 6/6 |
+| Engine: empty workspace → preview + HMR | `npm run demo:workspace` |
+| Concurrency: CAS, mutex, coordinator | `npm run demo:concurrency` — 17/17 |
+| History: diffs, bookmarks, revert | `npm run demo:historial` — 9/9 |
+| Persistence: survives a restart | `npm run demo:persistence` |
+| Visual backend: endpoints and status | `npm run demo:back` — 12/12 |
+| Isolation: the agent can't leave its room | `npm run demo:aislamiento` — 10/10 |
+| Per-person keys | `npm run demo:keys` — 6/6 |
 
-**Lo que falta probar:** el recorrido ② → ⑦ con agente real — pedir un proyecto de
-cero y verlo aparecer. Las piezas están verificadas por separado; el mock que usan
-los demos escribe un archivo fijo y no sabe scaffoldear.
+**What's still untested:** the ② → ⑦ path with a real agent — asking for a project
+from scratch and watching it appear. The pieces are verified individually; the mock
+the demos use writes a fixed file and doesn't know how to scaffold.
 
 ---
 
-## Notas de entorno
+## Environment notes
 
-- **WSL:** importar Fastify desde `/mnt/c` tarda ~55s (Windows traduciendo miles de
-  lecturas de `node_modules`). No es un cuelgue. Mover el repo al filesystem de
-  Linux lo arregla.
-- **Sin Docker** el server arranca igual, en modo local, y avisa fuerte que no hay
-  aislamiento. Nunca degrada en silencio.
+- **WSL:** importing Fastify from `/mnt/c` takes ~55s (Windows translating
+  thousands of `node_modules` reads). It's not hanging. Moving the repo to the
+  Linux filesystem fixes it.
+- **Without Docker** the server still starts, in local mode, and warns loudly that
+  there's no isolation. It never degrades silently.

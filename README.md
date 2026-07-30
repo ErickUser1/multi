@@ -18,9 +18,9 @@ A live room where several people and several agents build the same project, seei
 │                     │  THE APP    THE BACK                     │
 │  ● agente-1         │ ┌──────────────────────────────────────┐ │
 │    writing Nav.tsx  │ │                                      │ │
-│  ○ agente-2 idle    │ │      your app, moving live           │ │
+│  ○ agente-2 idle    │ │      your app, moving live           
 │                     │ │                                      │ │
-│  ─────────────────  │ │        ↖ erick                       │ │
+│  ─────────────────  │ │        ↖ donscanor                       │ │
 │  D  Donscanor       │ │                    ↖ your teammate   │ │
 │    @agente make the │ │                                      │ │
 │    header red       │ └──────────────────────────────────────┘ │
@@ -34,7 +34,7 @@ A live room where several people and several agents build the same project, seei
 ## Install
 
 ```bash
-git clone https://github.com/ErickHub192/multi
+git clone https://github.com/ErickUser1/multi
 cd multi
 npm install
 npm start

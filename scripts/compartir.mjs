@@ -19,9 +19,10 @@ import { fileURLToPath } from "node:url";
 
 const raiz = join(dirname(fileURLToPath(import.meta.url)), "..");
 const PUERTO = process.env.PORT ?? "4000";
+const NPM = process.platform === "win32" ? "npm.cmd" : "npm";
 
 function run(cmd, args, opts = {}) {
-  return spawn(cmd, args, { cwd: raiz, stdio: "inherit", shell: false, ...opts });
+  return spawn(cmd, args, { cwd: raiz, stdio: "inherit", shell: process.platform === "win32", ...opts });
 }
 
 function esperar(child) {
@@ -36,11 +37,11 @@ async function main() {
   //    llevaría a una API pelona.
   if (!existsSync(join(raiz, "web", "dist", "index.html"))) {
     console.log("\n  Compilando la Sala (solo la primera vez)…\n");
-    await esperar(run("npm", ["run", "build"]));
+    await esperar(run(NPM, ["run", "build"]));
   }
 
   console.log("\n  Levantando Multi…\n");
-  const server = run("npm", ["run", "serve"]);
+  const server = run(NPM, ["run", "serve"]);
 
   // 2. Esperar a que responda antes de abrir el túnel: si no, ngrok muestra
   //    un error de conexión y parece que todo falló.

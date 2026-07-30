@@ -34,3 +34,4 @@ soul.md
 # Bocetos HTML de la UI. Sirvieron para diseñar la Sala; el código real vive
 # en web/. Se quedan fuera para no confundir a quien llegue al repo.
 app/
+.claude/

@@ -89,6 +89,8 @@ export interface RunResult {
   turns: number;
   /** Historial completo tras la corrida (para persistir/continuar). */
   messages: Message[];
+  /** El turno se cortó porque alguien de la sala interrumpió al agente. */
+  interrumpido?: boolean;
 }
 
 /**
@@ -137,17 +139,30 @@ export async function runAgent(opts: {
   let turn = 0;
 
   for (; turn < MAX_TURNS; turn++) {
-    const end = await provider.stream(
-      {
-        system: SYSTEM_PROMPT,
-        messages,
-        tools: toolSpecs,
-        maxTokens,
-        model,
-        signal,
-      },
-      callbacks,
-    );
+    let end;
+    try {
+      end = await provider.stream(
+        {
+          system: SYSTEM_PROMPT,
+          messages,
+          tools: toolSpecs,
+          maxTokens,
+          model,
+          signal,
+        },
+        callbacks,
+      );
+    } catch (err) {
+      // Interrumpir NO es un error: es alguien de la sala corrigiendo el rumbo.
+      // Se devuelve lo que el agente alcanzó a hacer para que el turno siguiente
+      // continúe con ese contexto. Sin esto el historial se perdía en el catch
+      // de arriba, y el agente respondía "no tengo el contexto de la
+      // conversación anterior" — rompiendo la premisa de interrumpir sin miedo.
+      if (signal?.aborted) {
+        return { finalText, turns: turn, messages, interrumpido: true };
+      }
+      throw err;
+    }
 
     // Guardar el mensaje del assistant en el historial.
     messages.push(end.message);
@@ -171,7 +186,16 @@ export async function runAgent(opts: {
     );
 
     // Los resultados van como UN mensaje user con todos los tool_result.
+    // Van SIEMPRE, aunque hayan interrumpido a media ejecución: la API exige que
+    // cada tool_use tenga su tool_result, y sin eso el historial queda inválido
+    // y el turno siguiente falla al mandarlo.
     messages.push({ role: "user", content: results });
+
+    // Interrumpido mientras corrían las tools: se cierra aquí, con el historial
+    // ya consistente.
+    if (signal?.aborted) {
+      return { finalText, turns: turn + 1, messages, interrumpido: true };
+    }
   }
 
   // Se acabaron los turnos.

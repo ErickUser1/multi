@@ -16,6 +16,7 @@
     "demo:aislamiento": "tsx src/demos/aislamiento.ts",
     "demo:keys": "tsx src/demos/keys.ts",
     "demo:menciones": "tsx src/demos/menciones.ts",
+    "demo:interrupcion": "tsx src/demos/interrupcion.ts",
     "demo:providers": "tsx src/demos/providers.ts",
     "dev:test": "MULTI_TEST_MOCK=1 CHOKIDAR_USEPOLLING=1 tsx watch src/index.ts"
   },

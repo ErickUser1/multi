@@ -50,12 +50,13 @@ export class RunCoordinator {
       const existing = this.entries.get(key);
 
       if (existing) {
-        if (existing.stopping) {
-          // Se está muriendo: esperar y reintentar (no arrancar sobre el cadáver).
-          await existing.running.catch(() => {});
-          continue;
-        }
         // JOIN + coalescing: no arranca otro loop, pide una re-ejecución al final.
+        //
+        // Vale también si está `stopping`: ese es justo el caso de interrumpir
+        // escribiendo lo que sí quieres. El ciclo se entera de que hay trabajo
+        // pendiente y, en vez de morir, lo atiende con una señal limpia. Antes
+        // aquí se esperaba a que muriera y se reintentaba, con lo que el mensaje
+        // del que interrumpió se quedaba sin dueño.
         existing.pendingWake = true;
         return existing.running.then(
           () => undefined,
@@ -86,22 +87,46 @@ export class RunCoordinator {
     try {
       for (;;) {
         entry.pendingWake = false;
-        await drain(entry.abort.signal);
+        // Un drain puede terminar por abort: no debe tumbar el ciclo, porque
+        // justo después suele venir el trabajo que causó la interrupción.
+        await drain(entry.abort.signal).catch((err) => {
+          if (!entry.abort.signal.aborted) throw err;
+        });
+
         // Coalescing: los N mensajes que llegaron durante el drain se atienden
         // con UNA sola pasada más, no con N.
-        if (!entry.pendingWake || entry.stopping) break;
+        if (!entry.pendingWake) break;
+
+        // Interrumpido CON trabajo encolado: se atiende lo nuevo con una señal
+        // limpia. Sin esto el ciclo moría llevándose el mensaje del que
+        // interrumpió — el caso normal es interrumpir escribiendo lo que sí
+        // quieres, así que perderlo rompe el gesto entero.
+        if (entry.stopping) {
+          entry.stopping = false;
+          entry.abort = new AbortController();
+        }
       }
     } finally {
       if (this.entries.get(key) === entry) this.entries.delete(key);
     }
   }
 
-  /** Interrumpe la ejecución de una clave. */
+  /**
+   * Interrumpe la ejecución de una clave.
+   *
+   * Se limpia el wake que hubiera ANTES: pertenecía al trabajo que estás
+   * matando, y revivirlo sería justo lo contrario de interrumpir. Pero un wake
+   * que llegue DESPUÉS sí se atiende — ese es el caso normal: interrumpes
+   * escribiendo lo que sí quieres, y ese mensaje tiene que llegar.
+   *
+   * La distinción es de OpenCode (`session/run-coordinator.ts`), que la prueba
+   * con dos casos: "interrupts active execution and clears its pending wake" y
+   * "runs a wake registered during interruption cleanup".
+   */
   interrupt(key: string): void {
     const entry = this.entries.get(key);
     if (!entry) return;
     entry.stopping = true;
-    // Limpiar el wake pendiente: no revivir el trabajo que estamos matando.
     entry.pendingWake = false;
     entry.abort.abort();
   }

@@ -5,6 +5,56 @@ the way. If you're picking one up, that saves you retracing dead ends.
 
 ---
 
+## Agents don't know what the other agents are doing
+
+**Seen in a real session:** someone spawned `agente-1`, which started installing
+dependencies. Seconds later someone else spawned `agente-2`, which looked at the
+workspace, saw it empty (the first one hadn't finished writing yet), and started
+installing dependencies too. Two agents doing the same work from second zero.
+
+This is the exact problem Multi was built to solve — divergence from not seeing
+what the other one is doing — except between agents. It got solved for humans
+(they see the chat, the preview, the cursors) and overlooked for agents.
+
+**Shape of the fix:** not the full context of the other agent's conversation —
+that's expensive and mostly noise. A summary: who else is working, on what, and
+which files they've touched. Enough for the second agent to notice that someone
+is already setting the project up.
+
+The data already exists: `AgentRegistry` tracks state and current task, and
+`file-mutation.ts` keeps an ephemeral record of who wrote what. What's missing is
+handing that to the model as part of its turn.
+
+**Watch out for:** the summary has to be cheap to build and short enough not to eat
+the context window. And it's a snapshot, not a subscription — by the time the model
+reads it, it may already be stale. It should read as "this was the state when your
+turn started," not as truth.
+
+---
+
+## Warm npm cache in the image
+
+**The concrete reason:** the first `npm install` in a room takes minutes. Rooms are
+born empty on purpose (no template, no assumed stack), but that means every room
+downloads the world before anyone sees anything.
+
+Lovable's first preview is nearly instant. There's no public detail on how, but
+given their architecture (ephemeral container per project), the likely answer is
+their image ships with `node_modules` already baked in.
+
+**How to get that without giving up being stack-agnostic:** don't seed a project —
+warm the npm cache in the room image with the packages that get asked for most
+(react, vite, tailwind, typescript). If the agent asks for Svelte or Django it
+downloads them like today; the common case is just already there.
+
+The difference matters: a template *decides the stack for the user*; a cache *has
+ready what they'll probably ask for*. The first breaks the product's premise, the
+second doesn't.
+
+**Where:** `docker/room.Dockerfile`, with `npm cache add` at build time.
+
+---
+
 ## The full visual backend
 
 **What's there:** a map of endpoints. It scans the workspace and cross-references

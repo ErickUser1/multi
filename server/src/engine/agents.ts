@@ -162,3 +162,52 @@ export class AgentRegistry {
     return stuck;
   }
 }
+
+/**
+ * Qué están haciendo los demás agentes de la sala, para contárselo al que
+ * empieza un turno.
+ *
+ * El caso que resuelve, visto en una sesión real: alguien lanza un agente que se
+ * pone a instalar dependencias; segundos después alguien lanza otro, que mira el
+ * workspace, lo ve vacío (el primero todavía no escribe nada) y se pone a montar
+ * el proyecto también. Dos agentes haciendo lo mismo desde el segundo cero.
+ *
+ * Es el problema del que nació Multi — divergir por no ver lo que hace el otro —
+ * aplicado a los agentes. Se resolvió para los humanos (ven el chat, el preview,
+ * los cursores) y se pasó por alto aquí.
+ *
+ * Se manda un RESUMEN, no la conversación del otro: lo segundo es caro y en su
+ * mayoría ruido. Basta con quién más trabaja, en qué, y qué archivos tocó.
+ */
+export function resumenDeOtros(
+  registro: AgentRegistry,
+  yo: string,
+  archivos: Array<{ agentId: string; path: string; escribiendoAhora: boolean }>,
+): string | null {
+  const otros = registro.list().filter((a) => a.id !== yo && a.state !== "idle");
+  if (otros.length === 0) return null;
+
+  const lineas = otros.map((a) => {
+    const suyos = archivos.filter((f) => f.agentId === a.id);
+    const enVuelo = suyos.filter((f) => f.escribiendoAhora).map((f) => f.path);
+    const tocados = suyos.filter((f) => !f.escribiendoAhora).map((f) => f.path);
+
+    const partes = [`${a.name}: ${a.task ?? "trabajando"}`];
+    if (enVuelo.length) partes.push(`  escribiendo ahora: ${enVuelo.join(", ")}`);
+    if (tocados.length) partes.push(`  ya tocó: ${tocados.slice(0, 8).join(", ")}`);
+    return partes.join("\n");
+  });
+
+  return [
+    "<otros_agentes>",
+    "Ahora mismo hay más agentes trabajando en este proyecto:",
+    "",
+    ...lineas,
+    "",
+    "No rehagas lo que otro ya está haciendo. Si alguien está montando el proyecto,",
+    "espera a que termine o trabaja en otra parte. Un archivo que otro está",
+    "escribiendo en este momento: déjalo. Uno que ya soltó: léelo antes de tocarlo,",
+    "porque cambió desde la última vez que lo viste.",
+    "</otros_agentes>",
+  ].join("\n");
+}

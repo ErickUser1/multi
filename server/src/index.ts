@@ -24,7 +24,8 @@ import {
 import { getStorage } from "./storage/index.js";
 import { setCredential, getCredential, clearCredential } from "./keys.js";
 import { makeProvider, esProviderId, PERFILES } from "./agent/providers/profiles.js";
-import { MAX_AGENTS_PER_ROOM } from "./engine/agents.js";
+import { MAX_AGENTS_PER_ROOM, resumenDeOtros } from "./engine/agents.js";
+import { fileMutation } from "./engine/file-mutation.js";
 import { startTurn, commitTurn, failTurn } from "./engine/turns.js";
 import { commitAll, discardChanges, diffCommit, revertTo, revertFile } from "./engine/git.js";
 import { getHistory, setBookmark } from "./engine/history.js";
@@ -664,7 +665,9 @@ async function runAgentTurn(
       // no hay Docker). El agente no distingue: es la misma tool.
       runner: await ensureRunner(room),
       messages: history,
-      userMessage: task,
+      // Qué están haciendo los demás, para que no repita su trabajo. Se calcula
+      // AL EMPEZAR el turno: es una foto del momento, no una suscripción.
+      userMessage: conContextoDeOtros(room, agentId, task),
       signal,
       agentId,
       callbacks: {
@@ -730,6 +733,19 @@ async function runAgentTurn(
     room.agents.finish(agentId);
     io.to(room.id).emit("agents", { agents: room.agents.list() });
   }
+}
+
+/**
+ * Antepone al mensaje un resumen de qué hacen los otros agentes.
+ *
+ * Va en el mensaje del turno y no en el prompt del sistema porque cambia con
+ * cada turno: el prompt del sistema se cachea del lado del proveedor y meterle
+ * algo variable tiraría ese caché en cada llamada.
+ */
+function conContextoDeOtros(room: Room, agentId: string, task: string): string {
+  const archivos = fileMutation.trabajoRecienteDeOtros(agentId);
+  const resumen = resumenDeOtros(room.agents, agentId, archivos);
+  return resumen ? `${resumen}\n\n${task}` : task;
 }
 
 /** Formatea el elemento anclado como texto legible para el prompt del agente. */

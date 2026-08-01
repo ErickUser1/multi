@@ -251,22 +251,21 @@ export function KeyPanel(props: {
 
           <label className="key-campo">
             <span>Modelo</span>
-            {/* Editable a propósito: OpenRouter tiene cientos y no cabe listarlos. */}
-            <input
-              className="key-input"
-              list="modelos-sugeridos"
-              placeholder={sugerencias[0] ?? perfil.modelos[0]}
-              value={model}
+            {/* Un <select> y no un <input list>: el datalist con los 341 modelos
+                de OpenRouter hacía que Chrome dejara su tooltip nativo flotando
+                encima del panel. Con select el navegador maneja la lista larga
+                como lo que es, y de paso no se puede escribir un id inválido. */}
+            <select
+              className="key-select"
+              value={model || sugerencias[0] || ""}
               onChange={(e) => setModel(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") guardar();
-              }}
-            />
-            <datalist id="modelos-sugeridos">
+            >
               {sugerencias.map((m) => (
-                <option key={m} value={m} />
+                <option key={m} value={m}>
+                  {etiquetaModelo(m)}
+                </option>
               ))}
-            </datalist>
+            </select>
           </label>
 
           <p className="key-nota">
@@ -288,4 +287,12 @@ export function KeyPanel(props: {
       {props.error && <div className="key-error">{props.error}</div>}
     </div>
   );
+}
+
+/**
+ * Cómo se lee un modelo en la lista. Marca los gratis: con cientos de opciones,
+ * saber cuáles no cuestan es lo primero que alguien busca.
+ */
+function etiquetaModelo(id: string): string {
+  return id.endsWith(":free") ? `${id.slice(0, -5)}  ·  gratis` : id;
 }

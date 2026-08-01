@@ -172,6 +172,28 @@ fastify.get<{ Params: { id: string } }>("/providers/:id/models", async (req, rep
   }
 });
 
+/**
+ * La conversación de un agente. SOLO con MULTI_DEBUG=1.
+ *
+ * Nada del producto lo consume: existe para diagnosticar y para que los demos
+ * puedan comprobar cosas que de otro modo no se ven. Va detrás de una bandera
+ * porque expone la conversación completa de un agente — incluido lo que la gente
+ * escribió en el chat — y eso no debe estar abierto por default.
+ */
+if (process.env.MULTI_DEBUG === "1") {
+  fastify.get<{ Params: { id: string; agentId: string } }>(
+    "/rooms/:id/agents/:agentId/history",
+    async (req, reply) => {
+      const room = getRoom(req.params.id) ?? (await wakeRoom(req.params.id));
+      if (!room) return reply.code(404).send({ error: "sala no encontrada" });
+      const enMemoria = room.histories.get(req.params.agentId);
+      const messages =
+        enMemoria ?? (await (await getStorage()).getAgentHistory(room.id, req.params.agentId));
+      return { messages };
+    },
+  );
+}
+
 // El diff de un turno — opt-in, no se muestra por defecto.
 fastify.get<{ Params: { id: string; hash: string } }>(
   "/rooms/:id/diff/:hash",
@@ -573,12 +595,30 @@ async function dispatchAgent(
   pendingByAgent.set(key, queue);
 
   await room.coordinator.run(key, async (signal) => {
+    // Si ya venía abortado, no se toca la cola: lo encolado es para el turno
+    // siguiente, no para este que está muriendo.
+    if (signal.aborted) return;
+
     const pending = pendingByAgent.get(key) ?? [];
     pendingByAgent.set(key, []);
     if (pending.length === 0) return;
     // Coalescing: varios mensajes acumulados se atienden en un solo turno.
     const task = pending.join("\n\n");
-    await runAgentTurn(room, agentId, task, signal, provider);
+
+    try {
+      await runAgentTurn(room, agentId, task, signal, provider);
+    } catch (err) {
+      // Si el turno se cortó, lo que se sacó de la cola NO se ejecutó: se
+      // devuelve al frente para que lo atienda el turno siguiente.
+      //
+      // Sin esto el mensaje se perdía en silencio. Es lo que pasaba al
+      // interrumpir y decir "continúa": el turno moribundo vaciaba la cola,
+      // se llevaba el "continúa", y el agente respondía como si nadie le
+      // hubiera dicho nada.
+      const ahora = pendingByAgent.get(key) ?? [];
+      pendingByAgent.set(key, [...pending, ...ahora]);
+      throw err;
+    }
   });
 }
 
@@ -643,15 +683,24 @@ async function runAgentTurn(
       },
     });
 
+    // El historial se guarda SIEMPRE, también si lo interrumpieron: es lo que
+    // permite que el mensaje siguiente continúe con lo que ya se había hecho.
+    room.histories.set(agentId, result.messages);
+    void getStorage().then((s) => s.saveAgentHistory(room.id, agentId, result.messages));
+
+    if (result.interrumpido) {
+      // Sin mensaje del agente: quien interrumpió ya está escribiendo lo suyo, y
+      // un "me interrumpieron" en el chat solo estorba. Lo escrito se conserva.
+      await commitTurn(room.workspace.dir, turn, { summary: "(interrumpido)" });
+      return;
+    }
+
     await say(room, {
       from: agent.name,
       color: agent.color,
       role: "agent",
       text: result.finalText,
     });
-    room.histories.set(agentId, result.messages);
-    // Persistir la conversación del agente para que continúe tras un reinicio.
-    void getStorage().then((s) => s.saveAgentHistory(room.id, agentId, result.messages));
 
     // Canal 2: el turno cierra con UN commit (unidad de sentido del scrubber).
     const hash = await commitTurn(room.workspace.dir, turn, { summary: result.finalText });

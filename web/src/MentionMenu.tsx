@@ -52,10 +52,10 @@ export function MentionMenu(props: {
             @{o.name}
           </span>
           <span className="mention-hint">{o.hint}</span>
-          {/* A los que trabajan SÍ se les puede hablar: el mensaje los
-              interrumpe y atienden lo nuevo. Se avisa para que no parezca
-              que hay que esperar. */}
-          {o.ocupado && <span className="mention-tag">interrumpir</span>}
+          {/* A los que trabajan SÍ se les puede hablar: el mensaje los detiene y
+              atienden lo nuevo, con un solo gesto. Decía "interrumpir", que se
+              leía como un botón que no existe; ahora describe lo que pasa. */}
+          {o.ocupado && <span className="mention-tag">lo detiene</span>}
         </div>
       ))}
     </div>

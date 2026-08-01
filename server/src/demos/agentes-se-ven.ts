@@ -72,7 +72,28 @@ function main() {
     );
   }
 
-  console.log("\n4. Los que terminaron no estorban");
+  console.log("\n4. Lo que el otro CONTÓ también viaja");
+  {
+    const reg = new AgentRegistry();
+    const a1 = reg.spawn("la sección de personajes")!;
+    const a2 = reg.spawn("agrega a Virgilio")!;
+
+    const dijo = new Map([
+      [
+        a1.id,
+        "Puse los personajes en src/data/personajes.ts como array tipado, cada uno con nombre, círculo y pecado.",
+      ],
+    ]);
+    const r = resumenDeOtros(reg, a2.id, [], dijo);
+    check(
+      "el segundo se entera de la decisión, no solo del archivo",
+      !!r?.includes("src/data/personajes.ts"),
+      r ?? "",
+    );
+    check("se marca como algo que dijo", !!r?.includes('dijo: "'), r ?? "");
+  }
+
+  console.log("\n5. Los que terminaron no estorban");
   {
     const reg = new AgentRegistry();
     const a1 = reg.spawn("ya terminé")!;
@@ -83,7 +104,7 @@ function main() {
     check("no se menciona a un agente libre", r === null, r ?? "");
   }
 
-  console.log("\n5. No se cuenta a sí mismo");
+  console.log("\n6. No se cuenta a sí mismo");
   {
     const reg = new AgentRegistry();
     const a1 = reg.spawn("lo mío")!;

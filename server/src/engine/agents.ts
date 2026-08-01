@@ -183,6 +183,16 @@ export function resumenDeOtros(
   registro: AgentRegistry,
   yo: string,
   archivos: Array<{ agentId: string; path: string; escribiendoAhora: boolean }>,
+  /**
+   * Lo último que dijo cada agente en el chat. Es el mismo texto que la sala ya
+   * leyó — no hay canal privado entre agentes, todos ven lo mismo.
+   *
+   * Vale más de lo que parece: el resumen dice QUÉ archivo toca el otro, pero no
+   * las decisiones que tomó ("los datos van en src/data/personajes.ts, tipados
+   * así"). Eso solo está en lo que contó, y ahorra que el siguiente lo descubra
+   * leyendo o lo reinvente distinto.
+   */
+  ultimoMensaje?: Map<string, string>,
 ): string | null {
   const otros = registro.list().filter((a) => a.id !== yo && a.state !== "idle");
   if (otros.length === 0) return null;
@@ -195,6 +205,9 @@ export function resumenDeOtros(
     const partes = [`${a.name}: ${a.task ?? "trabajando"}`];
     if (enVuelo.length) partes.push(`  escribiendo ahora: ${enVuelo.join(", ")}`);
     if (tocados.length) partes.push(`  ya tocó: ${tocados.slice(0, 8).join(", ")}`);
+
+    const dijo = ultimoMensaje?.get(a.id);
+    if (dijo) partes.push(`  dijo: "${recorta(dijo, 300)}"`);
     return partes.join("\n");
   });
 
@@ -210,4 +223,10 @@ export function resumenDeOtros(
     "porque cambió desde la última vez que lo viste.",
     "</otros_agentes>",
   ].join("\n");
+}
+
+/** Recorta a lo que quepa sin comerse el contexto del turno. */
+function recorta(s: string, max: number): string {
+  const limpio = s.replace(/\s+/g, " ").trim();
+  return limpio.length > max ? `${limpio.slice(0, max)}…` : limpio;
 }

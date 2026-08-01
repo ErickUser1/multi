@@ -744,8 +744,35 @@ async function runAgentTurn(
  */
 function conContextoDeOtros(room: Room, agentId: string, task: string): string {
   const archivos = fileMutation.trabajoRecienteDeOtros(agentId);
-  const resumen = resumenDeOtros(room.agents, agentId, archivos);
+  const resumen = resumenDeOtros(room.agents, agentId, archivos, ultimosMensajes(room));
   return resumen ? `${resumen}\n\n${task}` : task;
+}
+
+/**
+ * Lo último que dijo cada agente, sacado de su propio historial.
+ *
+ * No se guarda aparte: es el mismo texto que la sala vio en el chat, y ya vive
+ * en `room.histories`. Contarlo otra vez sería duplicar estado.
+ */
+function ultimosMensajes(room: Room): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const [agentId, mensajes] of room.histories) {
+    // El último mensaje del assistant con texto: lo que reportó al terminar.
+    for (let i = mensajes.length - 1; i >= 0; i--) {
+      const m = mensajes[i];
+      if (m.role !== "assistant") continue;
+      const texto = m.content
+        .filter((c): c is Extract<typeof c, { type: "text" }> => c.type === "text")
+        .map((c) => c.text)
+        .join(" ")
+        .trim();
+      if (texto) {
+        out.set(agentId, texto);
+        break;
+      }
+    }
+  }
+  return out;
 }
 
 /** Formatea el elemento anclado como texto legible para el prompt del agente. */

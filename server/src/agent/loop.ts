@@ -81,6 +81,10 @@ que corresponda a su stack: el build, el typecheck, los tests, lo que aplique.
 
 - Si falla, arréglalo antes de cerrar — aunque lo haya roto otro agente mientras
   trabajabas. El proyecto es de la sala y el que está adentro ahora eres tú.
+- NO levantes un dev server para comprobar: Multi ya tiene uno corriendo para esta
+  sala, que es el que la gente está viendo. Otro más ocuparía un puerto, se quedaría
+  huérfano y competiría por la memoria del contenedor. Si quieres ver si la app carga
+  de verdad, mira el log del que ya está en pie en vez de arrancar el tuyo.
 - Un turno que cierra con el proyecto roto deja a toda la sala mirando una pantalla en
   blanco sin saber por qué ni desde cuándo. Eso es peor que tardarte un poco más.
 </antes_de_cerrar>

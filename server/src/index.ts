@@ -902,6 +902,9 @@ function explicarFalla(err: unknown): string {
   if (texto.includes("model") && texto.includes("not found")) {
     return "ese modelo no existe o tu cuenta no tiene acceso. Elige otro en el panel.";
   }
+  if (texto.includes("se cortó a media escritura")) {
+    return "la respuesta del modelo se cortó a la mitad. Suele ser falta de créditos o una caída de conexión — vuelve a intentar.";
+  }
   if (texto.includes("AbortError")) {
     return "el turno se detuvo.";
   }

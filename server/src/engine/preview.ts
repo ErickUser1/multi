@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { createConnection, createServer } from "node:net";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { Workspace } from "./workspace.js";
@@ -52,6 +52,11 @@ export interface Launch {
   args: string[];
   /** Variable por la que se le pasa el puerto (la mayoría de dev servers usan PORT). */
   portEnv?: string;
+  /**
+   * Dónde correr el comando. Normalmente la raíz del workspace, pero si el
+   * proyecto quedó en una subcarpeta, apunta ahí.
+   */
+  cwd?: string;
 }
 
 /**
@@ -65,6 +70,18 @@ export interface Launch {
  * Otros ecosistemas se suman aquí, sin tocar el resto del motor.
  */
 export async function detectLaunch(dir: string): Promise<Launch | null> {
+  const enRaiz = await leerLaunch(dir);
+  if (enRaiz) return enRaiz;
+
+  // El prompt le pide al agente que scaffoldee en la raíz, pero los generadores
+  // crean subcarpeta por defecto (`npm create vite mi-app`) y el modelo a veces
+  // los deja así. Un proyecto anidado quedaba invisible y el preview no arrancaba
+  // nunca — pasó de verdad. Se busca UN nivel abajo antes de darse por vencido.
+  return buscarEnSubcarpetas(dir);
+}
+
+/** Lee el launch de un directorio concreto, o null si ahí no hay proyecto. */
+async function leerLaunch(dir: string): Promise<Launch | null> {
   const pkgPath = join(dir, "package.json");
   if (!existsSync(pkgPath)) return null;
 
@@ -80,7 +97,31 @@ export async function detectLaunch(dir: string): Promise<Launch | null> {
   const script = ["dev", "start", "serve"].find((s) => typeof scripts[s] === "string");
   if (!script) return null;
 
-  return { command: "npm", args: ["run", script], portEnv: "PORT" };
+  return { command: "npm", args: ["run", script], portEnv: "PORT", cwd: dir };
+}
+
+/** Busca un proyecto un nivel abajo. Devuelve el primero que se pueda levantar. */
+async function buscarEnSubcarpetas(dir: string): Promise<Launch | null> {
+  let entradas;
+  try {
+    entradas = await readdir(dir, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+
+  for (const e of entradas) {
+    if (!e.isDirectory()) continue;
+    if (e.name.startsWith(".") || e.name === "node_modules") continue;
+    const encontrado = await leerLaunch(join(dir, e.name));
+    if (encontrado) {
+      console.warn(
+        `[preview] proyecto encontrado en la subcarpeta "${e.name}". Lo normal es que ` +
+          `viva en la raíz del workspace; se levanta de todos modos.`,
+      );
+      return encontrado;
+    }
+  }
+  return null;
 }
 
 /**
@@ -116,14 +157,21 @@ export async function startPreview(
     await killDevServersIn(container.roomId, container.internalPort);
   }
 
+  // Si el proyecto vive en una subcarpeta, el comando corre ahí. Dentro del
+  // contenedor eso es un `cd` porque se ejecuta vía shell.
+  const sub =
+    launch.cwd && launch.cwd !== workspace.dir
+      ? launch.cwd.slice(workspace.dir.length).replace(/^[/\\]/, "")
+      : "";
+
   const child = container
     ? spawnInContainer(
         container.roomId,
-        [command, ...args].join(" "),
+        (sub ? `cd ${JSON.stringify(sub)} && ` : "") + [command, ...args].join(" "),
         portEnv ? { [portEnv]: String(container.internalPort) } : {},
       )
     : spawn(command, args, {
-        cwd: workspace.dir,
+        cwd: launch.cwd ?? workspace.dir,
         env: { ...process.env, ...(portEnv ? { [portEnv]: String(port) } : {}) },
         // stdout/stderr capturados para logs y para detectar arranque; sin shell.
         stdio: ["ignore", "pipe", "pipe"],

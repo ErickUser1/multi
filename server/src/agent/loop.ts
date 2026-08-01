@@ -44,6 +44,11 @@ resultado de otra, encadénalas.
 La sala puede no tener proyecto todavía. Si te piden algo que necesita uno y no existe,
 créalo con bash: es tu trabajo, no preguntes por dónde empezar.
 
+- Créalo EN EL DIRECTORIO ACTUAL, nunca en una subcarpeta. Los generadores hacen
+  subcarpeta por defecto (npm create vite mi-app) y ahí el proyecto queda medio
+  escondido. Casi todos aceptan "." como nombre — por ejemplo
+  "npm create vite@latest . -- --template react-ts". Si el tuyo no lo acepta, créalo
+  aparte y mueve el contenido a la raíz.
 - Si te dicen el stack, usa ese, sea cual sea (Next, Svelte, Django, Go, lo que pidan).
 - Si no te lo dicen, elige uno moderno y sensato en vez de interrogar a alguien que
   quizá no programa. Por defecto React + Vite + TypeScript + Tailwind. Di en una línea

@@ -262,8 +262,12 @@ function providerFor(socketId: string): ModelProvider | null {
   if (!cred) return null;
   try {
     return makeProvider(cred.provider, cred.apiKey, cred.model);
-  } catch {
-    return null; // key vacía o perfil mal formado: se trata como "sin credencial"
+  } catch (err) {
+    // Se trata como "sin credencial", pero SE DICE: un catch mudo aquí dejaba al
+    // agente colgado sin explicación, y desde la sala parecía que Multi se había
+    // quedado pensando.
+    console.error(`[provider] no se pudo construir ${cred.provider}:`, err);
+    return null;
   }
 }
 
@@ -711,7 +715,10 @@ async function runAgentTurn(
     void notifyPreviewWhenReady(room);
   } catch (err) {
     await failTurn(room.workspace.dir, turn.id);
-    systemMsg(room, `${agent.name} falló: ${String(err)}`, "#d95d63");
+    // El error crudo del proveedor no le sirve a nadie en la sala: se traduce a
+    // qué pasó y qué hacer. El detalle técnico va al log del server.
+    console.error(`[sala ${room.id}] turno de ${agent.name} falló:`, err);
+    systemMsg(room, `${agent.name}: ${explicarFalla(err)}`, "#d95d63");
   } finally {
     room.agents.finish(agentId);
     io.to(room.id).emit("agents", { agents: room.agents.list() });
@@ -817,4 +824,38 @@ async function loadEnv(): Promise<void> {
     const m = line.match(/^\s*([A-Z_][A-Z0-9_]*)\s*=\s*(.*)\s*$/i);
     if (m && !(m[1] in process.env)) process.env[m[1]] = m[2].replace(/^["']|["']$/g, "");
   }
+}
+
+/**
+ * Traduce el error de un turno a algo accionable para quien está en la sala.
+ *
+ * Los errores de los proveedores llegan crudos ("ProviderError: OpenRouter:
+ * Internal Server Error", o un JSON de 400 completo). Eso no le dice a nadie si
+ * el problema es su cuenta, su key, o que el servicio se cayó — y sin saberlo no
+ * puede hacer nada.
+ */
+function explicarFalla(err: unknown): string {
+  const texto = String(err);
+
+  if (texto.includes("credit balance") || texto.includes("insufficient")) {
+    return "se acabaron los créditos de tu cuenta. Pon otra key o recarga saldo.";
+  }
+  if (texto.includes("401") || texto.includes("key inválida") || texto.includes("invalid_api_key")) {
+    return "tu API key no es válida. Revísala en el panel de arriba.";
+  }
+  if (texto.includes("rate") || texto.includes("429")) {
+    return "tu cuenta llegó a su límite de uso por ahora. Espera un momento o usa otra key.";
+  }
+  if (texto.includes("Internal Server Error") || texto.includes("no responde") || texto.includes("503")) {
+    return "el proveedor del modelo está fallando (no es cosa tuya). Vuelve a intentar, o cambia de modelo en el panel.";
+  }
+  if (texto.includes("model") && texto.includes("not found")) {
+    return "ese modelo no existe o tu cuenta no tiene acceso. Elige otro en el panel.";
+  }
+  if (texto.includes("AbortError")) {
+    return "el turno se detuvo.";
+  }
+
+  // Sin patrón conocido: se muestra recortado, no el volcado entero.
+  return `algo falló — ${texto.slice(0, 120)}`;
 }

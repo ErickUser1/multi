@@ -26,6 +26,38 @@ mechanism with a different trigger.
 
 ---
 
+## Considered and rejected: a shared task list
+
+Claude Code's agent teams coordinate through a shared task list plus a mailbox:
+the lead creates tasks, teammates claim them, dependencies unblock automatically.
+It's the standard answer to "how does the work fit together at the end."
+
+**Multi doesn't need it, and adding it would cost more than it gives.**
+
+Their lead is an agent that can't see anything, so it needs a board to know the
+state. In Multi the coordinators are people who are *looking at the same screen*.
+The board is the preview.
+
+Three things already cover it:
+
+- Agents get a summary of what the others are doing when their turn starts
+- The shared preview: if two pieces don't fit, everyone sees it within seconds
+- The chat: people coordinate by talking, like two people who work together
+
+A list that repeats what was already said in the chat is upkeep for nobody. And a
+list that starts *directing* work turns the room into an orchestrator with one
+boss — which is exactly the thing Multi isn't.
+
+**What the list wouldn't have fixed either:** an agent saying "done" after breaking
+the build. That's the real gap, and it's covered under agent self-verification
+above — the agent checking its own work is worth more here than a board tracking it.
+
+Worth noting that Claude Code documents this failure mode in their own limitations:
+*"teammates sometimes fail to mark tasks as completed, which blocks dependent
+tasks."* Coordination machinery isn't a guarantee.
+
+---
+
 ## Two ways to start a room
 
 Right now every room starts empty and the agent scaffolds the project from

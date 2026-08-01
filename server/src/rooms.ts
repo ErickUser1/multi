@@ -1,3 +1,7 @@
+import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
+import { readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { createWorkspace, type Workspace } from "./engine/workspace.js";
 import { startPreview, detectLaunch, type Preview } from "./engine/preview.js";
 import {
@@ -196,11 +200,27 @@ export async function maybeStartPreview(room: Room): Promise<string | null> {
   if (!launch) return null; // la sala sigue vacía: normal
 
   room.previewBooting = true;
+  const t0 = Date.now();
+  const marca = (etapa: string) =>
+    console.log(`[sala ${room.id}] ${etapa}: ${((Date.now() - t0) / 1000).toFixed(1)}s`);
   try {
     const runner = await ensureRunner(room);
-    // El agente pudo instalar deps él mismo; esto las completa si faltan.
-    // Corre por el runner: dentro del contenedor si lo hay.
-    await runner.exec("npm install", { timeoutMs: 600_000, maxOutput: 4000 });
+    marca("contenedor");
+
+    // Instalar SOLO si las dependencias declaradas cambiaron. El agente suele
+    // instalar él mismo al scaffoldear, y volver a correr `npm install` sobre un
+    // node_modules completo cuesta ~7s verificando lo que ya está — cada vez que
+    // alguien entra a la sala, con la gente mirando una pantalla vacía.
+    //
+    // Se compara por HASH del contenido, no por fechas: un checkout de git o una
+    // copia del workspace cambian las fechas sin cambiar nada real, y en /mnt/c
+    // las fechas son poco confiables de por sí.
+    const huella = await huellaDeps(room.workspace.dir);
+    if (huella && huella !== (await huellaInstalada(room.workspace.dir))) {
+      await runner.exec("npm install", { timeoutMs: 600_000, maxOutput: 4000 });
+      await guardarHuella(room.workspace.dir, huella);
+      marca("npm install");
+    }
 
     room.preview = room.container?.publishedPort
       ? await startPreview(room.workspace, launch, {
@@ -210,6 +230,7 @@ export async function maybeStartPreview(room: Room): Promise<string | null> {
         })
       : await startPreview(room.workspace, launch);
 
+    marca("dev server");
     console.log(`[sala ${room.id}] preview listo en ${room.preview.url}`);
     return room.preview.url;
   } catch (err) {
@@ -323,4 +344,49 @@ export function removeMember(room: Room, socketId: string): void {
 
 export function membersList(room: Room): Member[] {
   return [...room.members.values()];
+}
+
+/**
+ * Huella de las dependencias declaradas: hash de package.json + package-lock.
+ *
+ * El lock importa tanto como el package: fija las versiones exactas, así que
+ * puede cambiar (otra resolución) con un package.json idéntico.
+ *
+ * Devuelve null si no hay package.json (sala vacía) o si node_modules no existe
+ * — ahí hay que instalar sí o sí, sin importar qué diga la huella guardada.
+ */
+async function huellaDeps(dir: string): Promise<string | null> {
+  const pkg = join(dir, "package.json");
+  if (!existsSync(pkg)) return null;
+  if (!existsSync(join(dir, "node_modules"))) return "sin-node_modules";
+
+  const h = createHash("sha256");
+  h.update(await readFile(pkg, "utf8"));
+  const lock = join(dir, "package-lock.json");
+  if (existsSync(lock)) h.update(await readFile(lock, "utf8"));
+  return h.digest("hex");
+}
+
+/** La huella de la última instalación exitosa. */
+async function huellaInstalada(dir: string): Promise<string | null> {
+  const marca = join(dir, "node_modules", ".multi-deps");
+  if (!existsSync(marca)) return null;
+  try {
+    return (await readFile(marca, "utf8")).trim();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Guarda la huella dentro de node_modules a propósito: si alguien borra
+ * node_modules, la marca se va con él y la próxima vez se instala. La marca no
+ * puede sobrevivir a lo que describe.
+ */
+async function guardarHuella(dir: string, huella: string): Promise<void> {
+  try {
+    await writeFile(join(dir, "node_modules", ".multi-deps"), huella, "utf8");
+  } catch {
+    // Si no se puede escribir, el único costo es instalar de más la próxima vez.
+  }
 }

@@ -81,8 +81,6 @@ que corresponda a su stack: el build, el typecheck, los tests, lo que aplique.
 
 - Si falla, arréglalo antes de cerrar — aunque lo haya roto otro agente mientras
   trabajabas. El proyecto es de la sala y el que está adentro ahora eres tú.
-- Si el error viene de un archivo que otro está escribiendo justo en este momento, no
-  lo pelees: dilo en tu respuesta y deja que él cierre lo suyo.
 - Un turno que cierra con el proyecto roto deja a toda la sala mirando una pantalla en
   blanco sin saber por qué ni desde cuándo. Eso es peor que tardarte un poco más.
 </antes_de_cerrar>

@@ -188,7 +188,15 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
   const socketRef = useRef<Socket | null>(null);
   // Streaming POR AGENTE: varios pueden estar hablando a la vez.
   const [streaming, setStreaming] = useState<Record<string, string>>({});
-  const [toolLines, setToolLines] = useState<Record<string, string>>({});
+  /**
+   * Lo que cada agente ha ido haciendo en su turno. Se guarda la lista completa
+   * aunque por default solo se vea la última: cuando un turno falla a medias,
+   * saber por dónde iba es justo lo que hace falta, y esa información no está en
+   * ningún otro lado.
+   */
+  const [toolLines, setToolLines] = useState<Record<string, string[]>>({});
+  /** Agentes cuyo detalle de tools está expandido (click en la línea). */
+  const [toolsAbiertas, setToolsAbiertas] = useState<Record<string, boolean>>({});
   const [agents, setAgents] = useState<Agent[]>([]);
   const [orphans, setOrphans] = useState<OrphanTurn[]>([]);
   /** Query del menú de menciones (null = cerrado). */
@@ -271,6 +279,11 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
           delete n[m.from];
           return n;
         });
+        setToolsAbiertas((prev) => {
+          const n = { ...prev };
+          delete n[m.from];
+          return n;
+        });
       }
     });
     // Cada delta trae el agentId: se acumula en el mensaje de ESE agente.
@@ -278,7 +291,11 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
       setStreaming((p) => ({ ...p, [agentId]: (p[agentId] ?? "") + text })),
     );
     socket.on("agent:tool", ({ agentId, summary }: { agentId: string; summary: string }) =>
-      setToolLines((p) => ({ ...p, [agentId]: summary })),
+      setToolLines((p) => {
+        const previas = p[agentId] ?? [];
+        // Tope: un turno largo no debe crecer sin fin en memoria.
+        return { ...p, [agentId]: [...previas, summary].slice(-40) };
+      }),
     );
 
     // Cursores de otros.
@@ -463,7 +480,15 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
                       {agent?.name ?? agentId}
                     </span>
                   </div>
-                  {toolLines[agentId] && <div className="tool-line">{toolLines[agentId]}</div>}
+                  {toolLines[agentId]?.length ? (
+                    <ToolTrace
+                      lineas={toolLines[agentId]}
+                      abierto={!!toolsAbiertas[agentId]}
+                      onToggle={() =>
+                        setToolsAbiertas((p) => ({ ...p, [agentId]: !p[agentId] }))
+                      }
+                    />
+                  ) : null}
                   {streaming[agentId] && <div className="burbuja">{streaming[agentId]}</div>}
                 </div>
               </div>
@@ -660,6 +685,39 @@ function ChatRow({ msg, seguido }: { msg: ChatMessage; seguido?: boolean }) {
         {msg.anchoredTo && <div className="anchor-note">sobre: {msg.anchoredTo}</div>}
         <div className={msg.role === "system" ? "system-text" : "burbuja"}>{msg.text}</div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Lo que el agente va haciendo. Por default solo la última línea — la UI se
+ * mantiene limpia y no crece mientras trabaja.
+ *
+ * Se puede expandir con un click porque cuando un turno falla a media chamba,
+ * saber por dónde iba es justo lo que hace falta, y esa información no está en
+ * ningún otro lado: sin esto la línea se sobrescribía y lo anterior se perdía.
+ */
+function ToolTrace(props: { lineas: string[]; abierto: boolean; onToggle: () => void }) {
+  const ultima = props.lineas[props.lineas.length - 1];
+  const previas = props.lineas.length - 1;
+
+  if (!props.abierto) {
+    return (
+      <div className="tool-line tool-line-click" onClick={props.onToggle}>
+        {ultima}
+        {previas > 0 && <span className="tool-mas">+{previas}</span>}
+      </div>
+    );
+  }
+
+  return (
+    <div className="tool-trace" onClick={props.onToggle}>
+      {props.lineas.map((l, i) => (
+        <div className="tool-line" key={i}>
+          {l}
+        </div>
+      ))}
+      <div className="tool-cerrar">contraer</div>
     </div>
   );
 }

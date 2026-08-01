@@ -5,6 +5,55 @@ the way. If you're picking one up, that saves you retracing dead ends.
 
 ---
 
+## Adapt max_tokens to what the key can afford
+
+**What happens:** OpenRouter rejects requests with a 402 — *"This request requires
+more credits, or fewer max_tokens"* — before the model even runs. It checks your
+key's budget against the **maximum possible output**, not what the response would
+actually cost. Asking for 8192 tokens gets a request rejected that would have used
+200.
+
+Free-tier keys and low monthly limits hit this constantly, which makes Multi look
+broken when the fix is one number.
+
+**The fix isn't a fixed lower number:** cutting max_tokens blindly risks truncating
+the agent mid-file, which is worse than failing. What's needed is to catch that
+specific 402, halve the limit, and retry — the provider tells you exactly what the
+problem is, so the client can adapt instead of giving up.
+
+`openai-compat.ts` already retries on 429 and 5xx with backoff; this is the same
+mechanism with a different trigger.
+
+---
+
+## Two ways to start a room
+
+Right now every room starts empty and the agent scaffolds the project from
+scratch. That's what makes any stack possible — you can ask for a Phaser game, a
+Django API, whatever — but it costs a slow first minute and it's where things
+break: a generator that creates a subfolder, a typo in the command, `npm install`
+downloading the world.
+
+Lovable doesn't scaffold at all. Their sandbox ships with the project already
+built and dependencies installed; the agent only edits code. That's why their
+first preview is instant — and also why you can't build a game with it.
+
+**The idea:** offer both at room creation.
+
+    Create room
+      ├── Fast        → base project already installed, you're in within seconds
+      └── From scratch → empty, the agent builds whatever you ask for
+
+The user picks instead of us deciding. "From scratch" is exactly what exists
+today, so nothing is lost; "fast" covers the common case (a web app) without
+locking anyone in — and if you picked fast and later want another stack, the agent
+can still swap it, just slower.
+
+**Where:** the base project would be baked into `docker/room.Dockerfile` with
+`node_modules` already in place, so it costs zero at room creation.
+
+---
+
 ## Agents don't know what the other agents are doing
 
 **Seen in a real session:** someone spawned `agente-1`, which started installing

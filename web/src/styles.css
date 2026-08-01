@@ -1240,3 +1240,36 @@ body::after {
   margin-left: auto;
   flex-shrink: 0;
 }
+
+/* El rastro de tools: una línea por default, expandible con click. */
+.tool-line-click {
+  cursor: pointer;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.tool-line-click:hover {
+  color: var(--texto);
+}
+.tool-mas {
+  font-size: 9px;
+  color: var(--dim);
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  padding: 1px 6px;
+  flex-shrink: 0;
+}
+.tool-trace {
+  cursor: pointer;
+  border-left: 1px solid var(--linea);
+  padding-left: 8px;
+  margin: 2px 0;
+}
+.tool-cerrar {
+  font-size: 9px;
+  color: var(--dim);
+  margin-top: 3px;
+}
+.tool-cerrar:hover {
+  color: var(--texto);
+}

@@ -192,10 +192,20 @@ export function handlePreviewRequest(req: IncomingMessage, res: ServerResponse):
  * crudo al dev server. Devuelve true si lo manejó.
  */
 export function handlePreviewUpgrade(req: IncomingMessage, socket: Duplex, head: Buffer): boolean {
-  const parsed = parsePreviewUrl(req.url ?? "", {
-    referer: req.headers.referer,
-    cookie: req.headers.cookie,
-  });
+  // El HMR de Vite abre su WebSocket contra la RAÍZ ("/"), no bajo /preview/ ni
+  // bajo ninguno de los prefijos de asset. Como parsePreviewUrl exige uno de
+  // esos, devolvía null, el proxy decía "no es mío" y nadie atendía el upgrade:
+  // socket hang up. Ese era el bug — los archivos se servían bien (por eso al
+  // refrescar sí se veían los cambios) pero el canal de avisos nunca existía.
+  //
+  // Aquí la cookie basta para saber de qué sala es: un upgrade que la trae y no
+  // es de socket.io solo puede ser el HMR del preview de esa sala.
+  const parsed =
+    parsePreviewUrl(req.url ?? "", {
+      referer: req.headers.referer,
+      cookie: req.headers.cookie,
+    }) ?? upgradeDelPreview(req);
+
   if (!parsed) return false;
 
   const port = roomPreviewPort(parsed.roomId);
@@ -226,9 +236,17 @@ export function handlePreviewUpgrade(req: IncomingMessage, socket: Duplex, head:
   });
 
   upstream.on("error", () => socket.destroy());
-  // NOTA: escribir el head (bytes que llegaron con el handshake) antes de que el
-  // upgrade del upstream haya ocurrido puede adelantarse al socket. Si el HMR
-  // reconecta raro bajo carga, revisar aquí primero (mover el write al "upgrade").
+  // Si el cliente se va, no dejar la conexión al dev server colgada.
+  socket.on("error", () => upstream.destroy());
+  socket.on("close", () => upstream.destroy());
+
+  // Los bytes que llegaron pegados al handshake se reenvían tal cual; el resto
+  // fluye por los pipes que se tienden en el evento "upgrade".
+  //
+  // El end() SÍ hace falta: cierra el lado de escritura para que Node mande la
+  // petición de upgrade. Sin él la petición nunca sale y el cliente se queda
+  // esperando (medido: "sin respuesta en 8s"). El túnel bidireccional se tiende
+  // después, sobre el socket crudo, no sobre este request.
   if (head && head.length) upstream.write(head);
   upstream.end();
   return true;
@@ -256,4 +274,22 @@ function transformHtml(html: string, _basePath: string): string {
 // Placeholder para el registro desde index (si se quisiera como plugin Fastify).
 export function createPreviewProxy() {
   return { handlePreviewRequest, handlePreviewUpgrade };
+}
+
+/**
+ * ¿Este upgrade es el HMR de un preview?
+ *
+ * Vite abre su WebSocket contra la raíz, así que no se puede distinguir por la
+ * ruta. Se distingue por dos cosas: que traiga la cookie de sala (la puso el
+ * proxy al servir la página del preview) y que NO sea el socket.io de la Sala,
+ * que vive bajo /socket.io/.
+ */
+function upgradeDelPreview(req: IncomingMessage): { roomId: string; rest: string } | null {
+  const url = req.url ?? "/";
+  if (url.startsWith("/socket.io")) return null;
+
+  const roomId = roomFromCookie(req.headers.cookie);
+  if (!roomId) return null;
+
+  return { roomId, rest: url };
 }

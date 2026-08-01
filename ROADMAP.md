@@ -5,6 +5,27 @@ the way. If you're picking one up, that saves you retracing dead ends.
 
 ---
 
+## Adapt max_tokens to what the key can afford
+
+**What happens:** OpenRouter rejects requests with a 402 — *"This request requires
+more credits, or fewer max_tokens"* — before the model even runs. It checks your
+key's budget against the **maximum possible output**, not what the response would
+actually cost. Asking for 8192 tokens gets a request rejected that would have used
+200.
+
+Free-tier keys and low monthly limits hit this constantly, which makes Multi look
+broken when the fix is one number.
+
+**The fix isn't a fixed lower number:** cutting max_tokens blindly risks truncating
+the agent mid-file, which is worse than failing. What's needed is to catch that
+specific 402, halve the limit, and retry — the provider tells you exactly what the
+problem is, so the client can adapt instead of giving up.
+
+`openai-compat.ts` already retries on 429 and 5xx with backoff; this is the same
+mechanism with a different trigger.
+
+---
+
 ## Two ways to start a room
 
 Right now every room starts empty and the agent scaffolds the project from

@@ -48,10 +48,11 @@ resultado de otra, encadénalas.
 La sala puede no tener proyecto todavía. Si te piden algo que necesita uno y no existe,
 créalo con bash: es tu trabajo, no preguntes por dónde empezar.
 
-- El proyecto va EN LA RAÍZ del directorio de trabajo, no en una subcarpeta. Los
-  generadores piden un nombre y con eso crean una carpeta; casi todos aceptan un punto
-  para decir "aquí mismo". Si el que uses no lo acepta, genera aparte y mueve el
-  contenido a la raíz. Comprueba que el package.json quedó en la raíz antes de seguir.
+- El proyecto va EN LA RAÍZ del directorio de trabajo, no en una subcarpeta.
+  Los generadores tipo "create" piden un nombre y crean una carpeta con él, así que
+  prefiere armar el proyecto tú: inicializa el manifiesto, instala las dependencias y
+  escribe los archivos de config. Es más pasos pero queda donde debe y sin sorpresas.
+  Comprueba que el manifiesto quedó en la raíz antes de seguir.
 - Si te dicen el stack, usa ese, sea cual sea (Next, Svelte, Django, Go, lo que pidan).
 - Si no te lo dicen, elige uno moderno y sensato en vez de interrogar a alguien que
   quizá no programa. Por defecto React + Vite + TypeScript + Tailwind. Di en una línea

@@ -363,7 +363,14 @@ io.on("connection", (socket) => {
       // el mensaje nuevo arranca un turno fresco sobre ese estado.
       if (target.state !== "idle") {
         room.coordinator.interrupt(`${room.id}:${target.id}`);
-        systemMsg(room, `${member.name} interrumpió a ${target.name}`, member.color);
+        // Se dice que va a RETOMAR, no solo que se detuvo: sin eso el chat mostraba
+        // "X interrumpió a agente-1" y después, sin aviso, un comando distinto —
+        // parecía que el agente se había quedado callado y arrancado por su cuenta.
+        systemMsg(
+          room,
+          `${member.name} redirigió a ${target.name} — retomando con lo nuevo`,
+          member.color,
+        );
       }
 
       void dispatchAgent(room, target.id, withAnchor(intent.task), provider);

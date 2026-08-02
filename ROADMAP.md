@@ -86,30 +86,36 @@ can still swap it, just slower.
 
 ---
 
-## Agents don't know what the other agents are doing
+## Done: agents see what the other agents are doing
 
-**Seen in a real session:** someone spawned `agente-1`, which started installing
-dependencies. Seconds later someone else spawned `agente-2`, which looked at the
-workspace, saw it empty (the first one hadn't finished writing yet), and started
-installing dependencies too. Two agents doing the same work from second zero.
+**The bug, seen in a real session:** someone spawned `agente-1`, which started
+installing dependencies. Seconds later someone else spawned `agente-2`, which
+looked at the workspace, saw it empty (the first one hadn't finished writing yet),
+and started installing dependencies too. Two agents doing the same work from
+second zero.
 
-This is the exact problem Multi was built to solve — divergence from not seeing
-what the other one is doing — except between agents. It got solved for humans
-(they see the chat, the preview, the cursors) and overlooked for agents.
+This was the exact problem Multi was built to solve — divergence from not seeing
+what the other one is doing — except between agents. Solved for humans (they see
+the chat, the preview, the cursors) and overlooked for agents.
 
-**Shape of the fix:** not the full context of the other agent's conversation —
-that's expensive and mostly noise. A summary: who else is working, on what, and
-which files they've touched. Enough for the second agent to notice that someone
-is already setting the project up.
+**What shipped** (`resumenDeOtros` in `engine/agents.ts`): when a turn starts, the
+agent gets a summary of who else is working, on what, which files they're writing
+*right now* versus already released, and the last thing each one said in the chat.
+Not the other agent's full conversation — that's expensive and mostly noise.
 
-The data already exists: `AgentRegistry` tracks state and current task, and
-`file-mutation.ts` keeps an ephemeral record of who wrote what. What's missing is
-handing that to the model as part of its turn.
+Including what they *said* turned out to matter more than expected: the file list
+says which file the other one touches, but not the decisions behind it ("the data
+goes in `src/data/personajes.ts`, typed like this"). That only lives in what they
+told the room, and it saves the next agent from rediscovering it or reinventing it
+differently.
 
-**Watch out for:** the summary has to be cheap to build and short enough not to eat
-the context window. And it's a snapshot, not a subscription — by the time the model
-reads it, it may already be stale. It should read as "this was the state when your
-turn started," not as truth.
+Verified with two real agents in parallel: `agente-2` said out loud *"I'll do Level
+I in a new file so I don't step on what agente-1 is touching."* Covered by
+`demo:agentes-se-ven` (12/12).
+
+**Known limit:** it's a snapshot, not a subscription. It reads as "this was the
+state when your turn started," not as truth — by the time the model acts on it, it
+may be stale.
 
 ---
 
@@ -273,18 +279,42 @@ Multi runs locally today. To actually host it, still missing:
 
 ---
 
-## Agent self-verification
+## Done: agent self-verification
 
-The agent writes and says "done." It doesn't always check that it didn't break the
-preview.
+The agent used to write and say "done" without checking it hadn't broken the
+preview. That matters more here than with a single-user agent: several people see
+the blank screen at the same time, without knowing why or since when.
 
-This matters more here than with a single-user agent: if it breaks the preview,
-several people see a blank screen at the same time. The `bash` tool can already
-run the build or the linter — what's missing is the prompt asking for it before
-closing the turn, and the agent reading the dev server's logs.
+**What shipped:** the `<antes_de_cerrar>` section of the system prompt
+(`agent/loop.ts`). It asks for a check with whatever command fits the stack — build,
+typecheck, tests — never a hardcoded `npm run build`, because a Go or Python
+project doesn't have one. The loop already iterates up to 50 turns, so the agent
+writes, verifies, fixes and re-verifies *inside the same turn*; nothing had to be
+re-triggered.
 
-In practice current models already do this fairly often on their own ("compiles
-without errors"), so the work is making it reliable, not inventing it.
+Two things learned tuning it:
+
+- **It also fixes what someone else broke.** An earlier version let the agent defer
+  ("that file belongs to another agent"), which left errors unfixed in silence when
+  the other agent had already finished its turn. Removing that permission — less
+  rule, more judgment — worked better.
+- **It must not start its own dev server.** It was launching them to check, leaving
+  orphans competing for the container's memory (four stray logs found in `/tmp` in
+  one session). The prompt now says Multi already has one running and to read its
+  log instead.
+
+**The honest limit, which is why this doesn't close the parallelism problem:** it
+detects fast, it doesn't prevent. Two coupled pieces handed out at the same time
+will still collide — agent A changes a signature after agent B already shipped code
+against the old one, and B is gone. What changes is that whoever closes *last* sees
+the final state and fixes it, so it surfaces in seconds instead of at the end.
+
+**Not done: serializing the checks.** If two agents build at once, both could see
+the same breakage and both try to fix it. The fix would be a `KeyedMutex` keyed on
+the workspace, same pattern already used for git's index and container startup —
+the second one queues, and when its turn comes it sees the state *with* the first
+one's work already written. Left out until it's actually observed: right now it's a
+guess about a race, and the check takes seconds while turns take minutes.
 
 ---
 

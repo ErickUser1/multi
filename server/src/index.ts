@@ -24,7 +24,8 @@ import {
 import { getStorage } from "./storage/index.js";
 import { setCredential, getCredential, clearCredential } from "./keys.js";
 import { makeProvider, esProviderId, PERFILES } from "./agent/providers/profiles.js";
-import { MAX_AGENTS_PER_ROOM } from "./engine/agents.js";
+import { MAX_AGENTS_PER_ROOM, resumenDeOtros } from "./engine/agents.js";
+import { fileMutation } from "./engine/file-mutation.js";
 import { startTurn, commitTurn, failTurn } from "./engine/turns.js";
 import { commitAll, discardChanges, diffCommit, revertTo, revertFile } from "./engine/git.js";
 import { getHistory, setBookmark } from "./engine/history.js";
@@ -664,7 +665,9 @@ async function runAgentTurn(
       // no hay Docker). El agente no distingue: es la misma tool.
       runner: await ensureRunner(room),
       messages: history,
-      userMessage: task,
+      // Qué están haciendo los demás, para que no repita su trabajo. Se calcula
+      // AL EMPEZAR el turno: es una foto del momento, no una suscripción.
+      userMessage: conContextoDeOtros(room, agentId, task),
       signal,
       agentId,
       callbacks: {
@@ -730,6 +733,46 @@ async function runAgentTurn(
     room.agents.finish(agentId);
     io.to(room.id).emit("agents", { agents: room.agents.list() });
   }
+}
+
+/**
+ * Antepone al mensaje un resumen de qué hacen los otros agentes.
+ *
+ * Va en el mensaje del turno y no en el prompt del sistema porque cambia con
+ * cada turno: el prompt del sistema se cachea del lado del proveedor y meterle
+ * algo variable tiraría ese caché en cada llamada.
+ */
+function conContextoDeOtros(room: Room, agentId: string, task: string): string {
+  const archivos = fileMutation.trabajoRecienteDeOtros(agentId);
+  const resumen = resumenDeOtros(room.agents, agentId, archivos, ultimosMensajes(room));
+  return resumen ? `${resumen}\n\n${task}` : task;
+}
+
+/**
+ * Lo último que dijo cada agente, sacado de su propio historial.
+ *
+ * No se guarda aparte: es el mismo texto que la sala vio en el chat, y ya vive
+ * en `room.histories`. Contarlo otra vez sería duplicar estado.
+ */
+function ultimosMensajes(room: Room): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const [agentId, mensajes] of room.histories) {
+    // El último mensaje del assistant con texto: lo que reportó al terminar.
+    for (let i = mensajes.length - 1; i >= 0; i--) {
+      const m = mensajes[i];
+      if (m.role !== "assistant") continue;
+      const texto = m.content
+        .filter((c): c is Extract<typeof c, { type: "text" }> => c.type === "text")
+        .map((c) => c.text)
+        .join(" ")
+        .trim();
+      if (texto) {
+        out.set(agentId, texto);
+        break;
+      }
+    }
+  }
+  return out;
 }
 
 /** Formatea el elemento anclado como texto legible para el prompt del agente. */
@@ -858,6 +901,9 @@ function explicarFalla(err: unknown): string {
   }
   if (texto.includes("model") && texto.includes("not found")) {
     return "ese modelo no existe o tu cuenta no tiene acceso. Elige otro en el panel.";
+  }
+  if (texto.includes("se cortó a media escritura")) {
+    return "la respuesta del modelo se cortó a la mitad. Suele ser falta de créditos o una caída de conexión — vuelve a intentar.";
   }
   if (texto.includes("AbortError")) {
     return "el turno se detuvo.";

@@ -102,6 +102,40 @@ export class FileMutation {
     return readFile(key, "utf8");
   }
 
+  /**
+   * Archivos que otros agentes tocaron hace poco, para contárselo al que empieza
+   * un turno.
+   *
+   * Sin esto dos agentes lanzados casi a la vez ven la misma sala vacía y los dos
+   * se ponen a montar el proyecto — pasó en una sesión real. El problema del que
+   * nació Multi (divergir por no ver lo que hace el otro) aplicado a los agentes.
+   *
+   * Solo lo reciente: lo de hace media hora ya está en el proyecto y se ve
+   * leyendo los archivos.
+   */
+  trabajoRecienteDeOtros(
+    exceptoAgente: string,
+    dentroDeMs = 120_000,
+  ): Array<{ agentId: string; path: string; hace: number; escribiendoAhora: boolean }> {
+    const ahora = Date.now();
+    const out: Array<{ agentId: string; path: string; hace: number; escribiendoAhora: boolean }> = [];
+    for (const [path, w] of this.lastWriter) {
+      if (w.agentId === exceptoAgente) continue;
+      const hace = ahora - w.at;
+      if (hace > dentroDeMs) continue;
+      // Con el lock tomado no es "lo tocó": lo está escribiendo AHORA. Distinguirlo
+      // importa — a un archivo en vuelo hay que dejarlo, uno que ya se soltó solo
+      // hay que releerlo.
+      out.push({
+        agentId: w.agentId,
+        path,
+        hace,
+        escribiendoAhora: !!this.mutex.info(path).holder,
+      });
+    }
+    return out.sort((a, b) => a.hace - b.hace);
+  }
+
   /** Quién tiene tomado el lock de una ruta (para la UI: "esperando a X"). */
   lockInfo(path: string) {
     return this.mutex.info(resolve(path));

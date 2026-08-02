@@ -281,7 +281,17 @@ class MessageAccumulator {
           try {
             input = JSON.parse(raw);
           } catch {
-            throw new ProviderError(`input de tool_use "${b.name}" no es JSON válido: ${raw.slice(0, 120)}`, "parse");
+            // Casi siempre es un stream que se cortó a media generación: el JSON
+            // llega truncado, sin cerrar. Pasó de verdad cuando se acabaron los
+            // créditos mientras el modelo escribía los argumentos. El mensaje lo
+            // dice, porque "JSON inválido" a secas no le sirve a nadie en la sala.
+            const truncado = !raw.endsWith("}");
+            throw new ProviderError(
+              truncado
+                ? `la respuesta del modelo se cortó a media escritura (tool "${b.name}"). Suele pasar si se acaban los créditos o se pierde la conexión.`
+                : `input de tool_use "${b.name}" no es JSON válido: ${raw.slice(0, 120)}`,
+              "parse",
+            );
           }
         }
         content.push({ type: "tool_use", id: b.id, name: b.name, input });

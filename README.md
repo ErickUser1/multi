@@ -1,10 +1,10 @@
 # Multi
 
-A live room where you, your friends and several agents build the same app. Open source.
+A live room where you, your teammates and several agents build the same app. Open source.
 
-![A room in Multi: the chat on the left, the app running live on the right](docs/sala.webp)
+![A room in Multi: four people connected, the chat on the left, the app running live on the right with everyone's cursors on it](docs/sala.webp)
 
-Someone asks in plain language, the agent answers in terms of what changed, and the app on the right updates without a refresh. Everyone in the room sees it at the same time.
+Four people in that room. Someone asks in plain language, the agent answers in terms of what changed, and the app on the right updates without a refresh. Everyone sees it at the same time, cursors included.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Node 22+](https://img.shields.io/badge/node-22%2B-green.svg)

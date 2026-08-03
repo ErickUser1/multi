@@ -10,106 +10,112 @@ What's missing and why is in [ROADMAP.md](ROADMAP.md).
 ## The full walkthrough
 
 ```
-┌──────────────────────────────────────────────────────────────────────────────────┐
-│ E2E: FROM AN EMPTY ROOM TO A FINISHED PROJECT │
-└──────────────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│              E2E: FROM AN EMPTY ROOM TO A FINISHED PROJECT               │
+└──────────────────────────────────────────────────────────────────────────┘
 
 ① JOIN
-You create the room → POST /rooms → folder + git init + .gitignore
-(EMPTY: zero template)
-You share the link → your teammate joins with their name
-their key stays local (localStorage)
-│
-Both see: chat, cursors, "the room is empty"
+   You create the room  → POST /rooms → folder + git init + .gitignore
+                                        (EMPTY: zero template)
+   You share the link   → your teammate joins with their name
+                          their key stays local (localStorage)
+                                        │
+                   Both see: chat, cursors, "the room is empty"
 
 ② ASK FOR THE PROJECT
-"@agente build me a notes app"
-│
-├── chat or order? ── no @ → nobody wakes up
-│ (without this you can't talk to your teammate without invoking the agent)
-│
-├── do you have a key? ── no → error:key ONLY to you, the room doesn't know
-│
-└── spawn an agent → shows up in the list with its color
+   "@agente build me a notes app"
+        │
+        ├── chat or order? ───── no @ → nobody wakes up
+        │   (without this you can't talk to your teammate
+        │    without invoking the agent)
+        │
+        ├── do you have a key? ─ no → error:key ONLY to you,
+        │                             the room doesn't know
+        │
+        └── spawn an agent ────→ shows up in the list with its color
 
 ③ THE FIRST TIME AN AGENT WORKS
-ensureRunner → docker run → the room's container
-workspace mounted at /work
-2gb, 2 cpus, no privileges
+   ensureRunner → docker run → the room's container
+                               workspace mounted at /work
+                               2gb, 2 cpus, no privileges
 
 ④ THE LOOP (while + switch, no framework)
-┌────────────────────────────────────────────────────────────┐
-│ provider.stream(system, messages, tools) │
-│ │ │
-│ ├─ text_delta ──→ agent:delta ──→ streaming to │
-│ │ EVERYONE'S chat │
-│ │ │
-│ └─ stop_reason? │
-│ ├─ end_turn ──────────────→ EXITS the loop │
-│ └─ tool_use ──┐ │
-│ ▼ │
-│ Promise.all(ALL the tools at once) │
-│ read/grep/glob → straight to disk │
-│ write/edit → CAS + mutex (⑤) │
-│ bash → docker exec (isolated) │
-│ │ │
-│ tool_result ──→ back to the top │
-└────────────────────────────────────────────────────────────┘
-(max 50 turns)
+   ┌──────────────────────────────────────────────────────────────────┐
+   │ provider.stream(system, messages, tools)                         │
+   │      │                                                           │
+   │      ├─ text_delta ──→ agent:delta ──→ streaming to              │
+   │      │                                 EVERYONE'S chat           │
+   │      │                                                           │
+   │      └─ stop_reason?                                             │
+   │           ├─ end_turn ──────────────→ EXITS the loop             │
+   │           └─ tool_use ──┐                                        │
+   │                         ▼                                        │
+   │            Promise.all(ALL the tools at once)                    │
+   │              read/grep/glob → straight to disk                   │
+   │              write/edit     → CAS + mutex (⑤)                    │
+   │              bash           → docker exec (isolated)             │
+   │                         │                                        │
+   │            tool_result ─┴──→ back to the top                     │
+   └──────────────────────────────────────────────────────────────────┘
+                            (max 50 turns)
 
 ⑤ WHEN TWO AGENTS COLLIDE
-Agent-1 → Menu.jsx ─┐ different keys
-Agent-2 → App.jsx ─┘ → both at once, no waiting
+   Agent-1 → Menu.jsx ─┐  different keys
+   Agent-2 → App.jsx  ─┘  → both at once, no waiting
 
-Agent-1 → Menu.jsx ─┐ same key
-Agent-2 → Menu.jsx ─┘ → the 2nd one queues
-│
-KeyedMutex: each write goes through whole, no interleaving
-│
-CAS: is what you read still there?
-├─ yes → write (temp + rename, atomic)
-└─ no → StaleContentError TO THE MODEL:
-"it changed, read it again"
-→ the agent reapplies on top
-→ BOTH changes survive
+   Agent-1 → Menu.jsx ─┐  same key
+   Agent-2 → Menu.jsx ─┘  → the 2nd one queues
+                             │
+        KeyedMutex: each write goes through whole, no interleaving
+                             │
+        CAS: is what you read still there?
+             ├─ yes → write (temp + rename, atomic)
+             └─ no  → StaleContentError TO THE MODEL:
+                      "it changed, read it again"
+                      → the agent reapplies on top
+                      → BOTH changes survive
 
-While waiting: "Agent-2 waiting on Agent-1 (Menu.jsx)"
-That wait does NOT count toward the timeout: it's a queue, not stuck work.
+   While waiting: "Agent-2 waiting on Agent-1 (Menu.jsx)"
+   That wait does NOT count toward the timeout: it's a queue,
+   not stuck work.
 
 ⑥ TWO CHANNELS, TWO SPEEDS
-┌─ REAL TIME ───────────────────┐ ┌─ SAVED ──────────────────────┐
-│ every write → file:changed │ │ when the turn CLOSES: │
-│ → HMR → the preview moves │ │ ONE commit (5 files = 1) │
-│ does NOT wait on commits │ │ → history:new → history │
-└────────────────────────────────┘ └───────────────────────────────┘
-"now" "memory"
+   ┌─ REAL TIME ─────────────────┐   ┌─ SAVED ─────────────────────┐
+   │ every write → file:changed  │   │ when the turn CLOSES:       │
+   │ → HMR → the preview moves   │   │ ONE commit (5 files = 1)    │
+   │ does NOT wait on commits    │   │ → history:new → history     │
+   └─────────────────────────────┘   └─────────────────────────────┘
+              "now"                            "memory"
 
 ⑦ THE PREVIEW APPEARS ON ITS OWN
-when the turn closes → detectLaunch: is there already a package.json with "dev"?
-├─ no → keeps waiting (normal)
-└─ yes → npm install (inside) → dev server (inside)
-```
-→ Docker publishes the port → the proxy injects the inspector
-→ preview:ready → EVERYONE sees it appear
+   when the turn closes → detectLaunch: is there already a
+                          package.json with "dev"?
+        ├─ no  → keeps waiting (normal)
+        └─ yes → npm install (inside) → dev server (inside)
+                 → Docker publishes the port
+                 → the proxy injects the inspector
+                 → preview:ready → EVERYONE sees it appear
 
 ⑧ ITERATE: the product's real loop
-Someone clicks a button in the preview
-→ the (injected) inspector sends selector + tag via postMessage
-→ everyone sees "beto selected <button>"
-"make this button red" (anchored)
-→ the agent gets the selector in its prompt
-→ finds the code, changes it
-→ ⑥ again: both see it turn red
+   Someone clicks a button in the preview
+        → the (injected) inspector sends selector + tag via postMessage
+        → everyone sees "beto selected <button>"
+   "make this button red" (anchored)
+        → the agent gets the selector in its prompt
+        → finds the code, changes it
+        → ⑥ again: both see it turn red
 
 ⑨ IF SOMETHING GOES WRONG
-History → drag to a previous point → "Go back here"
-→ revert as a NEW commit (never erases history)
-→ everyone returns to that state
+   History → drag to a previous point → "Go back here"
+           → revert as a NEW commit (never erases history)
+           → everyone returns to that state
 
 ⑩ SHUTTING DOWN
-Ctrl+C → previews killed, containers removed
-Coming back: the room persists (SQLite), the chat persists, the project persists (git)
-the preview restarts on its own
+   Ctrl+C → previews killed, containers removed
+   Coming back: the room persists (SQLite), the chat persists,
+                the project persists (git)
+                the preview restarts on its own
+```
 
 
 ---
@@ -148,21 +154,24 @@ wanted it to: it needs the workspace filesystem, git, and `docker exec`.
 The API key doesn't travel with every message. It's sent **once, when the socket
 connects**, and the server keeps it in memory tied to that `socketId`:
 
-browser server
 ```
-─────── ──────
-on connect:
-emit("auth:key", {key}) ──────► keys.ts: Map<socketId, key>
+   browser                        server
+   ───────                        ──────
+   on connect:
+   emit("auth:key", {key}) ─────► keys.ts: Map<socketId, key>
 
-every turn:
-emit("chat", {text}) ──────► providerFor(socket.id)
-↓ looks up the key by socketId
-new AnthropicProvider(key)
-↓
-runAgent({ provider, ... }) ← the loop, here
-↓
+   every turn:
+   emit("chat", {text}) ────────► providerFor(socket.id)
+                                    │ looks up the key by socketId
+                                    ▼
+                                  new AnthropicProvider(key)
+                                    │
+                                    ▼
+                                  runAgent({ provider, ... })
+                                    │  ← the loop, here
+                                    ▼
+                                  fetch → api.anthropic.com
 ```
-fetch → api.anthropic.com
 
 
 **The consequence worth saying out loud:** whoever hosts Multi has, in their

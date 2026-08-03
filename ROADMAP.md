@@ -5,24 +5,42 @@ the way. If you're picking one up, that saves you retracing dead ends.
 
 ---
 
-## Adapt max_tokens to what the key can afford
+## Done: max_tokens adapts to what the key can afford
 
-**What happens:** OpenRouter rejects requests with a 402 — *"This request requires
-more credits, or fewer max_tokens"* — before the model even runs. It checks your
-key's budget against the **maximum possible output**, not what the response would
-actually cost. Asking for 8192 tokens gets a request rejected that would have used
-200.
+**The bug:** OpenRouter rejects requests with a 402 (*"This request requires more
+credits, or fewer max_tokens"*) **before the model even runs**. It checks your
+key's budget against the *maximum possible output*, not what the response would
+actually cost. Asking for 8192 tokens got a request rejected that would have used
+200. Free-tier keys and low balances hit this constantly, which made Multi look
+broken when the fix was one number.
 
-Free-tier keys and low monthly limits hit this constantly, which makes Multi look
-broken when the fix is one number.
+**What shipped** (`providers/openai-compat.ts`): a 402 is now two different
+things, and they're told apart by the provider's own message.
 
-**The fix isn't a fixed lower number:** cutting max_tokens blindly risks truncating
-the agent mid-file, which is worse than failing. What's needed is to catch that
-specific 402, halve the limit, and retry — the provider tells you exactly what the
-problem is, so the client can adapt instead of giving up.
+- *"can only afford N"* means there **is** money, the ceiling was just too high.
+  The client retries immediately with 90% of N. No backoff: waiting doesn't grow
+  a balance.
+- No such number means the account is actually empty. Fails right there, with one
+  attempt, saying so.
 
-`openai-compat.ts` already retries on 429 and 5xx with backoff; this is the same
-mechanism with a different trigger.
+Two details worth keeping if you touch this:
+
+**There's a floor** (512). Below roughly that, the model gets cut mid tool call
+and returns truncated JSON, which reads as an agent bug when it's really a money
+problem. If the affordable ceiling is under the floor, it fails loudly instead.
+
+**The user-facing message comes before the generic credits one** in
+`explicarFalla`. Both mention balance, and in the wrong order someone with money
+gets told to go top up.
+
+Covered by `demo:presupuesto` (16/16), with a fake server that charges upfront
+like OpenRouter does. No network, no API key.
+
+**Note:** OpenCode doesn't solve this. Its `maxOutputTokens` is a static min of
+the model's limit and a fixed cap (`provider/transform.ts`), computed from model
+capability and never from account balance. Nothing there handles a 402. Charging
+against the maximum possible output is an OpenRouter billing quirk, so there was
+nothing to copy.
 
 ---
 
@@ -46,11 +64,11 @@ Three things already cover it:
 
 A list that repeats what was already said in the chat is upkeep for nobody. And a
 list that starts *directing* work turns the room into an orchestrator with one
-boss — which is exactly the thing Multi isn't.
+boss, which is exactly the thing Multi isn't.
 
 **What the list wouldn't have fixed either:** an agent saying "done" after breaking
 the build. That's the real gap, and it's covered under agent self-verification
-above — the agent checking its own work is worth more here than a board tracking it.
+above. The agent checking its own work is worth more here than a board tracking it.
 
 Worth noting that Claude Code documents this failure mode in their own limitations:
 *"teammates sometimes fail to mark tasks as completed, which blocks dependent
@@ -61,14 +79,14 @@ tasks."* Coordination machinery isn't a guarantee.
 ## Two ways to start a room
 
 Right now every room starts empty and the agent scaffolds the project from
-scratch. That's what makes any stack possible — you can ask for a Phaser game, a
-Django API, whatever — but it costs a slow first minute and it's where things
+scratch. That's what makes any stack possible: you can ask for a Phaser game, a
+Django API, whatever. But it costs a slow first minute and it's where things
 break: a generator that creates a subfolder, a typo in the command, `npm install`
 downloading the world.
 
 Lovable doesn't scaffold at all. Their sandbox ships with the project already
 built and dependencies installed; the agent only edits code. That's why their
-first preview is instant — and also why you can't build a game with it.
+first preview is instant, and also why you can't build a game with it.
 
 **The idea:** offer both at room creation.
 
@@ -78,7 +96,7 @@ first preview is instant — and also why you can't build a game with it.
 
 The user picks instead of us deciding. "From scratch" is exactly what exists
 today, so nothing is lost; "fast" covers the common case (a web app) without
-locking anyone in — and if you picked fast and later want another stack, the agent
+locking anyone in. And if you picked fast and later want another stack, the agent
 can still swap it, just slower.
 
 **Where:** the base project would be baked into `docker/room.Dockerfile` with
@@ -94,14 +112,14 @@ looked at the workspace, saw it empty (the first one hadn't finished writing yet
 and started installing dependencies too. Two agents doing the same work from
 second zero.
 
-This was the exact problem Multi was built to solve — divergence from not seeing
-what the other one is doing — except between agents. Solved for humans (they see
+This was the exact problem Multi was built to solve, divergence from not seeing
+what the other one is doing, except between agents. Solved for humans (they see
 the chat, the preview, the cursors) and overlooked for agents.
 
 **What shipped** (`resumenDeOtros` in `engine/agents.ts`): when a turn starts, the
 agent gets a summary of who else is working, on what, which files they're writing
 *right now* versus already released, and the last thing each one said in the chat.
-Not the other agent's full conversation — that's expensive and mostly noise.
+Not the other agent's full conversation: that's expensive and mostly noise.
 
 Including what they *said* turned out to matter more than expected: the file list
 says which file the other one touches, but not the decisions behind it ("the data
@@ -114,7 +132,7 @@ I in a new file so I don't step on what agente-1 is touching."* Covered by
 `demo:agentes-se-ven` (12/12).
 
 **Known limit:** it's a snapshot, not a subscription. It reads as "this was the
-state when your turn started," not as truth — by the time the model acts on it, it
+state when your turn started," not as truth. By the time the model acts on it, it
 may be stale.
 
 ---
@@ -129,7 +147,7 @@ Lovable's first preview is nearly instant. There's no public detail on how, but
 given their architecture (ephemeral container per project), the likely answer is
 their image ships with `node_modules` already baked in.
 
-**How to get that without giving up being stack-agnostic:** don't seed a project —
+**How to get that without giving up being stack-agnostic:** don't seed a project,
 warm the npm cache in the room image with the packages that get asked for most
 (react, vite, tailwind, typescript). If the agent asks for Svelte or Django it
 downloads them like today; the common case is just already there.
@@ -151,7 +169,7 @@ with a status light: dotted (front calls it, doesn't exist), green (exists and i
 used), gray (exists, nobody calls it). Updates live. See `engine/api-map.ts` and
 `web/BackCanvas.tsx`.
 
-**What's missing:** what the app *stores* — the tables. An endpoint is programmer
+**What's missing:** what the app *stores*: the tables. An endpoint is programmer
 language; `GET /api/pedidos` tells someone who doesn't code nothing. What a
 teammate needs to know to avoid colliding with you is *what this saves*.
 
@@ -176,11 +194,11 @@ born from.
 **Where the reasoning landed:** every path above reads *representations* of the
 schema, and a representation can lie. The only source that can't lie about itself
 is the live database. And there's no need to write a client per engine: the agent
-already has the credentials from `.env` and a terminal — it can just ask the
+already has the credentials from `.env` and a terminal. It can just ask the
 database and report back what it finds.
 
 **Watch out for, if you pick this up:** asking the database costs a connection, so
-refresh when a turn that touched data closes, or on demand — not on every
+refresh when a turn that touched data closes, or on demand, not on every
 `file:changed`. If there are no credentials or the database is down, say so ("couldn't
 connect"), never show empty in a way that reads as "no tables." Structure yes, data
 no by default: in a shared room, rows can be sensitive.
@@ -214,7 +232,7 @@ it."*
 ## The agent's cursor over the preview
 
 Right now humans have a live cursor over the stage and the agent doesn't. The
-reason isn't cosmetic: a human has a cursor because they move a mouse — there are
+reason isn't cosmetic: a human has a cursor because they move a mouse: there are
 coordinates to transmit. The agent has no mouse.
 
 To draw its position you'd need to know that *"it's editing `Pedidos.tsx`"*
@@ -286,8 +304,8 @@ preview. That matters more here than with a single-user agent: several people se
 the blank screen at the same time, without knowing why or since when.
 
 **What shipped:** the `<antes_de_cerrar>` section of the system prompt
-(`agent/loop.ts`). It asks for a check with whatever command fits the stack — build,
-typecheck, tests — never a hardcoded `npm run build`, because a Go or Python
+(`agent/loop.ts`). It asks for a check with whatever command fits the stack: build,
+typecheck, tests. Never a hardcoded `npm run build`, because a Go or Python
 project doesn't have one. The loop already iterates up to 50 turns, so the agent
 writes, verifies, fixes and re-verifies *inside the same turn*; nothing had to be
 re-triggered.
@@ -296,8 +314,8 @@ Two things learned tuning it:
 
 - **It also fixes what someone else broke.** An earlier version let the agent defer
   ("that file belongs to another agent"), which left errors unfixed in silence when
-  the other agent had already finished its turn. Removing that permission — less
-  rule, more judgment — worked better.
+  the other agent had already finished its turn. Removing that permission (less
+  rule, more judgment) worked better.
 - **It must not start its own dev server.** It was launching them to check, leaving
   orphans competing for the container's memory (four stray logs found in `/tmp` in
   one session). The prompt now says Multi already has one running and to read its
@@ -305,13 +323,13 @@ Two things learned tuning it:
 
 **The honest limit, which is why this doesn't close the parallelism problem:** it
 detects fast, it doesn't prevent. Two coupled pieces handed out at the same time
-will still collide — agent A changes a signature after agent B already shipped code
+will still collide: agent A changes a signature after agent B already shipped code
 against the old one, and B is gone. What changes is that whoever closes *last* sees
 the final state and fixes it, so it surfaces in seconds instead of at the end.
 
 **Not done: serializing the checks.** If two agents build at once, both could see
 the same breakage and both try to fix it. The fix would be a `KeyedMutex` keyed on
-the workspace, same pattern already used for git's index and container startup —
+the workspace, same pattern already used for git's index and container startup.
 the second one queues, and when its turn comes it sees the state *with* the first
 one's work already written. Left out until it's actually observed: right now it's a
 guess about a race, and the check takes seconds while turns take minutes.

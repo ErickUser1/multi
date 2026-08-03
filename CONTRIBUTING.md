@@ -41,9 +41,9 @@ The full system walkthrough is in [E2E.md](E2E.md).
 
 ## Things worth knowing
 
-**Every shared resource needs its lock.** The product is concurrent by design — several agents, several people, one project. Files, the git index, containers, and ports already go through `KeyedMutex`. If you add another shared resource, give it a lock from the start: concurrency bugs show up in production, not on your machine.
+**Every shared resource needs its lock.** The product is concurrent by design: several agents, several people, one project. Files, the git index, containers, and ports already go through `KeyedMutex`. If you add another shared resource, give it a lock from the start: concurrency bugs show up in production, not on your machine.
 
-**The engine doesn't know about frameworks.** The room starts empty and the agent scaffolds whatever stack it's asked for. If you need something to work with a given stack, solve it by reading what the project declares or constraining the agent through the prompt — not by hardcoding `vite` into the engine.
+**The engine doesn't know about frameworks.** The room starts empty and the agent scaffolds whatever stack it's asked for. If you need something to work with a given stack, solve it by reading what the project declares or constraining the agent through the prompt, not by hardcoding `vite` into the engine.
 
 **Concurrency errors go to the model.** If an agent tries to write a file that changed, the message is for it ("read it again"), not a modal for the human. That asymmetry is deliberate.
 
@@ -53,4 +53,4 @@ The full system walkthrough is in [E2E.md](E2E.md).
 
 ## Reporting something
 
-If it's a bug, say what you expected and what happened. If you have the server log, even better — most of this project's problems have come from reading that, not from reading the code.
+If it's a bug, say what you expected and what happened. If you have the server log, even better. Most of this project's problems have come from reading that, not from reading the code.

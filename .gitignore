@@ -35,3 +35,13 @@ soul.md
 # en web/. Se quedan fuera para no confundir a quien llegue al repo.
 app/
 .claude/
+
+# El landing vive en su propio repo (../multi-landing). Es marketing, no
+# producto: tiene su propio deploy en cada push y se hace público antes que
+# el código. Juntos, cada arreglo del motor dispararía un deploy del landing.
+landing/
+
+# Nota de traspaso interna: pendientes, decisiones a medio cocer y estado
+# del dia. Es cuaderno, no documentacion. Lo que un contribuidor necesita
+# esta en README, CONTRIBUTING, E2E y ROADMAP.
+ESTADO.md

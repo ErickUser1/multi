@@ -13,6 +13,7 @@
     "serve": "npm run start -w server",
     "compartir": "node scripts/compartir.mjs",
     "dev": "npm run dev -w server",
+    "dev:polling": "npm run dev:polling -w server",
     "dev:web": "npm run dev -w web",
     "typecheck": "npm run typecheck -w server && npm run typecheck -w web",
     "demo:workspace": "npm run demo:workspace -w server",
@@ -24,6 +25,8 @@
     "demo:aislamiento": "npm run demo:aislamiento -w server",
     "demo:keys": "npm run demo:keys -w server",
     "demo:menciones": "npm run demo:menciones -w server",
+    "demo:interrupcion": "npm run demo:interrupcion -w server",
+    "demo:agentes-se-ven": "npm run demo:agentes-se-ven -w server",
     "demo:providers": "npm run demo:providers -w server",
     "dev:test": "npm run dev:test -w server"
   },

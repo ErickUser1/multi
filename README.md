@@ -1,34 +1,13 @@
-<div align="center">
-
 # Multi
 
-**Multiplayer AI coding. Open source.**
+A live room where you, your friends and several agents build the same app. Open source.
 
-A live room where several people and several agents build the same project, seeing the same thing at the same time.
+![A room in Multi: the chat on the left, the app running live on the right](docs/sala.webp)
+
+Someone asks in plain language, the agent answers in terms of what changed, and the app on the right updates without a refresh. Everyone in the room sees it at the same time.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Node 22+](https://img.shields.io/badge/node-22%2B-green.svg)
-
-</div>
-
-```
-┌─────────────────────┬──────────────────────────────────────────┐
-│  taco-crew-21       │  [ SELECT ELEMENT ]            D  E  +   │
-│  3 IN THE ROOM      ├──────────────────────────────────────────┤
-│                     │  THE APP    THE BACK                     │
-│  ● agente-1         │ ┌──────────────────────────────────────┐ │
-│    writing Nav.tsx  │ │                                      │ │
-│  ○ agente-2 idle    │ │      your app, moving live           
-│                     │ │                                      │ │
-│  ─────────────────  │ │        ↖ donscanor                   │ │
-│  D  Donscanor       │ │                    ↖ your teammate   │ │
-│    @agente make the │ │                                      │ │
-│    header red       │ └──────────────────────────────────────┘ │
-│                     │  HISTORY  ● ● ● ● ●               NOW    │
-│  AI agente-1        │                                          │
-│    Done.            │                                          │
-└─────────────────────┴──────────────────────────────────────────┘
-```
 
 
 ## Install
@@ -40,9 +19,9 @@ npm install
 npm start
 ```
 
-Open **http://localhost:4000**, create a room, ask an agent for something. It'll ask for your API key , that's the whole setup.
+Open **http://localhost:4000**, create a room, ask an agent for something. It'll ask for your API key, and that's the whole setup.
 
-Needs [Node 22+](https://nodejs.org), and [Docker](https://docs.docker.com/get-started/get-docker/) for isolation.
+Needs [Node 22+](https://nodejs.org). [Docker](https://docs.docker.com/get-started/get-docker/) is optional but recommended: with it, each room runs isolated in its own container. Without it, agents run commands directly on your machine and the server says so on startup.
 
 ### Bring someone in
 
@@ -82,7 +61,7 @@ Your key lives in your browser and in the server's memory while you're connected
 
 ## Under the hood
 
-Each room is a folder with its own git, isolated in its own container. The agent is hand-written. no agent framework, no model SDK — and rooms start empty: it scaffolds whatever stack you ask for.
+Each room is a folder with its own git, isolated in its own container. The agent is hand-written, with no agent framework and no model SDK. Rooms start empty: it scaffolds whatever stack you ask for.
 
 Full walkthrough in **[E2E.md](E2E.md)** · What's missing and why in **[ROADMAP.md](ROADMAP.md)** · Both in Spanish.
 

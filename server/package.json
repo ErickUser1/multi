@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "CHOKIDAR_USEPOLLING=1 tsx watch src/index.ts",
+    "dev": "tsx watch src/index.ts",
+    "dev:polling": "cross-env CHOKIDAR_USEPOLLING=1 tsx watch src/index.ts",
     "start": "tsx src/index.ts",
     "typecheck": "tsc --noEmit",
     "demo:workspace": "tsx src/demos/workspace.ts",
@@ -19,7 +20,7 @@
     "demo:interrupcion": "tsx src/demos/interrupcion.ts",
     "demo:agentes-se-ven": "tsx src/demos/agentes-se-ven.ts",
     "demo:providers": "tsx src/demos/providers.ts",
-    "dev:test": "MULTI_TEST_MOCK=1 CHOKIDAR_USEPOLLING=1 tsx watch src/index.ts"
+    "dev:test": "cross-env MULTI_TEST_MOCK=1 tsx watch src/index.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.3.0",
@@ -29,6 +30,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
+    "cross-env": "^10.1.0",
     "socket.io-client": "^4.8.3",
     "tsx": "^4.23.1",
     "typescript": "^5.7.2"

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { SERVER_URL } from "./socket.js";
+import { useTextos } from "./i18n.js";
 
 /**
  * La línea de tiempo de la sala: cada punto es un turno de agente.
@@ -26,6 +27,7 @@ export function Historial(props: {
   /** Señal para recargar (cambió el historial). */
   version: number;
 }) {
+  const { t } = useTextos();
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
   const [selected, setSelected] = useState<HistoryEntry | null>(null);
   const [diff, setDiff] = useState<string | null>(null);
@@ -52,7 +54,7 @@ export function Historial(props: {
       <span className="hist-label">Historial</span>
 
       <div className="hist-barra">
-        {puntos.length === 0 && <span className="hist-vacio">aún no hay cambios guardados</span>}
+        {puntos.length === 0 && <span className="hist-vacio">{t.sinCambios}</span>}
         {puntos.map((e) => (
           <button
             key={e.hash}
@@ -66,8 +68,8 @@ export function Historial(props: {
             {e.bookmark ? "★" : "●"}
           </button>
         ))}
-        <span className="hist-ahora" title="el estado actual">
-          ahora
+        <span className="hist-ahora" title={t.tituloEstadoActual}>
+          {t.ahora}
         </span>
       </div>
 
@@ -83,7 +85,7 @@ export function Historial(props: {
           {selected.files.length > 0 && (
             <div className="hist-det-files">
               {selected.files.slice(0, 6).map((f) => (
-                <span key={f} className="hist-file" onClick={() => setConfirming({ hash: selected.hash, file: f })} title={`regresar solo ${f}`}>
+                <span key={f} className="hist-file" onClick={() => setConfirming({ hash: selected.hash, file: f })} title={t.regresarSolo(f)}>
                   {f}
                 </span>
               ))}
@@ -96,14 +98,14 @@ export function Historial(props: {
               Ver cambios
             </button>
             <button className="hist-btn" onClick={() => setConfirming({ hash: selected.hash })}>
-              Regresar aquí
+              {t.regresarAqui}
             </button>
             <button
               className="hist-btn"
               onClick={() =>
                 props.onBookmark(
                   selected.hash,
-                  selected.bookmark ? null : prompt("¿cómo la llamas?", "versión que funcionaba") || null,
+                  selected.bookmark ? null : prompt(t.comoLaLlamas, t.versionQueFuncionaba) || null,
                 )
               }
             >
@@ -128,11 +130,10 @@ export function Historial(props: {
         <div className="hist-confirm">
           <div className="hist-confirm-text">
             {confirming.file
-              ? `¿Regresar solo ${confirming.file} a este estado?`
-              : "¿Regresar TODO el proyecto a este estado?"}
+              ? t.confirmarArchivo(confirming.file)
+              : t.confirmarTodo}
             <div className="hist-confirm-nota">
-              No se borra nada: se guarda como un cambio nuevo y lo posterior sigue en el historial.
-              {" "}El código vuelve, pero los datos de la base NO.
+              {t.confirmarNota}{" "}{t.confirmarDatos}
             </div>
           </div>
           <div className="hist-confirm-acciones">
@@ -144,10 +145,10 @@ export function Historial(props: {
                 setSelected(null);
               }}
             >
-              Sí, regresar
+              {t.siRegresar}
             </button>
             <button className="hist-btn" onClick={() => setConfirming(null)}>
-              Cancelar
+              {t.cancelar}
             </button>
           </div>
         </div>

@@ -111,10 +111,17 @@ export class ProviderError extends Error {
       | "rate_limit" // 429
       | "overloaded" // 529
       | "bad_request" // 400 — request mal armado
+      | "presupuesto" // 402 con saldo: el techo pedido no cabe, cabe uno menor
       | "api" // otro non-2xx
       | "network" // fallo de transporte
       | "parse", // SSE malformado
-    readonly opts: { status?: number; retryAfterMs?: number; cause?: unknown } = {},
+    readonly opts: {
+      status?: number;
+      retryAfterMs?: number;
+      cause?: unknown;
+      /** Techo de salida que el proveedor sí acepta con el saldo de esta key. */
+      maxTokensSugerido?: number;
+    } = {},
   ) {
     super(message);
     this.name = "ProviderError";

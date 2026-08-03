@@ -20,7 +20,8 @@
     "demo:interrupcion": "tsx src/demos/interrupcion.ts",
     "demo:agentes-se-ven": "tsx src/demos/agentes-se-ven.ts",
     "demo:providers": "tsx src/demos/providers.ts",
-    "dev:test": "cross-env MULTI_TEST_MOCK=1 tsx watch src/index.ts"
+    "dev:test": "cross-env MULTI_TEST_MOCK=1 tsx watch src/index.ts",
+    "demo:presupuesto": "tsx src/demos/presupuesto.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.3.0",

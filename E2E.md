@@ -1,4 +1,3 @@
-markdown
 # How Multi works, end to end
 
 This document describes **what the code does today**, not what's planned. It's the
@@ -10,8 +9,9 @@ What's missing and why is in [ROADMAP.md](ROADMAP.md).
 
 ## The full walkthrough
 
+```
 ┌──────────────────────────────────────────────────────────────────────────────────┐
-│ E2E — FROM AN EMPTY ROOM TO A FINISHED PROJECT │
+│ E2E: FROM AN EMPTY ROOM TO A FINISHED PROJECT │
 └──────────────────────────────────────────────────────────────────────────────────┘
 
 ① JOIN
@@ -74,7 +74,7 @@ CAS: is what you read still there?
 → BOTH changes survive
 
 While waiting: "Agent-2 waiting on Agent-1 (Menu.jsx)"
-That wait does NOT count toward the timeout — it's a queue, not stuck work.
+That wait does NOT count toward the timeout: it's a queue, not stuck work.
 
 ⑥ TWO CHANNELS, TWO SPEEDS
 ┌─ REAL TIME ───────────────────┐ ┌─ SAVED ──────────────────────┐
@@ -88,10 +88,11 @@ That wait does NOT count toward the timeout — it's a queue, not stuck work.
 when the turn closes → detectLaunch: is there already a package.json with "dev"?
 ├─ no → keeps waiting (normal)
 └─ yes → npm install (inside) → dev server (inside)
+```
 → Docker publishes the port → the proxy injects the inspector
 → preview:ready → EVERYONE sees it appear
 
-⑧ ITERATE — the product's real loop
+⑧ ITERATE: the product's real loop
 Someone clicks a button in the preview
 → the (injected) inspector sends selector + tag via postMessage
 → everyone sees "beto selected <button>"
@@ -148,6 +149,7 @@ The API key doesn't travel with every message. It's sent **once, when the socket
 connects**, and the server keeps it in memory tied to that `socketId`:
 
 browser server
+```
 ─────── ──────
 on connect:
 emit("auth:key", {key}) ──────► keys.ts: Map<socketId, key>
@@ -159,34 +161,35 @@ new AnthropicProvider(key)
 ↓
 runAgent({ provider, ... }) ← the loop, here
 ↓
+```
 fetch → api.anthropic.com
 
 
 **The consequence worth saying out loud:** whoever hosts Multi has, in their
 process's memory, the keys of everyone who joins their rooms. On your own machine
 with your teammates, that's harmless. On a public service open to strangers, it
-isn't — and it's one of the reasons a paid hosting offering would end up supplying
+isn't, and it's one of the reasons a paid hosting offering would end up supplying
 its own key and charging for usage, instead of taking other people's.
 
 ### Who can read that Map
 
 | | |
 |---|---|
-| The server process | yes — it needs the key in the clear to call the API |
-| Whoever hosts it | yes — `console.log`, a debugger, or a process dump |
-| Root on that machine | yes — can read the memory of any process |
-| Other members of the room | **no** — no event emits keys, and the Map is indexed by `socketId` |
-| **The agents** | **no** — they run inside the container, which can't reach the server's memory. Asking an agent "show me the keys" gets you nowhere: they're not in its world |
-| Disk | **no** — never written; they're gone on restart |
-| Logs | **no** — never logged, not even truncated |
+| The server process | yes: it needs the key in the clear to call the API |
+| Whoever hosts it | yes: `console.log`, a debugger, or a process dump |
+| Root on that machine | yes: can read the memory of any process |
+| Other members of the room | **no**: no event emits keys, and the Map is indexed by `socketId` |
+| **The agents** | **no**: they run inside the container, which can't reach the server's memory. Asking an agent "show me the keys" gets you nowhere: they're not in its world |
+| Disk | **no**: never written; they're gone on restart |
+| Logs | **no**: never logged, not even truncated |
 
-The trust model is **"you trust whoever's hosting it"** — the same one you already
+The trust model is **"you trust whoever's hosting it"**, the same one you already
 accept with Vercel and your environment variables. Trivially true locally (you're
 the host); stops being true on an open cloud.
 
 **Mitigation if you ever host it publicly:** Anthropic lets you create keys with a
 spending limit. Anyone joining someone else's Multi should use a capped one, not
-their main account's key — it turns the worst case of "my account got drained"
+their main account's key. It turns the worst case of "my account got drained"
 into "I lost a few bucks."
 
 ---
@@ -217,14 +220,14 @@ into "I lost a few bucks."
 | What | How |
 |---|---|
 | Engine: empty workspace → preview + HMR | `npm run demo:workspace` |
-| Concurrency: CAS, mutex, coordinator | `npm run demo:concurrency` — 17/17 |
-| History: diffs, bookmarks, revert | `npm run demo:historial` — 9/9 |
+| Concurrency: CAS, mutex, coordinator | `npm run demo:concurrency`: 17/17 |
+| History: diffs, bookmarks, revert | `npm run demo:historial`: 9/9 |
 | Persistence: survives a restart | `npm run demo:persistence` |
-| Visual backend: endpoints and status | `npm run demo:back` — 12/12 |
-| Isolation: the agent can't leave its room | `npm run demo:aislamiento` — 10/10 |
-| Per-person keys | `npm run demo:keys` — 6/6 |
+| Visual backend: endpoints and status | `npm run demo:back`: 12/12 |
+| Isolation: the agent can't leave its room | `npm run demo:aislamiento`: 10/10 |
+| Per-person keys | `npm run demo:keys`: 6/6 |
 
-**What's still untested:** the ② → ⑦ path with a real agent — asking for a project
+**What's still untested:** the ② → ⑦ path with a real agent: asking for a project
 from scratch and watching it appear. The pieces are verified individually; the mock
 the demos use writes a fixed file and doesn't know how to scaffold.
 

@@ -1,34 +1,13 @@
-<div align="center">
-
 # Multi
 
-**Multiplayer AI coding. Open source.**
+A live room where you, your friends and several agents build the same app. Open source.
 
-A live room where several people and several agents build the same project, seeing the same thing at the same time.
+![A room in Multi: the chat on the left, the app running live on the right](docs/sala.webp)
+
+Someone asks in plain language, the agent answers in terms of what changed, and the app on the right updates without a refresh. Everyone in the room sees it at the same time.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Node 22+](https://img.shields.io/badge/node-22%2B-green.svg)
-
-</div>
-
-```
-┌─────────────────────┬──────────────────────────────────────────┐
-│  taco-crew-21       │  [ SELECT ELEMENT ]            D  E  +   │
-│  3 IN THE ROOM      ├──────────────────────────────────────────┤
-│                     │  THE APP    THE BACK                     │
-│  ● agente-1         │ ┌──────────────────────────────────────┐ │
-│    writing Nav.tsx  │ │                                      │ │
-│  ○ agente-2 idle    │ │      your app, moving live           
-│                     │ │                                      │ │
-│  ─────────────────  │ │        ↖ donscanor                   │ │
-│  D  Donscanor       │ │                    ↖ your teammate   │ │
-│    @agente make the │ │                                      │ │
-│    header red       │ └──────────────────────────────────────┘ │
-│                     │  HISTORY  ● ● ● ● ●               NOW    │
-│  AI agente-1        │                                          │
-│    Done.            │                                          │
-└─────────────────────┴──────────────────────────────────────────┘
-```
 
 
 ## Install

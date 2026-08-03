@@ -28,7 +28,8 @@
     "demo:interrupcion": "npm run demo:interrupcion -w server",
     "demo:agentes-se-ven": "npm run demo:agentes-se-ven -w server",
     "demo:providers": "npm run demo:providers -w server",
-    "dev:test": "npm run dev:test -w server"
+    "dev:test": "npm run dev:test -w server",
+    "demo:presupuesto": "npm run demo:presupuesto -w server"
   },
   "engines": {
     "node": ">=22"

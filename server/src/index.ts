@@ -887,6 +887,11 @@ async function loadEnv(): Promise<void> {
 function explicarFalla(err: unknown): string {
   const texto = String(err);
 
+  // Antes que el de créditos: este mensaje TAMBIÉN habla de saldo, y si cae en
+  // el genérico se le dice "recarga" a alguien que sí tiene dinero.
+  if (texto.includes("el techo de salida no cabe")) {
+    return "tu saldo no alcanza para el tamaño de respuesta que se pidió. Se reintentó con uno más chico y tampoco cupo: recarga saldo o usa un modelo más barato.";
+  }
   if (texto.includes("credit balance") || texto.includes("insufficient")) {
     return "se acabaron los créditos de tu cuenta. Pon otra key o recarga saldo.";
   }
@@ -903,7 +908,7 @@ function explicarFalla(err: unknown): string {
     return "ese modelo no existe o tu cuenta no tiene acceso. Elige otro en el panel.";
   }
   if (texto.includes("se cortó a media escritura")) {
-    return "la respuesta del modelo se cortó a la mitad. Suele ser falta de créditos o una caída de conexión — vuelve a intentar.";
+    return "la respuesta del modelo se cortó a la mitad. Suele ser falta de créditos o una caída de conexión, vuelve a intentar.";
   }
   if (texto.includes("AbortError")) {
     return "el turno se detuvo.";

@@ -29,6 +29,16 @@ import {
 
 const RETRY = { maxRetries: 5, baseMs: 1000, capMs: 60_000 };
 
+/** Techo de salida por defecto cuando nadie pide uno. */
+const DEFAULT_MAX_TOKENS = 8192;
+
+/**
+ * Piso al recortar el techo por falta de saldo. Por debajo de esto el modelo se
+ * corta a media llamada de herramienta y devuelve un JSON truncado: parece un
+ * bug del agente cuando en realidad es que no alcanza el dinero.
+ */
+const MIN_MAX_TOKENS = 512;
+
 export interface OpenAICompatOptions {
   apiKey: string;
   /** Sin barra final. Ej: https://openrouter.ai/api/v1 */
@@ -55,12 +65,40 @@ export class OpenAICompatProvider implements ModelProvider {
     callbacks: StreamCallbacks = {},
   ): Promise<Extract<StreamEvent, { type: "end" }>> {
     let attempt = 0;
+    // El techo de salida puede bajar entre intentos: ver el catch de abajo.
+    let enCurso = params;
+
     for (;;) {
       try {
-        return await this.once(params, callbacks);
+        return await this.once(enCurso, callbacks);
       } catch (err) {
         const e = err as ProviderError;
-        if (!(e instanceof ProviderError) || !e.retryable || attempt >= RETRY.maxRetries) throw err;
+        if (!(e instanceof ProviderError)) throw err;
+
+        // Techo demasiado alto para el saldo de la key. Esperar no sirve de
+        // nada aquí — el saldo no crece solo — así que se reintenta YA con el
+        // número que el proveedor dijo que sí acepta, menos un margen para que
+        // no vuelva a rebotar si el cobro cambia entre una llamada y otra.
+        //
+        // El piso existe porque por debajo de ~256 el modelo se corta a media
+        // herramienta y devuelve un JSON truncado, que es peor que fallar
+        // claro: parece un bug del agente cuando en realidad es falta de saldo.
+        if (e.kind === "presupuesto" && attempt < RETRY.maxRetries) {
+          const sugerido = e.opts.maxTokensSugerido ?? 0;
+          const techo = Math.floor(sugerido * 0.9);
+          const actual = enCurso.maxTokens ?? DEFAULT_MAX_TOKENS;
+
+          if (techo >= MIN_MAX_TOKENS && techo < actual) {
+            callbacks.onRetry?.({ attempt: attempt + 1, waitMs: 0, reason: e.kind });
+            enCurso = { ...enCurso, maxTokens: techo };
+            attempt++;
+            continue;
+          }
+          // Ni recortando cabe: es falta de saldo de verdad, no un techo alto.
+          throw e;
+        }
+
+        if (!e.retryable || attempt >= RETRY.maxRetries) throw err;
 
         // Backoff exponencial con tope; el servidor puede pedir una espera mayor.
         const waitMs = Math.min(RETRY.baseMs * 2 ** attempt, RETRY.capMs);
@@ -80,7 +118,7 @@ export class OpenAICompatProvider implements ModelProvider {
       model: params.model ?? this.defaultModel,
       messages: toOpenAIMessages(params.system, params.messages),
       ...(params.tools?.length ? { tools: params.tools.map(toOpenAITool) } : {}),
-      max_tokens: params.maxTokens ?? 8192,
+      max_tokens: params.maxTokens ?? DEFAULT_MAX_TOKENS,
       stream: true,
       // Sin esto, el último chunk no trae el conteo de tokens.
       stream_options: { include_usage: true },
@@ -352,6 +390,22 @@ async function errorFromResponse(res: Response, name: string): Promise<ProviderE
     return new ProviderError(`${name}: límite de uso alcanzado. ${detalle}`, "rate_limit", { status: res.status, retryAfterMs });
   }
   if (res.status === 402) {
+    // Un 402 son DOS cosas distintas y hay que separarlas.
+    //
+    // OpenRouter valida el saldo contra el MÁXIMO POSIBLE de salida, no contra
+    // lo que la respuesta va a costar de verdad: pedir max_tokens 8192 tumba
+    // una petición que habría gastado 200. El mensaje viene con la forma "can
+    // only afford N", así que el proveedor está diciendo con qué techo sí pasa.
+    //
+    // Con saldo real de cero no hay número que sirva y sigue siendo "auth".
+    const cabe = /can only afford (\d+)/i.exec(detalle);
+    if (cabe) {
+      return new ProviderError(
+        `${name}: el techo de salida no cabe en el saldo de la key. ${detalle}`,
+        "presupuesto",
+        { status: res.status, maxTokensSugerido: Number(cabe[1]) },
+      );
+    }
     return new ProviderError(`${name}: sin créditos. ${detalle}`, "auth");
   }
   if (res.status >= 500) {

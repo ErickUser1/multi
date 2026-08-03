@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { SERVER_URL } from "./socket.js";
+import { useTextos } from "./i18n.js";
 
 /**
  * Tu proveedor de modelo y tu API key.
@@ -41,7 +42,7 @@ const PROVEEDORES: Record<
   { label: string; hint: string; url?: string; modelos: string[] }
 > = {
   anthropic: {
-    label: "Anthropic (Claude)",
+    label: "Anthropic",
     hint: "sk-ant-…",
     url: "https://console.anthropic.com/settings/keys",
     modelos: ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5-20251001"],
@@ -49,7 +50,7 @@ const PROVEEDORES: Record<
   // Verificados contra https://openrouter.ai/api/v1/models (julio 2026). Los
   // gratis van primero: son la puerta de entrada para quien no quiere pagar.
   openrouter: {
-    label: "OpenRouter (muchos modelos)",
+    label: "OpenRouter",
     hint: "sk-or-v1-…",
     url: "https://openrouter.ai/keys",
     modelos: [
@@ -69,7 +70,7 @@ const PROVEEDORES: Record<
     modelos: ["gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.6-sol"],
   },
   groq: {
-    label: "Groq (rápido)",
+    label: "Groq",
     hint: "gsk_…",
     url: "https://console.groq.com/keys",
     modelos: ["llama-3.3-70b-versatile"],
@@ -81,7 +82,7 @@ const PROVEEDORES: Record<
     modelos: ["deepseek-chat", "deepseek-reasoner"],
   },
   ollama: {
-    label: "Ollama (en tu máquina)",
+    label: "Ollama",
     hint: "cualquier cosa: Ollama no pide key",
     modelos: ["gemma3", "qwen2.5-coder"],
   },
@@ -126,6 +127,7 @@ export function KeyPanel(props: {
   onGuardar: (c: Credencial) => void;
   onOlvidar: () => void;
 }) {
+  const { t } = useTextos();
   const [abierto, setAbierto] = useState(props.abiertoPorDefecto);
   const [provider, setProvider] = useState(props.actual?.provider ?? "openrouter");
   const [key, setKey] = useState("");
@@ -178,9 +180,9 @@ export function KeyPanel(props: {
       <button
         className={`key-chip ${props.actual ? "listo" : "falta"}`}
         onClick={() => setAbierto(true)}
-        title={props.actual ? `${props.actual.provider} · ${props.actual.model ?? ""}` : "necesaria para invocar agentes"}
+        title={props.actual ? `${props.actual.provider} · ${props.actual.model ?? ""}` : t.keyNecesaria}
       >
-        {props.actual ? PROVEEDORES[props.actual.provider]?.label.split(" ")[0] ?? "listo" : "poner mi key"}
+        {props.actual ? PROVEEDORES[props.actual.provider]?.label.split(" ")[0] ?? t.keyListo : t.ponerMiKey}
       </button>
     );
   }
@@ -188,9 +190,9 @@ export function KeyPanel(props: {
   return (
     <div className="key-panel">
       <div className="key-cab">
-        <span>Tu modelo</span>
+        <span>{t.tuModelo}</span>
         <button className="key-x" onClick={() => setAbierto(false)}>
-          cerrar
+          {t.cerrar}
         </button>
       </div>
 
@@ -205,18 +207,17 @@ export function KeyPanel(props: {
               </span>
             </div>
             <button className="key-olvidar" onClick={olvidar}>
-              Cambiar
+              {t.cambiar}
             </button>
           </div>
           <p className="key-nota">
-            Guardado en este navegador: sirve en todas tus salas y sigue aquí mañana.
-            Nadie más en la sala lo ve.
+            {t.keyGuardadaNota}
           </p>
         </>
       ) : (
         <>
           <label className="key-campo">
-            <span>Proveedor</span>
+            <span>{t.proveedor}</span>
             <select
               className="key-select"
               value={provider}
@@ -227,7 +228,7 @@ export function KeyPanel(props: {
             >
               {Object.entries(PROVEEDORES).map(([id, p]) => (
                 <option key={id} value={id}>
-                  {p.label}
+                  {t.proveedorNota[id] ? `${p.label} (${t.proveedorNota[id]})` : p.label}
                 </option>
               ))}
             </select>
@@ -250,7 +251,7 @@ export function KeyPanel(props: {
           </label>
 
           <label className="key-campo">
-            <span>Modelo</span>
+            <span>{t.modelo}</span>
             {/* Un <select> y no un <input list>: el datalist con los 341 modelos
                 de OpenRouter hacía que Chrome dejara su tooltip nativo flotando
                 encima del panel. Con select el navegador maneja la lista larga
@@ -269,16 +270,16 @@ export function KeyPanel(props: {
           </label>
 
           <p className="key-nota">
-            Cada quien usa el suyo: lo que le pidas al agente lo pagas tú, no la sala.
+            {t.keyNota}
           </p>
 
           <button className="key-guardar" onClick={guardar} disabled={!key.trim()}>
-            Guardar
+            {t.guardar}
           </button>
 
           {perfil.url && (
             <a className="key-link" href={perfil.url} target="_blank" rel="noreferrer">
-              ¿De dónde saco una key de {perfil.label.split(" ")[0]}?
+              {t.dondeSacoKey(perfil.label.split(" ")[0])}
             </a>
           )}
         </>

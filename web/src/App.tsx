@@ -18,6 +18,7 @@ import { MentionMenu } from "./MentionMenu.js";
 import { Historial } from "./Historial.js";
 import { BackCanvas, type Endpoint } from "./BackCanvas.js";
 import { KeyPanel, loadStoredCredencial, type Credencial } from "./KeyPanel.js";
+import { useTextos } from "./i18n.js";
 
 // El roomId vive en el hash de la URL: #/sala/taco-fiesta-42
 function readRoomFromHash(): string | null {
@@ -61,6 +62,7 @@ export function App() {
 // ── Pantalla: crear / entrar a sala ────────────────────────────────────────
 
 function Landing() {
+  const { t } = useTextos();
   const [busy, setBusy] = useState(false);
   const [pegando, setPegando] = useState(false);
   const [link, setLink] = useState("");
@@ -72,7 +74,7 @@ function Landing() {
       const id = await createRoom();
       window.location.hash = `#/sala/${id}`;
     } catch (e) {
-      alert("no se pudo crear la sala: " + String(e));
+      alert(t.noSePudoCrear + String(e));
       setBusy(false);
     }
   };
@@ -87,7 +89,7 @@ function Landing() {
   const entrar = () => {
     const id = extraerRoomId(link);
     if (!id) {
-      setError("no encontré el nombre de la sala ahí");
+      setError(t.noEncontreSala);
       return;
     }
     window.location.hash = `#/sala/${id}`;
@@ -97,16 +99,16 @@ function Landing() {
     <div className="center-screen">
       <div className="card">
         <h1 className="brand">MULTI</h1>
-        <p className="sub">un lugar para vibecodear con tus compas</p>
+        <p className="sub">{t.tagline}</p>
         <button className="cta" onClick={nueva} disabled={busy}>
-          {busy ? "creando sala…" : "Crear una sala"}
+          {busy ? t.creandoSala : t.crearSala}
         </button>
 
         {pegando ? (
           <div className="entrar-bloque">
             <input
               className="name-input"
-              placeholder="pega el link o el nombre de la sala"
+              placeholder={t.pegaLink}
               value={link}
               onChange={(e) => {
                 setLink(e.target.value);
@@ -119,13 +121,13 @@ function Landing() {
               autoFocus
             />
             <button className="entrar-btn" onClick={entrar} disabled={!link.trim()}>
-              Entrar
+              {t.entrar}
             </button>
             {error && <p className="entrar-error">{error}</p>}
           </div>
         ) : (
           <button className="hint hint-btn" onClick={() => setPegando(true)}>
-            o entra con el link que te pasó tu compa
+            {t.oEntraConLink}
           </button>
         )}
       </div>
@@ -156,21 +158,22 @@ function NamePrompt(props: {
   setName: (n: string) => void;
   onEnter: () => void;
 }) {
+  const { t } = useTextos();
   return (
     <div className="center-screen">
       <div className="card">
-        <p className="sub">vas a entrar a la sala</p>
+        <p className="sub">{t.vasAEntrar}</p>
         <h2 className="room-name">{props.roomId}</h2>
         <input
           className="name-input"
-          placeholder="¿cómo te llamas?"
+          placeholder={t.tuNombre}
           value={props.name}
           onChange={(e) => props.setName(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && props.onEnter()}
           autoFocus
         />
         <button className="cta" onClick={props.onEnter}>
-          Entrar
+          {t.entrar}
         </button>
       </div>
     </div>
@@ -180,6 +183,7 @@ function NamePrompt(props: {
 // ── La Sala ─────────────────────────────────────────────────────────────────
 
 function Sala({ roomId, name }: { roomId: string; name: string }) {
+  const { t } = useTextos();
   const [members, setMembers] = useState<Member[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [previewReady, setPreviewReady] = useState(false);
@@ -434,7 +438,7 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
       <aside className="chat">
         <div className="sala-cab">
           <div className="sala-nombre">{roomId}</div>
-          <div className="sala-meta">{members.length} en la sala</div>
+          <div className="sala-meta">{t.enLaSala(members.length)}</div>
         </div>
 
         {/* Los agentes de la sala, como jugadores visibles */}
@@ -444,15 +448,14 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
         {orphans.length > 0 && (
           <div className="orphan-card">
             <div className="orphan-text">
-              {orphans.length === 1 ? "Un agente se interrumpió" : `${orphans.length} agentes se interrumpieron`} a
-              media tarea. ¿Guardas lo que alcanzó a hacer?
+              {t.seInterrumpio(orphans.length)} {t.aMediaTarea}
             </div>
             <div className="orphan-actions">
               <button className="orphan-btn keep" onClick={() => resolveOrphans("keep")}>
-                Guardar
+                {t.guardarTrabajo}
               </button>
               <button className="orphan-btn" onClick={() => resolveOrphans("revert")}>
-                Volver al último punto
+                {t.volverAlPunto}
               </button>
             </div>
           </div>
@@ -512,7 +515,7 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
             <input
               ref={inputRef}
               className="caja"
-              placeholder="habla con la sala — o escribe @agente para pedir algo"
+              placeholder={t.hablaConLaSala}
               value={draft}
               onChange={(e) => onDraftChange(e.target.value)}
               onKeyDown={(e) => {
@@ -530,9 +533,9 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
           <button
             className={`inspect-btn ${inspect ? "on" : ""}`}
             onClick={() => setInspect((v) => !v)}
-            title="selecciona un elemento del preview"
+            title={t.tituloSelector}
           >
-            {inspect ? "seleccionando…" : "Seleccionar elemento"}
+            {inspect ? t.seleccionando : t.seleccionarBtn}
           </button>
           <div className="presencia">
             {members.map((m) => (
@@ -540,8 +543,6 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
                 {m.name.slice(0, 1).toUpperCase()}
               </div>
             ))}
-            {/* La `key` cambia cuando el server pide la API key: remonta el
-                panel para que se abra solo en ese momento. */}
             {/* La `key` cambia cuando el server pide la API key: remonta el
                 panel para que se abra solo en ese momento. */}
             <KeyPanel
@@ -561,17 +562,17 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
               }}
             />
             <button className="invitar" onClick={copyLink}>
-              Copiar link
+              {t.copiarLink}
             </button>
           </div>
         </div>
 
         <div className="tabs">
           <button className={`tab ${tab === "app" ? "activa" : ""}`} onClick={() => setTab("app")}>
-            La app
+            {t.laApp}
           </button>
           <button className={`tab ${tab === "back" ? "activa" : ""}`} onClick={() => setTab("back")}>
-            El back
+            {t.elBack}
           </button>
         </div>
 
@@ -588,25 +589,25 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
                 ref={iframeRef}
                 className="preview-frame"
                 src={previewSrc}
-                title="preview de la app"
+                title={t.tituloPreview}
               />
               {/* Selecciones de OTROS (con su color/nombre). Nota: se dibujan
                   como badges de aviso; el outline exacto vive dentro del iframe. */}
               <div className="others-selections">
                 {Object.values(selections).map((s) => (
                   <div key={s.socketId} className="sel-badge" style={{ borderColor: s.color, color: s.color }}>
-                    {s.name} seleccionó &lt;{s.element?.tag}&gt;
+                    {s.name} {t.selecciono} &lt;{s.element?.tag}&gt;
                   </div>
                 ))}
               </div>
             </>
           ) : (
             <div className="preview-loading">
-              <p>La sala está vacía.</p>
+              <p>{t.salaVacia}</p>
               <p className="preview-loading-sub">
-                Pídele a un agente que arranque el proyecto — el stack lo eliges tú.
+                {t.pideleAlAgente}
                 <br />
-                Por ejemplo: <code>@agente crea un Next con Tailwind</code>
+                {t.porEjemplo} <code>{t.pideAlgo}</code>
               </p>
             </div>
           )}
@@ -698,6 +699,7 @@ function ChatRow({ msg, seguido }: { msg: ChatMessage; seguido?: boolean }) {
  * ningún otro lado: sin esto la línea se sobrescribía y lo anterior se perdía.
  */
 function ToolTrace(props: { lineas: string[]; abierto: boolean; onToggle: () => void }) {
+  const { t } = useTextos();
   const ultima = props.lineas[props.lineas.length - 1];
   const previas = props.lineas.length - 1;
 
@@ -717,7 +719,7 @@ function ToolTrace(props: { lineas: string[]; abierto: boolean; onToggle: () => 
           {l}
         </div>
       ))}
-      <div className="tool-cerrar">contraer</div>
+      <div className="tool-cerrar">{t.contraer}</div>
     </div>
   );
 }

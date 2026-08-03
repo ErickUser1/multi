@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { SERVER_URL } from "./socket.js";
+import { useTextos } from "./i18n.js";
 
 /**
  * El back visual: el tab "El back".
@@ -24,12 +25,6 @@ export interface Endpoint {
   definedAt: CallSite | null;
 }
 
-const ETIQUETA: Record<EndpointStatus, string> = {
-  faltante: "el front lo llama, pero no existe todavía",
-  conectado: "existe y el front lo usa",
-  huerfano: "existe, pero nadie lo llama",
-};
-
 export function BackCanvas(props: {
   roomId: string;
   /** Cambia cuando algún archivo del workspace cambió: hay que re-analizar. */
@@ -37,6 +32,7 @@ export function BackCanvas(props: {
   /** Anclar el endpoint al chat, igual que se ancla un elemento del preview. */
   onAnclar: (e: Endpoint) => void;
 }) {
+  const { t } = useTextos();
   const [endpoints, setEndpoints] = useState<Endpoint[] | null>(null);
   const [abierto, setAbierto] = useState<string | null>(null);
 
@@ -64,9 +60,9 @@ export function BackCanvas(props: {
   if (endpoints.length === 0) {
     return (
       <div className="back-vacio">
-        <p>Todavía no hay nada del lado del servidor.</p>
+        <p>{t.sinBack}</p>
         <p className="back-vacio-sub">
-          Cuando el front llame a una API o el agente cree un endpoint, aparece aquí.
+          {t.backVacioNota}
         </p>
       </div>
     );
@@ -79,8 +75,8 @@ export function BackCanvas(props: {
       {faltantes > 0 && (
         <div className="back-resumen">
           {faltantes === 1
-            ? "1 endpoint que el front llama todavía no existe"
-            : `${faltantes} endpoints que el front llama todavía no existen`}
+            ? t.faltantes(1)
+            : t.faltantes(faltantes)}
         </div>
       )}
 
@@ -105,16 +101,17 @@ function Card(props: {
   onToggle: () => void;
   onAnclar: () => void;
 }) {
+  const { t } = useTextos();
   const e = props.endpoint;
   return (
     <div className={`ep-card ${e.status}`}>
       <button className="ep-head" onClick={props.onToggle}>
         <span className={`ep-metodo m-${e.method.toLowerCase()}`}>{e.method}</span>
         <span className="ep-path">{e.path}</span>
-        <span className={`ep-semaforo ${e.status}`} title={ETIQUETA[e.status]} />
+        <span className={`ep-semaforo ${e.status}`} title={t.epEstado[e.status]} />
       </button>
 
-      <div className="ep-estado">{ETIQUETA[e.status]}</div>
+      <div className="ep-estado">{t.epEstado[e.status]}</div>
 
       {props.abierto && (
         <div className="ep-detalle">
@@ -126,7 +123,7 @@ function Card(props: {
               </code>
             </div>
           ) : (
-            <div className="ep-linea ep-falta">sin implementación en el proyecto</div>
+            <div className="ep-linea ep-falta">{t.sinImplementacion}</div>
           )}
 
           {e.calls.length > 0 ? (

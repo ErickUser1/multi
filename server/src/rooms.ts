@@ -192,7 +192,19 @@ async function bootPreview(room: Room): Promise<void> {
  *
  * Devuelve la URL si quedó corriendo, null si todavía no hay qué levantar.
  */
-export async function maybeStartPreview(room: Room): Promise<string | null> {
+/**
+ * Por dónde va el arranque del preview.
+ *
+ * Se avisa a la sala porque el arranque tarda, y sin esto la gente ve el mismo
+ * mensaje de "la sala está vacía" que aparece cuando de verdad no hay proyecto.
+ * Una espera que se entiende se siente mucho más corta que una que no.
+ */
+export type EtapaPreview = "contenedor" | "dependencias" | "servidor";
+
+export async function maybeStartPreview(
+  room: Room,
+  onEtapa?: (etapa: EtapaPreview) => void,
+): Promise<string | null> {
   if (room.preview) return room.preview.url;
   if (room.previewBooting) return null; // ya hay un arranque en curso
 
@@ -204,6 +216,7 @@ export async function maybeStartPreview(room: Room): Promise<string | null> {
   const marca = (etapa: string) =>
     console.log(`[sala ${room.id}] ${etapa}: ${((Date.now() - t0) / 1000).toFixed(1)}s`);
   try {
+    onEtapa?.("contenedor");
     const runner = await ensureRunner(room);
     marca("contenedor");
 
@@ -217,11 +230,13 @@ export async function maybeStartPreview(room: Room): Promise<string | null> {
     // las fechas son poco confiables de por sí.
     const huella = await huellaDeps(room.workspace.dir);
     if (huella && huella !== (await huellaInstalada(room.workspace.dir))) {
+      onEtapa?.("dependencias");
       await runner.exec("npm install", { timeoutMs: 600_000, maxOutput: 4000 });
       await guardarHuella(room.workspace.dir, huella);
       marca("npm install");
     }
 
+    onEtapa?.("servidor");
     room.preview = room.container?.publishedPort
       ? await startPreview(room.workspace, launch, {
           roomId: room.id,

@@ -901,6 +901,36 @@ body::after {
   margin: auto;
   color: var(--dim);
   font-size: 13px;
+  text-align: center;
+}
+
+/* El arranque del preview tarda (contenedor, dependencias, dev server). El
+   spinner dice que algo está pasando; el texto de abajo dice QUÉ, que es lo que
+   convierte una espera muerta en una que se entiende. */
+.preview-spinner {
+  width: 22px;
+  height: 22px;
+  margin: 0 auto 14px;
+  border: 2px solid var(--linea);
+  border-top-color: var(--lavanda);
+  border-radius: 50%;
+  animation: girar 0.7s linear infinite;
+}
+@keyframes girar {
+  to {
+    transform: rotate(360deg);
+  }
+}
+/* Respeta a quien pidió menos movimiento: el spinner late en vez de girar. */
+@media (prefers-reduced-motion: reduce) {
+  .preview-spinner {
+    animation: latir 1.4s ease-in-out infinite;
+  }
+  @keyframes latir {
+    50% {
+      opacity: 0.35;
+    }
+  }
 }
 
 /* ── El back visual (tab II) ─────────────────────────────────────────────── */

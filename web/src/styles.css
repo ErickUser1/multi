@@ -143,6 +143,156 @@ body::after {
 .sala-cab {
   padding: 16px 18px 12px;
   box-shadow: 0 1px 0 rgba(0, 0, 0, 0.18);
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.sala-titulo {
+  min-width: 0;
+}
+
+/* ── Menú de salas ────────────────────────────────────────────────────── */
+/* Desplegable y no sidebar: la lista se abre una o dos veces por sesión, y un
+   panel permanente le quitaría ancho al preview, que es lo que todos miran. */
+.menu-salas {
+  position: relative;
+  flex-shrink: 0;
+}
+.menu-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 6px 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* Las tres rayas, con pseudo-elementos: sin SVG ni fuente de iconos. */
+.menu-icono,
+.menu-icono::before,
+.menu-icono::after {
+  display: block;
+  width: 15px;
+  height: 1.5px;
+  background: var(--dim);
+  border-radius: 1px;
+  transition: background 0.15s;
+}
+.menu-icono {
+  position: relative;
+}
+.menu-icono::before,
+.menu-icono::after {
+  content: "";
+  position: absolute;
+  left: 0;
+}
+.menu-icono::before {
+  top: -5px;
+}
+.menu-icono::after {
+  top: 5px;
+}
+.menu-btn:hover .menu-icono,
+.menu-btn:hover .menu-icono::before,
+.menu-btn:hover .menu-icono::after {
+  background: var(--texto);
+}
+
+.menu-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 60;
+  width: 268px;
+  max-height: 380px;
+  overflow-y: auto;
+  background: var(--panel);
+  border: 1px solid var(--linea);
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  padding: 8px;
+}
+.menu-cab {
+  font-size: 9px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--dim);
+  padding: 4px 8px 8px;
+}
+.menu-vacio {
+  font-size: 11.5px;
+  color: var(--dim);
+  font-style: italic;
+  padding: 4px 8px 10px;
+  line-height: 1.5;
+}
+.menu-lista {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.menu-item {
+  display: flex;
+  align-items: center;
+  border-radius: 5px;
+}
+.menu-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+.menu-link {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px 8px;
+  text-decoration: none;
+  color: var(--texto);
+}
+.menu-sala-id {
+  font-size: 12.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.menu-sala-fecha {
+  font-size: 10px;
+  color: var(--dim);
+}
+/* La × aparece al pasar el cursor: quitar una sala es raro, y un botón visible
+   en cada fila compite con el link, que es lo que sí quieres tocar. */
+.menu-olvidar {
+  background: none;
+  border: none;
+  color: var(--dim);
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  padding: 6px 9px;
+  opacity: 0;
+  transition: opacity 0.12s, color 0.12s;
+}
+.menu-item:hover .menu-olvidar,
+.menu-olvidar:focus-visible {
+  opacity: 1;
+}
+.menu-olvidar:hover {
+  color: var(--rojo);
+}
+
+.menu-nueva {
+  display: block;
+  margin-top: 8px;
+  padding: 9px 8px 4px;
+  border-top: 1px solid var(--linea);
+  font-size: 11.5px;
+  color: var(--dim);
+  text-decoration: none;
+}
+.menu-nueva:hover {
+  color: var(--texto);
 }
 .sala-nombre {
   font-family: "Bodoni MT", "Didot", Georgia, serif;

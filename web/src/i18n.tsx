@@ -76,6 +76,14 @@ const TEXTOS = {
     loLlama: "lo llama",
     nadieLoLlama: "nadie lo llama desde el front",
 
+    // Arranque del preview
+    levantandoPreview: "Levantando la app…",
+    etapaPreview: {
+      contenedor: "Preparando el entorno de la sala.",
+      dependencias: "Instalando dependencias. Esta es la parte lenta.",
+      servidor: "Arrancando el servidor de desarrollo.",
+    } as Record<string, string>,
+
     // Menú de salas
     tusSalas: "Tus salas",
     sinOtrasSalas: "Todavía no has entrado a otra sala.",
@@ -194,6 +202,14 @@ const TEXTOS = {
     sinImplementacion: "not implemented in the project",
     loLlama: "calls it",
     nadieLoLlama: "nothing calls it from the front end",
+
+    // Arranque del preview
+    levantandoPreview: "Starting the app…",
+    etapaPreview: {
+      contenedor: "Preparing the room's environment.",
+      dependencias: "Installing dependencies. This is the slow part.",
+      servidor: "Starting the dev server.",
+    } as Record<string, string>,
 
     // Menú de salas
     tusSalas: "Your rooms",

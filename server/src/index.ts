@@ -296,6 +296,9 @@ io.on("connection", (socket) => {
       you: member,
       members: membersList(room),
       previewUrl: room.preview?.url ?? null,
+      // Quien llega a media cuesta no recibió el "preview:arrancando" (ya pasó),
+      // y sin esto vería "la sala está vacía" mientras el proyecto se levanta.
+      previewArrancando: room.previewBooting === true,
       agents: room.agents.list(),
       orphanTurns: room.orphanTurns ?? [],
       messages: history.map((m) => ({
@@ -797,7 +800,12 @@ function summarizeTool(name: string, input: Record<string, unknown>): string {
  * Que no arranque NO es error: la sala vacía es el estado normal al empezar.
  */
 async function notifyPreviewWhenReady(room: Room): Promise<void> {
-  const url = await maybeStartPreview(room);
+  const url = await maybeStartPreview(room, (etapa) => {
+    // Por dónde va el arranque. Sin esto la sala muestra "está vacía" mientras
+    // el proyecto SÍ existe y se está levantando, que es mentira y se siente
+    // como una pantalla muerta.
+    io.to(room.id).emit("preview:arrancando", { etapa });
+  });
   if (url) io.to(room.id).emit("preview:ready", { previewUrl: url });
 }
 

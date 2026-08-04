@@ -192,6 +192,8 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
   const [members, setMembers] = useState<Member[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [previewReady, setPreviewReady] = useState(false);
+  /** Por dónde va el arranque del preview. null = no está arrancando. */
+  const [arrancando, setArrancando] = useState<"contenedor" | "dependencias" | "servidor" | null>(null);
   const [draft, setDraft] = useState("");
 
   const socketRef = useRef<Socket | null>(null);
@@ -262,9 +264,17 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
       if (p.orphanTurns?.length) setOrphans(p.orphanTurns);
       // El chat que ya existía en la sala (sobrevivió al reinicio).
       if (p.messages?.length) setMessages(p.messages);
+      // Llegaste mientras se levantaba: el evento de etapa ya pasó.
+      if (p.previewArrancando) setArrancando("servidor");
     });
     socket.on("presence", ({ members }: { members: Member[] }) => setMembers(members));
-    socket.on("preview:ready", () => setPreviewReady(true));
+    socket.on("preview:ready", () => {
+      setPreviewReady(true);
+      setArrancando(null);
+    });
+    socket.on("preview:arrancando", ({ etapa }: { etapa: "contenedor" | "dependencias" | "servidor" }) =>
+      setArrancando(etapa),
+    );
     socket.on("agents", ({ agents }: { agents: Agent[] }) => setAgents(agents));
     // Hay un punto nuevo en la línea de tiempo (commit, revert o bookmark).
     socket.on("history:new", () => setHistVersion((v) => v + 1));
@@ -611,12 +621,22 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
             </>
           ) : (
             <div className="preview-loading">
-              <p>{t.salaVacia}</p>
-              <p className="preview-loading-sub">
-                {t.pideleAlAgente}
-                <br />
-                {t.porEjemplo} <code>{t.pideAlgo}</code>
-              </p>
+              {arrancando ? (
+                <>
+                  <div className="preview-spinner" aria-hidden="true" />
+                  <p>{t.levantandoPreview}</p>
+                  <p className="preview-loading-sub">{t.etapaPreview[arrancando]}</p>
+                </>
+              ) : (
+                <>
+                  <p>{t.salaVacia}</p>
+                  <p className="preview-loading-sub">
+                    {t.pideleAlAgente}
+                    <br />
+                    {t.porEjemplo} <code>{t.pideAlgo}</code>
+                  </p>
+                </>
+              )}
             </div>
           )}
 

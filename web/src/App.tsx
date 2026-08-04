@@ -19,6 +19,8 @@ import { Historial } from "./Historial.js";
 import { BackCanvas, type Endpoint } from "./BackCanvas.js";
 import { KeyPanel, loadStoredCredencial, type Credencial } from "./KeyPanel.js";
 import { useTextos } from "./i18n.js";
+import { MenuSalas } from "./MenuSalas.js";
+import { recordarSala } from "./historial-salas.js";
 
 // El roomId vive en el hash de la URL: #/sala/taco-fiesta-42
 function readRoomFromHash(): string | null {
@@ -49,6 +51,9 @@ export function App() {
         setName={setName}
         onEnter={() => {
           localStorage.setItem("multi-name", name || "anónimo");
+          // Se anota AQUÍ y no al leer el hash: abrir un link que no llegaste a
+          // usar no debería llenarte el historial.
+          recordarSala(roomId);
           setEntered(true);
         }}
       />
@@ -437,8 +442,11 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
       {/* Chat izquierda */}
       <aside className="chat">
         <div className="sala-cab">
-          <div className="sala-nombre">{roomId}</div>
-          <div className="sala-meta">{t.enLaSala(members.length)}</div>
+          <MenuSalas actual={roomId} />
+          <div className="sala-titulo">
+            <div className="sala-nombre">{roomId}</div>
+            <div className="sala-meta">{t.enLaSala(members.length)}</div>
+          </div>
         </div>
 
         {/* Los agentes de la sala, como jugadores visibles */}

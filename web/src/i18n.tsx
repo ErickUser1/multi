@@ -76,6 +76,12 @@ const TEXTOS = {
     loLlama: "lo llama",
     nadieLoLlama: "nadie lo llama desde el front",
 
+    // Menú de salas
+    tusSalas: "Tus salas",
+    sinOtrasSalas: "Todavía no has entrado a otra sala.",
+    crearOtraSala: "Crear otra sala",
+    quitarDeLaLista: "Quitar de la lista",
+
     // Historial
     historial: "Historial",
     sinCambios: "aún no hay cambios guardados",
@@ -188,6 +194,12 @@ const TEXTOS = {
     sinImplementacion: "not implemented in the project",
     loLlama: "calls it",
     nadieLoLlama: "nothing calls it from the front end",
+
+    // Menú de salas
+    tusSalas: "Your rooms",
+    sinOtrasSalas: "You haven't joined another room yet.",
+    crearOtraSala: "Create another room",
+    quitarDeLaLista: "Remove from the list",
 
     // Historial
     historial: "History",

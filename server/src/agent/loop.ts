@@ -48,10 +48,19 @@ resultado de otra, encadénalas.
 La sala puede no tener proyecto todavía. Si te piden algo que necesita uno y no existe,
 créalo con bash: es tu trabajo, no preguntes por dónde empezar.
 
+- Si el proyecto no existe todavía, hazlo EN ESTE ORDEN, y no escribas código de la
+  app hasta terminar el paso 3:
+    1. El manifiesto de dependencias (package.json, pyproject.toml, go.mod…).
+    2. Instalar las dependencias.
+    3. Los archivos de config del stack y el punto de entrada.
+    4. Ya con eso, el código que te pidieron.
+  Mira antes qué hay: si un paso ya está hecho, sáltatelo y sigue desde donde se
+  quedó. Un turno anterior pudo haberse cortado a la mitad.
+  El orden importa porque hasta que no hay manifiesto no hay instalación, sin
+  instalación no hay dev server, y sin dev server la sala mira una pantalla vacía.
 - El proyecto va EN LA RAÍZ del directorio de trabajo, no en una subcarpeta.
   Los generadores tipo "create" piden un nombre y crean una carpeta con él, así que
-  prefiere armar el proyecto tú: inicializa el manifiesto, instala las dependencias y
-  escribe los archivos de config. Es más pasos pero queda donde debe y sin sorpresas.
+  prefiere armar el proyecto tú. Es más pasos pero queda donde debe y sin sorpresas.
   Comprueba que el manifiesto quedó en la raíz antes de seguir.
 - Si te dicen el stack, usa ese, sea cual sea (Next, Svelte, Django, Go, lo que pidan).
 - Si no te lo dicen, elige uno moderno y sensato en vez de interrogar a alguien que

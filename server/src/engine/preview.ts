@@ -173,13 +173,27 @@ export async function startPreview(
     : spawn(command, args, {
         cwd: launch.cwd ?? workspace.dir,
         env: { ...process.env, ...(portEnv ? { [portEnv]: String(port) } : {}) },
-        // stdout/stderr capturados para logs y para detectar arranque; sin shell.
+        // stdout/stderr capturados para logs y para detectar el arranque.
         stdio: ["ignore", "pipe", "pipe"],
+        // Con shell porque en Windows el ejecutable es npm.cmd, no npm: sin esto
+        // spawn busca un archivo llamado "npm", no lo encuentra y truena con
+        // ENOENT. Dentro del contenedor da igual (es Linux), pero el camino sin
+        // Docker corre en la máquina de quien levantó Multi, y esa puede ser
+        // Windows.
+        shell: process.platform === "win32",
       });
 
   const tag = `[preview ${workspace.roomId}:${port}]`;
   child.stdout?.on("data", (d) => process.stdout.write(`${tag} ${d}`));
   child.stderr?.on("data", (d) => process.stderr.write(`${tag} ${d}`));
+
+  // Un fallo al LANZAR el proceso (comando inexistente, permisos) llega como
+  // evento 'error'. Sin este listener Node lo trata como excepción no capturada
+  // y se lleva el server entero: una sala que no puede arrancar su preview
+  // tiraba a todas las demás y a la gente que estaba adentro.
+  child.on("error", (err) => {
+    console.error(`${tag} no se pudo arrancar el dev server:`, err.message);
+  });
 
   const url = `http://localhost:${port}`;
 

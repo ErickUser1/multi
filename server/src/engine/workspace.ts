@@ -78,6 +78,11 @@ async function ensureGitignore(dir: string): Promise<void> {
     ".env.*",
     "*.log",
     "",
+    "# Temporales de la escritura atómica (file-mutation.ts: temp + rename). Si el",
+    "# proceso muere entre los dos pasos, queda uno tirado; sin esto entraría al",
+    "# commit del turno.",
+    "*.tmp-*",
+    "",
   ];
   await writeFile(path, lineas.join("\n"), "utf8");
 }

@@ -101,6 +101,33 @@ export async function failTurn(workspaceDir: string, turnId: string): Promise<vo
   await patchTurn(workspaceDir, turnId, { state: "failed", endedAt: Date.now() });
 }
 
+/**
+ * Cierra el turno como fallido PERO commitea lo que alcanzó a escribir.
+ *
+ * Un stream que se corta a media generación deja archivos completos en disco (la
+ * escritura es atómica: temp + rename), y sin commit quedan fuera del historial de
+ * la sala: nadie puede volver a ese punto ni ver qué se hizo. Se guardan como un
+ * punto más de la línea de tiempo, marcado como cortado.
+ *
+ * El turno sigue siendo `failed`: `state` dice CÓMO terminó y `commit` dice DÓNDE
+ * quedó el trabajo. Son campos independientes a propósito.
+ */
+export async function failTurnConCommit(
+  workspaceDir: string,
+  turn: Turn,
+  opts: { summary?: string } = {},
+): Promise<string | null> {
+  const message = opts.summary?.trim() || turn.task.slice(0, 72);
+  const hash = await commitAll(workspaceDir, { message, author: turn.agentId });
+
+  await patchTurn(workspaceDir, turn.id, {
+    state: "failed",
+    endedAt: Date.now(),
+    commit: hash ?? undefined,
+  });
+  return hash;
+}
+
 async function patchTurn(workspaceDir: string, turnId: string, patch: Partial<Turn>): Promise<void> {
   const turns = await readTurns(workspaceDir);
   const t = turns.find((x) => x.id === turnId);

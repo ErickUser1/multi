@@ -26,14 +26,14 @@ import { setCredential, getCredential, clearCredential } from "./keys.js";
 import { makeProvider, esProviderId, PERFILES } from "./agent/providers/profiles.js";
 import { MAX_AGENTS_PER_ROOM, resumenDeOtros } from "./engine/agents.js";
 import { fileMutation } from "./engine/file-mutation.js";
-import { startTurn, commitTurn, failTurn } from "./engine/turns.js";
+import { startTurn, commitTurn, failTurnConCommit } from "./engine/turns.js";
 import { commitAll, discardChanges, diffCommit, revertTo, revertFile } from "./engine/git.js";
 import { getHistory, setBookmark } from "./engine/history.js";
 import { buildApiMap } from "./engine/api-map.js";
 import { handlePreviewRequest, handlePreviewUpgrade } from "./engine/proxy.js";
 import { isDockerAvailable, ensureImage, sweepOrphanContainers } from "./engine/container.js";
 import { runAgent } from "./agent/loop.js";
-import type { ModelProvider } from "./agent/providers/types.js";
+import type { ModelProvider, Message } from "./agent/providers/types.js";
 import { createDevMock } from "./agent/providers/mock-scenarios.js";
 
 const PORT = Number(process.env.PORT ?? 4000);
@@ -660,10 +660,22 @@ async function runAgentTurn(
     room.histories.set(agentId, history);
   }
 
+  /**
+   * El historial tal como va, espejado desde el loop.
+   *
+   * Si el turno LANZA, el array del loop se va con el stack (es una copia local).
+   * Sin esto el turno entero se perdia: el agente arrancaba de cero, releia el
+   * proyecto y podia reescribir lo que ya habia hecho.
+   */
+  let historialVivo: Message[] | null = null;
+
   try {
     const result = await runAgent({
       provider,
       workspaceDir: room.workspace.dir,
+      onProgreso: (msgs) => {
+        historialVivo = msgs;
+      },
       // Los comandos del agente corren en el contenedor de la sala (o local si
       // no hay Docker). El agente no distingue: es la misma tool.
       runner: await ensureRunner(room),
@@ -727,7 +739,29 @@ async function runAgentTurn(
     // puede levantar, el preview arranca solo y todos lo ven aparecer.
     void notifyPreviewWhenReady(room);
   } catch (err) {
-    await failTurn(room.workspace.dir, turn.id);
+    // El turno falló, pero lo que alcanzó a hacer NO se tira.
+    //
+    // Un stream que se corta a media generación deja archivos completos en disco
+    // (la escritura es atómica) y vueltas completas en el historial (el push del
+    // mensaje del assistant ocurre DESPUÉS del catch del loop, así que cada
+    // tool_use quedó emparejado con su tool_result). Sin esto, el agente volvía a
+    // empezar de cero: releía el proyecto entero y reescribía lo mismo.
+    const rescatado = historialVivo as Message[] | null;
+    const hayAlgoNuevo = rescatado !== null && rescatado.length > history.length;
+
+    if (hayAlgoNuevo) {
+      room.histories.set(agentId, rescatado!);
+      void getStorage().then((s) => s.saveAgentHistory(room.id, agentId, rescatado!));
+    }
+
+    // Se commitea igual, para que el trabajo aparezca en la línea de tiempo y se
+    // pueda volver a él. El turno sigue marcado como fallido: `state` dice cómo
+    // terminó, `commit` dice dónde quedó lo hecho.
+    const hash = await failTurnConCommit(room.workspace.dir, turn, {
+      summary: `${turn.task.slice(0, 60)} (se cortó)`,
+    });
+    if (hash) io.to(room.id).emit("history:new", { hash, agentId, message: turn.task });
+
     // El error crudo del proveedor no le sirve a nadie en la sala: se traduce a
     // qué pasó y qué hacer. El detalle técnico va al log del server.
     console.error(`[sala ${room.id}] turno de ${agent.name} falló:`, err);

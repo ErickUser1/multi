@@ -194,7 +194,23 @@ export function resumenDeOtros(
    */
   ultimoMensaje?: Map<string, string>,
 ): string | null {
-  const otros = registro.list().filter((a) => a.id !== yo && a.state !== "idle");
+  /**
+   * Los que están trabajando MÁS los que acaban de terminar dejando rastro.
+   *
+   * Un agente pasa a `idle` en cuanto cierra su turno, así que filtrar por estado
+   * lo hacía desaparecer del resumen al segundo de haber hecho justo lo que el
+   * siguiente necesita saber. Pasó de verdad: uno construyó el nivel de un juego,
+   * terminó, y a los pocos minutos otro empezó a construir su propia versión.
+   *
+   * Quién filtra ahora es el tiempo, no el estado: `archivos` ya viene acotado a
+   * los últimos dos minutos (`trabajoRecienteDeOtros`), así que un agente que
+   * terminó hace rato desaparece solo. Para lo que quede fuera de esa ventana
+   * está `git log`, que guarda quién hizo qué en cada turno.
+   */
+  const otros = registro
+    .list()
+    .filter((a) => a.id !== yo)
+    .filter((a) => a.state !== "idle" || archivos.some((f) => f.agentId === a.id));
   if (otros.length === 0) return null;
 
   const lineas = otros.map((a) => {
@@ -202,7 +218,10 @@ export function resumenDeOtros(
     const enVuelo = suyos.filter((f) => f.escribiendoAhora).map((f) => f.path);
     const tocados = suyos.filter((f) => !f.escribiendoAhora).map((f) => f.path);
 
-    const partes = [`${a.name}: ${a.task ?? "trabajando"}`];
+    // Terminado vs trabajando cambia qué hacer: lo del que sigue adentro se
+    // respeta, lo del que ya salió se puede usar sin esperar a nadie.
+    const estado = a.state === "idle" ? " (ya terminó)" : "";
+    const partes = [`${a.name}${estado}: ${a.task ?? "trabajando"}`];
     if (enVuelo.length) partes.push(`  escribiendo ahora: ${enVuelo.join(", ")}`);
     if (tocados.length) partes.push(`  ya tocó: ${tocados.slice(0, 8).join(", ")}`);
 
@@ -213,14 +232,17 @@ export function resumenDeOtros(
 
   return [
     "<otros_agentes>",
-    "Ahora mismo hay más agentes trabajando en este proyecto:",
+    "Otros agentes están trabajando en este proyecto, o acaban de trabajar en él:",
     "",
     ...lineas,
     "",
-    "No rehagas lo que otro ya está haciendo. Si alguien está montando el proyecto,",
-    "espera a que termine o trabaja en otra parte. Un archivo que otro está",
-    "escribiendo en este momento: déjalo. Uno que ya soltó: léelo antes de tocarlo,",
-    "porque cambió desde la última vez que lo viste.",
+    "No rehagas lo que otro ya hizo ni lo que está haciendo. Si alguien está montando",
+    "el proyecto, espera a que termine o trabaja en otra parte. Un archivo que otro",
+    "está escribiendo en este momento: déjalo. Uno que ya soltó: léelo antes de",
+    "tocarlo, porque cambió desde la última vez que lo viste.",
+    "",
+    "Esto cubre los últimos minutos. Si lo que te piden pudo hacerse antes, `git log`",
+    "dice qué hizo cada agente en cada turno.",
     "</otros_agentes>",
   ].join("\n");
 }

@@ -66,9 +66,12 @@ function main() {
     ]);
     check("marca el archivo en vuelo", !!r?.includes("escribiendo ahora: src/Nav.tsx"), r ?? "");
     check("y el que ya soltó", !!r?.includes("ya tocó: src/App.tsx"), r ?? "");
+    // Sin saltos de línea: el texto se envuelve a 80 columnas y una frase puede
+    // quedar partida en dos líneas.
+    const seguido = r?.replace(/\s+/g, " ") ?? "";
     check(
       "explica qué hacer con cada uno",
-      !!r?.includes("déjalo") && !!r?.includes("léelo antes de tocarlo"),
+      seguido.includes("déjalo") && seguido.includes("léelo antes de tocarlo"),
     );
   }
 
@@ -93,7 +96,7 @@ function main() {
     check("se marca como algo que dijo", !!r?.includes('dijo: "'), r ?? "");
   }
 
-  console.log("\n5. Los que terminaron no estorban");
+  console.log("\n5. Los que terminaron SIN dejar rastro no estorban");
   {
     const reg = new AgentRegistry();
     const a1 = reg.spawn("ya terminé")!;
@@ -101,10 +104,45 @@ function main() {
     reg.finish(a1.id);
 
     const r = resumenDeOtros(reg, a2.id, []);
-    check("no se menciona a un agente libre", r === null, r ?? "");
+    check("no se menciona a un agente libre y sin archivos", r === null, r ?? "");
   }
 
-  console.log("\n6. No se cuenta a sí mismo");
+  console.log("\n6. Pero el que terminó Y dejó archivos SÍ se cuenta");
+  {
+    // El bug: un agente pasa a idle en cuanto cierra su turno, así que filtrar
+    // por estado lo borraba del resumen justo después de hacer lo que el
+    // siguiente necesita saber. Visto de verdad: uno construyó el nivel de un
+    // juego, terminó, y minutos después otro empezó su propia versión.
+    const reg = new AgentRegistry();
+    const a1 = reg.spawn("haz el nivel 1")!;
+    const a2 = reg.spawn("conecta el menú")!;
+    reg.finish(a1.id);
+
+    const r = resumenDeOtros(reg, a2.id, [
+      { agentId: a1.id, path: "src/game/Game.tsx", escribiendoAhora: false },
+      { agentId: a1.id, path: "src/game/engine.ts", escribiendoAhora: false },
+    ]);
+
+    check("aparece aunque ya no esté trabajando", r !== null);
+    check("con los archivos que dejó", !!r?.includes("src/game/Game.tsx"), r ?? "");
+    check("y se distingue que ya terminó", !!r?.includes("ya terminó"), r ?? "");
+  }
+
+  console.log("\n7. Los archivos siguen mandando: sin rastro reciente, nadie aparece");
+  {
+    // La ventana de tiempo es la que filtra ahora, no el estado. Si el agente
+    // terminó hace rato, `trabajoRecienteDeOtros` ya no devuelve sus archivos y
+    // desaparece solo — para eso está `git log`, que sí guarda todo.
+    const reg = new AgentRegistry();
+    const a1 = reg.spawn("algo de hace rato")!;
+    const a2 = reg.spawn("lo de ahora")!;
+    reg.finish(a1.id);
+
+    const r = resumenDeOtros(reg, a2.id, []);
+    check("fuera de la ventana no se acumula", r === null, r ?? "");
+  }
+
+  console.log("\n8. No se cuenta a sí mismo");
   {
     const reg = new AgentRegistry();
     const a1 = reg.spawn("lo mío")!;

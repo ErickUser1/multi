@@ -840,7 +840,15 @@ async function notifyPreviewWhenReady(room: Room): Promise<void> {
     // como una pantalla muerta.
     io.to(room.id).emit("preview:arrancando", { etapa });
   });
-  if (url) io.to(room.id).emit("preview:ready", { previewUrl: url });
+  if (url) {
+    io.to(room.id).emit("preview:ready", { previewUrl: url });
+    return;
+  }
+
+  // Sin URL: o la sala sigue vacía (normal, no hay nada que levantar) o el
+  // arranque falló. En ambos casos hay que avisar, porque quien vio una etapa se
+  // quedaría con el spinner girando para siempre esperando un ready que no llega.
+  io.to(room.id).emit("preview:sin-arranque");
 }
 
 // ── Arranque ────────────────────────────────────────────────────────────────

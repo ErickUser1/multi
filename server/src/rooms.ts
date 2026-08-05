@@ -168,6 +168,10 @@ export async function loadRoomIndex(): Promise<number> {
  * Una sala recién creada está vacía: no hay nada que levantar, y eso es normal
  * (el agente todavía no scaffoldea). No es error ni espera indefinida — el
  * preview arranca solo cuando aparezca algo, vía `maybeStartPreview`.
+ *
+ * Esto NO emite nada por el socket, a propósito: corre al despertar la sala,
+ * cuando todavía no hay nadie conectado a quien avisar. Quien entre después
+ * recibe la URL en el `joined`; ese es el canal para este caso.
  */
 async function bootPreview(room: Room): Promise<void> {
   try {

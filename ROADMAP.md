@@ -44,6 +44,47 @@ nothing to copy.
 
 ---
 
+## Done: a cut-off turn keeps what it already did
+
+**The bug, seen in a real session:** an agent failed three times in a row with
+*"the model's response was cut off mid-write"*. Each attempt re-read the whole
+project from scratch. Typing `@agente continua` didn't help. As far as the agent
+was concerned, that turn never happened.
+
+**The cause:** `runAgent` makes a *copy* of the history it receives, so the whole
+turn grows in a local array. The success path and the interrupt path both return
+it; the error path threw and the array went with the stack.
+
+**What shipped:** an `onProgreso` callback that mirrors the array out before every
+`throw` and on every normal exit, so the caller always has the latest version
+regardless of how the turn ended. On failure the server now saves that history, and
+commits whatever the agent wrote as a point on the room's timeline (marked as cut
+off) instead of leaving it uncommitted and invisible.
+
+Two details worth keeping if you touch this:
+
+**The rescued history is already valid.** The `throw` in the loop happens *before*
+the assistant message is pushed, so what survives are complete rounds with every
+`tool_use` paired to its `tool_result`, the invariant the API requires. Nothing
+needs sanitizing; a partial save done wrong would break the *next* turn.
+
+**The turn stays `failed`.** `state` and `commit` are independent fields on `Turn`,
+so a turn can be marked failed and still carry its hash: `state` says how it ended,
+`commit` says where the work landed.
+
+Covered by `demo:turno-cortado` (12/12), with a scripted fake provider. No network,
+no API key.
+
+**On the messages you type while it's down:** `dispatchAgent` already coalesces
+anything that arrives *while the agent is running* into a single turn
+(`pending.join("\n\n")`), and re-queues it on failure so nothing is silently
+dropped. What it can't group is a message typed after the turn already failed and
+the agent went idle: that starts a fresh turn. With the history now surviving, that
+matters much less than it used to, since the fresh turn opens with everything the
+cut-off one had done.
+
+---
+
 ## Considered and rejected: a shared task list
 
 Claude Code's agent teams coordinate through a shared task list plus a mailbox:

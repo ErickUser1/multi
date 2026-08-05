@@ -29,7 +29,8 @@
     "demo:agentes-se-ven": "npm run demo:agentes-se-ven -w server",
     "demo:providers": "npm run demo:providers -w server",
     "dev:test": "npm run dev:test -w server",
-    "demo:presupuesto": "npm run demo:presupuesto -w server"
+    "demo:presupuesto": "npm run demo:presupuesto -w server",
+    "demo:turno-cortado": "npm run demo:turno-cortado -w server"
   },
   "engines": {
     "node": ">=22"

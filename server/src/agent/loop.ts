@@ -141,6 +141,18 @@ export async function runAgent(opts: {
   onWaitEnd?: () => void;
   /** Dónde corren los comandos de bash. Sin esto, corren en la máquina del server. */
   runner?: ToolContext["runner"];
+  /**
+   * El historial tal como va, para que sobreviva si el turno LANZA.
+   *
+   * `messages` es una copia local (ver abajo), así que un error deja el array
+   * inalcanzable desde fuera: se va con el stack. Sin esto, un stream cortado
+   * borraba todo el turno y el agente arrancaba de cero, releyendo el proyecto y
+   * reescribiendo lo que ya había hecho.
+   *
+   * Se llama antes de cada `throw` y en cada salida normal, así que quien lo
+   * reciba siempre tiene la última versión sin importar cómo terminó el turno.
+   */
+  onProgreso?: (messages: Message[]) => void;
 }): Promise<RunResult> {
   const { provider, workspaceDir, userMessage, model, maxTokens, callbacks = {}, signal } = opts;
 
@@ -182,8 +194,14 @@ export async function runAgent(opts: {
       // de arriba, y el agente respondía "no tengo el contexto de la
       // conversación anterior" — rompiendo la premisa de interrumpir sin miedo.
       if (signal?.aborted) {
+        opts.onProgreso?.(messages);
         return { finalText, turns: turn, messages, interrumpido: true };
       }
+      // El array es local: si se va con el stack, el turno entero se pierde.
+      // Aquí está consistente — el push del mensaje del assistant viene DESPUÉS
+      // de este catch, así que lo que queda son vueltas completas con cada
+      // tool_use emparejado con su tool_result.
+      opts.onProgreso?.(messages);
       throw err;
     }
 
@@ -195,6 +213,7 @@ export async function runAgent(opts: {
 
     if (end.stopReason !== "tool_use") {
       // end_turn / max_tokens / etc. → terminó.
+      opts.onProgreso?.(messages);
       return { finalText, turns: turn + 1, messages };
     }
 
@@ -217,11 +236,13 @@ export async function runAgent(opts: {
     // Interrumpido mientras corrían las tools: se cierra aquí, con el historial
     // ya consistente.
     if (signal?.aborted) {
+      opts.onProgreso?.(messages);
       return { finalText, turns: turn + 1, messages, interrumpido: true };
     }
   }
 
   // Se acabaron los turnos.
+  opts.onProgreso?.(messages);
   return { finalText: finalText || "(el agente alcanzó el límite de turnos)", turns: turn, messages };
 }
 

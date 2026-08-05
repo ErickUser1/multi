@@ -265,7 +265,12 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
       // El chat que ya existía en la sala (sobrevivió al reinicio).
       if (p.messages?.length) setMessages(p.messages);
       // Llegaste mientras se levantaba: el evento de etapa ya pasó.
-      if (p.previewArrancando) setArrancando("servidor");
+      //
+      // Solo si NO hay preview todavía. El arranque puede haber terminado antes
+      // de que entraras (la sala se despierta sola al primer request), y entonces
+      // el `preview:ready` ya pasó y no vuelve: sin esta condición el spinner se
+      // quedaba girando encima de un preview que sí existía.
+      if (p.previewArrancando && !p.previewUrl) setArrancando("servidor");
     });
     socket.on("presence", ({ members }: { members: Member[] }) => setMembers(members));
     socket.on("preview:ready", () => {
@@ -275,6 +280,10 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
     socket.on("preview:arrancando", ({ etapa }: { etapa: "contenedor" | "dependencias" | "servidor" }) =>
       setArrancando(etapa),
     );
+    // El arranque terminó sin preview: la sala sigue vacía o algo falló. Se quita
+    // el spinner y vuelve el mensaje de "pídele a un agente que arranque el
+    // proyecto", que es lo accionable.
+    socket.on("preview:sin-arranque", () => setArrancando(null));
     socket.on("agents", ({ agents }: { agents: Agent[] }) => setAgents(agents));
     // Hay un punto nuevo en la línea de tiempo (commit, revert o bookmark).
     socket.on("history:new", () => setHistVersion((v) => v + 1));

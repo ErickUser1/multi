@@ -138,6 +138,37 @@ body::after {
   flex-direction: column;
   border-right: 1px solid var(--linea);
   background: rgba(43, 46, 76, 0.5);
+  transition: width 0.22s ease, opacity 0.16s ease;
+}
+
+/* Colapsado: el preview se queda con toda la pantalla.
+   Se anima el ancho en vez de quitar el nodo para que el iframe NO se
+   desmonte: recargarlo costaría segundos y perdería el estado de la app. */
+.sala.chat-colapsado .chat {
+  width: 0;
+  opacity: 0;
+  overflow: hidden;
+  border-right: none;
+  pointer-events: none;
+}
+
+/* El botón de colapsar, primero en la barra. Discreto: es un control de vista,
+   no una acción de la sala. */
+.colapsar-btn {
+  background: none;
+  border: 1px solid var(--linea);
+  border-radius: 3px;
+  color: var(--dim);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  padding: 8px 10px;
+  flex-shrink: 0;
+  transition: color 0.15s, border-color 0.15s;
+}
+.colapsar-btn:hover {
+  color: var(--texto);
+  border-color: var(--dim);
 }
 
 .sala-cab {

@@ -59,6 +59,10 @@ const TEXTOS = {
     selecciono: "seleccionó",
     contraer: "contraer",
 
+    // Presentar
+    ocultarChat: "Ocultar el chat",
+    mostrarChat: "Mostrar el chat",
+
     // Pestañas
     laApp: "La app",
     elBack: "El back",
@@ -185,6 +189,10 @@ const TEXTOS = {
     seleccionarElemento: "Select element",
     selecciono: "selected",
     contraer: "collapse",
+
+    // Presentar
+    ocultarChat: "Hide the chat",
+    mostrarChat: "Show the chat",
 
     // Pestañas
     laApp: "The app",

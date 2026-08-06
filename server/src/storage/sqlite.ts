@@ -39,6 +39,7 @@ export class SqliteStorage implements Storage {
         role        TEXT NOT NULL,
         text        TEXT NOT NULL,
         anchored_to TEXT,
+        adjuntos    TEXT,
         created_at  INTEGER NOT NULL
       );
       CREATE INDEX IF NOT EXISTS messages_room_idx ON messages(room_id, id);
@@ -51,6 +52,16 @@ export class SqliteStorage implements Storage {
         PRIMARY KEY (room_id, agent_id)
       );
     `);
+
+    // Las salas que ya existían tienen la tabla sin la columna de adjuntos: el
+    // CREATE de arriba no las toca porque lleva IF NOT EXISTS. Agregarla a mano
+    // y tragarse el error si ya está es la forma barata de migrar sin llevar
+    // versiones de esquema, que para una columna nueva sería desproporcionado.
+    try {
+      this.db.exec(`ALTER TABLE messages ADD COLUMN adjuntos TEXT`);
+    } catch {
+      // ya la tiene
+    }
   }
 
   async createRoom(room: StoredRoom): Promise<void> {
@@ -83,10 +94,19 @@ export class SqliteStorage implements Storage {
   async appendMessage(m: StoredMessage): Promise<void> {
     this.db
       .prepare(
-        `INSERT INTO messages (room_id, author, color, role, text, anchored_to, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO messages (room_id, author, color, role, text, anchored_to, adjuntos, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(m.roomId, m.author, m.color, m.role, m.text, m.anchoredTo ?? null, m.createdAt);
+      .run(
+        m.roomId,
+        m.author,
+        m.color,
+        m.role,
+        m.text,
+        m.anchoredTo ?? null,
+        m.adjuntos?.length ? JSON.stringify(m.adjuntos) : null,
+        m.createdAt,
+      );
   }
 
   async getMessages(roomId: string, limit = 200): Promise<StoredMessage[]> {
@@ -104,6 +124,7 @@ export class SqliteStorage implements Storage {
       role: String(r.role) as StoredMessage["role"],
       text: String(r.text),
       anchoredTo: r.anchored_to ? String(r.anchored_to) : undefined,
+      adjuntos: parseAdjuntos(r.adjuntos),
       createdAt: Number(r.created_at),
     }));
   }
@@ -140,6 +161,24 @@ export class SqliteStorage implements Storage {
 
   async close(): Promise<void> {
     this.db.close();
+  }
+}
+
+/**
+ * Los adjuntos de un mensaje, desde la columna.
+ *
+ * Llega null en todo lo anterior a esta columna, que son las 44 salas que ya
+ * existían. Un JSON corrupto tampoco debe tumbar la carga del chat: si no se
+ * puede leer, el mensaje se muestra sin sus imágenes, que es mejor que no
+ * mostrar el mensaje.
+ */
+function parseAdjuntos(v: unknown): StoredMessage["adjuntos"] {
+  if (typeof v !== "string" || !v) return undefined;
+  try {
+    const parsed = JSON.parse(v);
+    return Array.isArray(parsed) && parsed.length ? parsed : undefined;
+  } catch {
+    return undefined;
   }
 }
 

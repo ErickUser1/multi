@@ -42,6 +42,12 @@ sin saber por qué. Si algo no salió como esperabas, arréglalo antes de seguir
 Cuando vayas a llamar varias tools y no dependan entre sí, llámalas en paralelo en vez
 de una tras otra: leer tres archivos son tres llamadas simultáneas. Si una necesita el
 resultado de otra, encadénalas.
+
+Si alguien adjuntó una imagen y la vas a usar en la app, cópiala primero con
+usar_adjunto al lugar que le toque en tu stack (public/ en Vite y Next, src/assets/ en
+Astro) y refiérete a ella desde ahí. Las imágenes del chat viven fuera del proyecto:
+sin copiarlas, la ruta no existe para la app y el navegador no las encuentra. Y no
+intentes leerlas con read_file, que lee texto.
 </uso_de_tools>
 
 <sala_vacia>
@@ -139,6 +145,16 @@ export async function runAgent(opts: {
   messages: Message[];
   /** El mensaje nuevo del usuario que dispara este turno. */
   userMessage: string;
+  /**
+   * Las imágenes que venían con ese mensaje, si el proveedor puede verlas.
+   *
+   * Van SOLO en el turno que las trajo. El historial se reenvía completo en cada
+   * llamada, así que una imagen que se quedara aquí se pagaría en todos los
+   * turnos siguientes. Lo que sí sobrevive es la ruta dentro del texto, que
+   * cuesta unas pocas decenas de tokens y es lo que el agente necesita para
+   * volver a usarla.
+   */
+  imagenes?: Extract<ContentBlock, { type: "image" }>[];
   model?: string;
   maxTokens?: number;
   callbacks?: AgentCallbacks;
@@ -167,7 +183,12 @@ export async function runAgent(opts: {
 
   const messages: Message[] = [
     ...opts.messages,
-    { role: "user", content: [{ type: "text", text: userMessage }] },
+    {
+      role: "user",
+      // Las imágenes primero: las dos APIs recomiendan que el modelo vea antes
+      // de leer la pregunta.
+      content: [...(opts.imagenes ?? []), { type: "text", text: userMessage }],
+    },
   ];
 
   const toolCtx: ToolContext = {

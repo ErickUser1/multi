@@ -1,8 +1,22 @@
 import { createServer } from "node:http";
+import { mkdir, rm } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { randomUUID } from "node:crypto";
 import { AnthropicProvider } from "../agent/providers/anthropic.js";
 import { OpenAICompatProvider } from "../agent/providers/openai-compat.js";
 import { proveedorVe } from "../agent/providers/profiles.js";
 import type { Message } from "../agent/providers/types.js";
+import {
+  guardarAdjunto,
+  leerAdjunto,
+  adjuntosDir,
+  AdjuntoInvalido,
+  type Adjunto,
+} from "../engine/adjuntos.js";
+import { usarAdjuntoTool } from "../agent/tools/adjuntos.js";
+import type { ToolContext, ToolEvent } from "../agent/tools/base.js";
 
 /**
  * Demo: una imagen del chat llega al modelo en el formato que cada API espera.
@@ -211,6 +225,128 @@ async function main(): Promise<void> {
     "openrouter no ve (mezcla modelos que ven y que no)",
     proveedorVe("openrouter") === false,
   );
+
+  // ── 5. Guardar y leer del disco ───────────────────────────────────────────
+  console.log("\nGuardado (fuera del proyecto):");
+  const raiz = join(tmpdir(), `multi-adjuntos-${randomUUID()}`);
+  const ws = join(raiz, "sala-demo");
+  await mkdir(ws, { recursive: true });
+  let guardado: Adjunto | null = null;
+  {
+    guardado = await guardarAdjunto(ws, {
+      nombre: "logo.png",
+      mediaType: "image/png",
+      data: PNG_1X1,
+    });
+
+    check("guarda y devuelve un id", !!guardado.id);
+    check("conserva el nombre para mostrarlo", guardado.nombre === "logo.png");
+    check(
+      "el archivo cae FUERA del workspace",
+      existsSync(join(adjuntosDir(ws), guardado.id)) && !existsSync(join(ws, guardado.id)),
+    );
+    check(
+      "el nombre en disco no viene de quien lo subió",
+      guardado.id !== "logo.png" && guardado.id.endsWith(".png"),
+      `→ ${guardado.id}`,
+    );
+
+    const leido = await leerAdjunto(ws, guardado.id);
+    check("se puede leer de vuelta en base64", leido?.data === PNG_1X1);
+
+    check("un id que no existe devuelve null", (await leerAdjunto(ws, "noexiste.png")) === null);
+    check(
+      "no se puede salir del directorio con ..",
+      (await leerAdjunto(ws, "../../../etc/passwd")) === null,
+    );
+  }
+
+  console.log("\nLo que no se acepta:");
+  {
+    const rechaza = async (que: string, entrada: Parameters<typeof guardarAdjunto>[1]) => {
+      try {
+        await guardarAdjunto(ws, entrada);
+        check(que, false, "→ lo aceptó");
+      } catch (err) {
+        check(que, err instanceof AdjuntoInvalido, `→ ${String(err)}`);
+      }
+    };
+
+    await rechaza("un PDF disfrazado de imagen", {
+      nombre: "x.pdf",
+      mediaType: "application/pdf",
+      data: PNG_1X1,
+    });
+    await rechaza("un SVG (puede traer scripts)", {
+      nombre: "x.svg",
+      mediaType: "image/svg+xml",
+      data: PNG_1X1,
+    });
+    await rechaza("una imagen sin datos", {
+      nombre: "x.png",
+      mediaType: "image/png",
+      data: "",
+    });
+    await rechaza("algo que pesa más de 2MB", {
+      nombre: "grande.png",
+      mediaType: "image/png",
+      data: Buffer.alloc(3 * 1024 * 1024).toString("base64"),
+    });
+  }
+
+  // ── 6. La tool que la mete al proyecto ────────────────────────────────────
+  console.log("\nusar_adjunto (la puerta al proyecto):");
+  {
+    const ctx = { workspaceDir: ws } as ToolContext;
+    let emitido: ToolEvent | null = null;
+    const ctxConEmit = {
+      ...ctx,
+      emit: (e: ToolEvent) => {
+        emitido = e;
+      },
+    };
+
+    const res = await usarAdjuntoTool.run(
+      { adjunto: guardado!.id, destino: "public/logo.png" },
+      ctxConEmit,
+    );
+    check("copia el archivo al workspace", existsSync(join(ws, "public", "logo.png")));
+    check("crea las carpetas que falten", res.includes("public/logo.png"));
+    check(
+      "avisa que el archivo cambió, para que el preview lo recoja",
+      (emitido as ToolEvent | null)?.type === "file:changed",
+    );
+
+    const escapa = async (destino: string) => {
+      try {
+        await usarAdjuntoTool.run({ adjunto: guardado!.id, destino }, ctx);
+        return false;
+      } catch {
+        return true;
+      }
+    };
+    check("no deja escribir fuera del workspace con ..", await escapa("../../fuera.png"));
+    check("no deja rutas absolutas", await escapa("/tmp/fuera.png"));
+
+    // El agente normalmente escribe el nombre que ve en el chat, no el id.
+    await usarAdjuntoTool.run({ adjunto: "logo.png", destino: "assets/logo.png" }, ctx);
+    check("también lo encuentra por su nombre", existsSync(join(ws, "assets", "logo.png")));
+
+    let mensaje = "";
+    try {
+      await usarAdjuntoTool.run({ adjunto: "noexiste.png", destino: "public/x.png" }, ctx);
+    } catch (err) {
+      mensaje = String(err);
+    }
+    check(
+      "un nombre que no existe NO cae en la única imagen que hay",
+      mensaje.length > 0 && !existsSync(join(ws, "public", "x.png")),
+      "→ copió la que no era",
+    );
+    check("y el error dice cuáles hay", mensaje.includes("logo.png"));
+  }
+
+  await rm(raiz, { recursive: true, force: true });
 
   console.log(`\n${pass} bien, ${fail} mal\n`);
   process.exit(fail === 0 ? 0 : 1);

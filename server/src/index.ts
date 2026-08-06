@@ -23,7 +23,16 @@ import {
 } from "./rooms.js";
 import { getStorage } from "./storage/index.js";
 import { setCredential, getCredential, clearCredential } from "./keys.js";
-import { makeProvider, esProviderId, PERFILES } from "./agent/providers/profiles.js";
+import { makeProvider, esProviderId, PERFILES, proveedorVe } from "./agent/providers/profiles.js";
+import {
+  guardarAdjunto,
+  leerAdjunto,
+  rutaAdjunto,
+  mediaTypeDe,
+  AdjuntoInvalido,
+  MAX_POR_MENSAJE,
+  type Adjunto,
+} from "./engine/adjuntos.js";
 import { MAX_AGENTS_PER_ROOM, resumenDeOtros } from "./engine/agents.js";
 import { fileMutation } from "./engine/file-mutation.js";
 import { startTurn, commitTurn, failTurnConCommit } from "./engine/turns.js";
@@ -33,7 +42,7 @@ import { buildApiMap } from "./engine/api-map.js";
 import { handlePreviewRequest, handlePreviewUpgrade } from "./engine/proxy.js";
 import { isDockerAvailable, ensureImage, sweepOrphanContainers } from "./engine/container.js";
 import { runAgent } from "./agent/loop.js";
-import type { ModelProvider, Message } from "./agent/providers/types.js";
+import type { ModelProvider, Message, ContentBlock } from "./agent/providers/types.js";
 import { createDevMock } from "./agent/providers/mock-scenarios.js";
 
 const PORT = Number(process.env.PORT ?? 4000);
@@ -46,6 +55,17 @@ await fastify.register(cors, { origin: WEB_ORIGIN, credentials: true });
 
 const io = new SocketServer(fastify.server, {
   cors: { origin: WEB_ORIGIN, methods: ["GET", "POST"], credentials: true },
+  /**
+   * El tope por mensaje. Por defecto socket.io trae 1MB, y lo peor de pasarse no
+   * es el rechazo: es que el mensaje se descarta SIN AVISO, así que desde la sala
+   * parece que le diste a enviar y no pasó nada.
+   *
+   * Con imágenes eso se alcanza rápido. El navegador las reduce a 1568px antes de
+   * mandarlas (web/src/imagenes.ts), pero cuatro adjuntos más el texto se acercan
+   * al megabyte. 8MB deja margen de sobra sin abrir la puerta a que alguien mande
+   * un archivo enorme: el tope real por imagen lo pone `guardarAdjunto`, en 2MB.
+   */
+  maxHttpBufferSize: 8e6,
 });
 
 fastify.addHook("preClose", (done) => {
@@ -208,6 +228,31 @@ fastify.get<{ Params: { id: string; hash: string } }>(
   },
 );
 
+// Las imágenes que la gente pegó en el chat. El front las pinta con esta URL en
+// vez de meter el base64 en el DOM: así el navegador las cachea y el historial
+// de la sala no carga megas de data URIs al entrar.
+fastify.get<{ Params: { id: string; adjuntoId: string } }>(
+  "/rooms/:id/adjuntos/:adjuntoId",
+  async (req, reply) => {
+    const room = getRoom(req.params.id) ?? (await wakeRoom(req.params.id));
+    if (!room) return reply.code(404).send({ error: "sala no encontrada" });
+
+    // El id se comprueba contra lo que hay en el directorio de ESTA sala, así
+    // que no hay forma de pedir el adjunto de otra ni de salirse con "..".
+    const ruta = await rutaAdjunto(room.workspace.dir, req.params.adjuntoId);
+    if (!ruta) return reply.code(404).send({ error: "adjunto no encontrado" });
+
+    const mediaType = mediaTypeDe(req.params.adjuntoId);
+    if (!mediaType) return reply.code(404).send({ error: "adjunto no encontrado" });
+
+    return reply
+      .header("content-type", mediaType)
+      // Inmutable: el id es un UUID, nunca cambia de contenido.
+      .header("cache-control", "public, max-age=31536000, immutable")
+      .send(await readFile(ruta));
+  },
+);
+
 // Info de una sala (para saber la URL del preview al entrar).
 fastify.get<{ Params: { id: string } }>("/rooms/:id", async (req, reply) => {
   const room = getRoom(req.params.id);
@@ -272,6 +317,19 @@ function providerFor(socketId: string): ModelProvider | null {
   }
 }
 
+/**
+ * Si el proveedor de ESTA persona puede ver imágenes.
+ *
+ * Sale de la credencial, no del `name` del proveedor construido: ese es la
+ * etiqueta que se enseña ("OpenAI", "Ollama (local)"), y todos los de formato
+ * OpenAI comparten cliente. El id de verdad solo lo tiene la credencial.
+ */
+function vePorSocket(socketId: string): boolean {
+  if (TEST_MOCK) return true; // el mock acepta lo que le manden
+  const cred = getCredential(socketId) ?? FALLBACK;
+  return cred ? proveedorVe(cred.provider) : false;
+}
+
 // ── Socket.IO ─────────────────────────────────────────────────────────────
 
 io.on("connection", (socket) => {
@@ -307,6 +365,7 @@ io.on("connection", (socket) => {
         role: m.role,
         text: m.text,
         anchoredTo: m.anchoredTo,
+        adjuntos: m.adjuntos,
       })),
     });
     // Avisar a los demás de la nueva presencia.
@@ -318,19 +377,58 @@ io.on("connection", (socket) => {
 
   // Mensaje de chat → lo retransmite y dispara al agente.
   // `anchor` (opcional) es la selección LOCAL del que manda (cuidado 2).
-  socket.on("chat", async ({ text, anchor }: { text: string; anchor?: SelectedElement | null }) => {
+  socket.on(
+    "chat",
+    async ({
+      text,
+      anchor,
+      adjuntos: crudos,
+    }: {
+      text: string;
+      anchor?: SelectedElement | null;
+      adjuntos?: { nombre?: unknown; mediaType?: unknown; data?: unknown }[];
+    }) => {
     const room = joinedRoom;
-    if (!room || !text?.trim()) return;
+    const hayAdjuntos = Array.isArray(crudos) && crudos.length > 0;
+    // Mandar solo una imagen, sin escribir nada, es un mensaje legítimo.
+    if (!room || (!text?.trim() && !hayAdjuntos)) return;
     const member = room.members.get(socket.id);
     if (!member) return;
 
+    // 0) Guardar las imágenes antes de nada: tienen que existir en disco para
+    //    poder verse en el chat y sobrevivir a un reinicio del server.
+    let adjuntos: Adjunto[] = [];
+    if (hayAdjuntos) {
+      if (crudos!.length > MAX_POR_MENSAJE) {
+        socket.emit("error:adjunto", {
+          message: `máximo ${MAX_POR_MENSAJE} imágenes por mensaje`,
+        });
+        return;
+      }
+      try {
+        adjuntos = await Promise.all(
+          crudos!.map((a) => guardarAdjunto(room.workspace.dir, a)),
+        );
+      } catch (err) {
+        // Solo a quien la mandó: que su imagen no sirva no es asunto de la sala.
+        socket.emit("error:adjunto", {
+          message:
+            err instanceof AdjuntoInvalido ? err.message : "no se pudo guardar la imagen",
+        });
+        return;
+      }
+    }
+
     // 1) Eco del mensaje humano a toda la sala (con marca de anclaje si aplica).
+    //    Esto pasa SIEMPRE, sea plática o sea orden: las imágenes se ven aunque
+    //    ningún agente despierte.
     void say(room, {
       from: member.name,
       color: member.color,
       role: "human",
       text,
       anchoredTo: anchor ? anchor.path : undefined,
+      adjuntos: adjuntos.length ? adjuntos : undefined,
     });
 
     // 2) ¿Es plática o una orden? El agente solo despierta si lo llaman.
@@ -350,6 +448,34 @@ io.on("connection", (socket) => {
 
     // Anclaje: prependemos el elemento como texto legible (cuidado 3).
     const withAnchor = (t: string) => (anchor ? `${anchorText(anchor)}\n\n${t}` : t);
+
+    // Los adjuntos se anuncian como texto SIEMPRE, vea o no vea el modelo. Con
+    // el nombre le basta para pedir `usar_adjunto` y meterlo en la app; verlo
+    // solo hace falta para hablar de lo que hay dentro de la imagen.
+    // El id va junto al nombre porque es lo que `usar_adjunto` resuelve sin
+    // ambigüedad. Con solo el nombre, dos capturas llamadas "imagen.png" serían
+    // indistinguibles y el agente copiaría la que no era.
+    const withAdjuntos = (t: string) =>
+      adjuntos.length
+        ? `${adjuntos
+            .map((a) => `[imagen adjunta: ${a.nombre} — usar_adjunto("${a.id}", …)]`)
+            .join("\n")}\n\n${t}`
+        : t;
+
+    // La imagen en sí solo viaja si el proveedor puede verla. Al que no ve
+    // mandársela es un 400 seguro, y el turno moriría por algo que no hacía
+    // falta para la tarea.
+    let imagenes: Extract<ContentBlock, { type: "image" }>[] = [];
+    if (adjuntos.length && vePorSocket(socket.id)) {
+      const leidas = await Promise.all(
+        adjuntos.map((a) => leerAdjunto(room.workspace.dir, a.id)),
+      );
+      imagenes = leidas
+        .filter((x): x is { data: string; mediaType: string } => x !== null)
+        .map((x) => ({ type: "image" as const, mediaType: x.mediaType, data: x.data }));
+    }
+
+    const prepara = (t: string) => withAdjuntos(withAnchor(t));
 
     if (intent.kind === "address") {
       // "@agente-2 ..." → join a ese agente (coalescing, no arranca otro loop).
@@ -377,7 +503,7 @@ io.on("connection", (socket) => {
         );
       }
 
-      void dispatchAgent(room, target.id, withAnchor(intent.task), provider);
+      void dispatchAgent(room, target.id, prepara(intent.task), provider, imagenes);
     } else {
       // "@agente ..." = quiero uno NUEVO, siempre. Es la forma de lanzar trabajo
       // en paralelo, y el menú lo ofrece con esas palabras ("lanzar otro").
@@ -395,7 +521,7 @@ io.on("connection", (socket) => {
         : undefined;
 
       if (libre) {
-        void dispatchAgent(room, libre.id, withAnchor(intent.task), provider);
+        void dispatchAgent(room, libre.id, prepara(intent.task), provider, imagenes);
       } else {
         const agent = room.agents.spawn(intent.task);
         if (!agent) {
@@ -408,7 +534,7 @@ io.on("connection", (socket) => {
         io.to(room.id).emit("agents", { agents: room.agents.list() });
         // Que quede claro que nació uno nuevo, en vez de que aparezca sin más.
         systemMsg(room, `entró ${agent.name} a la sala`, agent.color);
-        void dispatchAgent(room, agent.id, withAnchor(intent.task), provider);
+        void dispatchAgent(room, agent.id, prepara(intent.task), provider, imagenes);
       }
     }
 
@@ -565,7 +691,14 @@ io.on("connection", (socket) => {
 /** Emite un mensaje a la sala Y lo persiste, para que sobreviva al reinicio. */
 async function say(
   room: Room,
-  msg: { from: string; color: string; role: "human" | "agent" | "system"; text: string; anchoredTo?: string },
+  msg: {
+    from: string;
+    color: string;
+    role: "human" | "agent" | "system";
+    text: string;
+    anchoredTo?: string;
+    adjuntos?: Adjunto[];
+  },
 ): Promise<void> {
   io.to(room.id).emit("chat:message", msg);
   try {
@@ -577,6 +710,12 @@ async function say(
       role: msg.role,
       text: msg.text,
       anchoredTo: msg.anchoredTo,
+      // Solo lo que hace falta para pintarlas. El peso vive en disco.
+      adjuntos: msg.adjuntos?.map((a) => ({
+        id: a.id,
+        nombre: a.nombre,
+        mediaType: a.mediaType,
+      })),
       createdAt: Date.now(),
     });
     await storage.touchRoom(room.id);
@@ -593,6 +732,16 @@ function systemMsg(room: Room, text: string, color = "#a9abd0"): void {
 const pendingByAgent = new Map<string, string[]>();
 
 /**
+ * Las imágenes pendientes por agente, en paralelo a la cola de texto.
+ *
+ * Van aparte porque la cola de texto se une con join("\n\n") para el coalescing,
+ * y una imagen no se concatena. Si llegan dos mensajes con imagen antes de que
+ * el agente termine, el turno resultante las lleva todas, que es lo que espera
+ * quien las mandó.
+ */
+const pendingImagenes = new Map<string, Extract<ContentBlock, { type: "image" }>[]>();
+
+/**
  * Despacha trabajo a UN agente. El coordinador garantiza un solo drain activo
  * por agentId — pero agentes distintos corren EN PARALELO (esa es la clave).
  * Si el agente ya está corriendo, el mensaje se acumula y se atiende en UNA
@@ -603,11 +752,15 @@ async function dispatchAgent(
   agentId: string,
   userText: string,
   provider: ModelProvider,
+  imagenes: Extract<ContentBlock, { type: "image" }>[] = [],
 ): Promise<void> {
   const key = `${room.id}:${agentId}`;
   const queue = pendingByAgent.get(key) ?? [];
   queue.push(userText);
   pendingByAgent.set(key, queue);
+  if (imagenes.length) {
+    pendingImagenes.set(key, [...(pendingImagenes.get(key) ?? []), ...imagenes]);
+  }
 
   await room.coordinator.run(key, async (signal) => {
     // Si ya venía abortado, no se toca la cola: lo encolado es para el turno
@@ -619,9 +772,11 @@ async function dispatchAgent(
     if (pending.length === 0) return;
     // Coalescing: varios mensajes acumulados se atienden en un solo turno.
     const task = pending.join("\n\n");
+    const imgs = pendingImagenes.get(key) ?? [];
+    pendingImagenes.set(key, []);
 
     try {
-      await runAgentTurn(room, agentId, task, signal, provider);
+      await runAgentTurn(room, agentId, task, signal, provider, imgs);
     } catch (err) {
       // Si el turno se cortó, lo que se sacó de la cola NO se ejecutó: se
       // devuelve al frente para que lo atienda el turno siguiente.
@@ -632,6 +787,11 @@ async function dispatchAgent(
       // hubiera dicho nada.
       const ahora = pendingByAgent.get(key) ?? [];
       pendingByAgent.set(key, [...pending, ...ahora]);
+      // Las imágenes vuelven con su texto: si el mensaje se reintenta, la imagen
+      // que lo acompañaba tiene que ir con él.
+      if (imgs.length) {
+        pendingImagenes.set(key, [...imgs, ...(pendingImagenes.get(key) ?? [])]);
+      }
       throw err;
     }
   });
@@ -644,6 +804,7 @@ async function runAgentTurn(
   task: string,
   signal: AbortSignal,
   provider: ModelProvider,
+  imagenes: Extract<ContentBlock, { type: "image" }>[] = [],
 ): Promise<void> {
   const agent = room.agents.get(agentId);
   if (!agent) return;
@@ -683,6 +844,7 @@ async function runAgentTurn(
       // Qué están haciendo los demás, para que no repita su trabajo. Se calcula
       // AL EMPEZAR el turno: es una foto del momento, no una suscripción.
       userMessage: conContextoDeOtros(room, agentId, task),
+      imagenes,
       signal,
       agentId,
       callbacks: {

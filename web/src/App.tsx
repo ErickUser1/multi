@@ -219,6 +219,14 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
   /** Qué tab del escenario se ve. */
   const [tab, setTab] = useState<"app" | "back">("app");
   /**
+   * El chat colapsado deja el preview a pantalla completa.
+   *
+   * Para presentar: la gracia de Multi es ver el chat y la app a la vez, pero
+   * cuando enseñas el resultado el chat estorba. La barra de arriba se queda,
+   * asi que volver es un click.
+   */
+  const [chatColapsado, setChatColapsado] = useState(false);
+  /**
    * Mi API key. Se lee del navegador al montar: se configura UNA vez y sirve en
    * todas las salas. null = todavía no hay (puedes entrar y platicar igual).
    */
@@ -457,7 +465,7 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
   const copyLink = () => navigator.clipboard.writeText(window.location.href);
 
   return (
-    <div className="sala">
+    <div className={`sala ${chatColapsado ? "chat-colapsado" : ""}`}>
       {/* Chat izquierda */}
       <aside className="chat">
         <div className="sala-cab">
@@ -557,6 +565,14 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
       {/* Escenario derecha */}
       <section className="escenario" ref={escenarioRef}>
         <div className="barra-sup">
+          <button
+            className="colapsar-btn"
+            onClick={() => setChatColapsado((v) => !v)}
+            title={chatColapsado ? t.mostrarChat : t.ocultarChat}
+            aria-label={chatColapsado ? t.mostrarChat : t.ocultarChat}
+          >
+            {chatColapsado ? "⟩" : "⟨"}
+          </button>
           <button
             className={`inspect-btn ${inspect ? "on" : ""}`}
             onClick={() => setInspect((v) => !v)}

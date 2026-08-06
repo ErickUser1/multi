@@ -63,6 +63,11 @@ const TEXTOS = {
     ocultarChat: "Ocultar el chat",
     mostrarChat: "Mostrar el chat",
 
+    // Imágenes
+    quitarImagen: "quitar",
+    maxImagenes: (n: number) => `caben ${n} imágenes por mensaje`,
+    imagenNoSePudo: "no se pudo preparar la imagen",
+
     // Pestañas
     laApp: "La app",
     elBack: "El back",
@@ -193,6 +198,11 @@ const TEXTOS = {
     // Presentar
     ocultarChat: "Hide the chat",
     mostrarChat: "Show the chat",
+
+    // Imágenes
+    quitarImagen: "remove",
+    maxImagenes: (n: number) => `${n} images per message max`,
+    imagenNoSePudo: "couldn't prepare the image",
 
     // Pestañas
     laApp: "The app",

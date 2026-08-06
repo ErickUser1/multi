@@ -23,12 +23,22 @@ export interface Member {
   color: string;
 }
 
+/** Una imagen que alguien pegó en el chat, ya guardada en el server. */
+export interface Adjunto {
+  /** Con qué pedírsela al server. */
+  id: string;
+  /** Cómo se llamaba el archivo de quien lo subió. */
+  nombre: string;
+  mediaType: string;
+}
+
 export interface ChatMessage {
   from: string;
   color: string;
   role: "human" | "agent" | "system";
   text: string;
   anchoredTo?: string;
+  adjuntos?: Adjunto[];
 }
 
 /** Un agente de la sala, como jugador visible. */

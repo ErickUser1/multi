@@ -21,6 +21,10 @@ import { KeyPanel, loadStoredCredencial, type Credencial } from "./KeyPanel.js";
 import { useTextos } from "./i18n.js";
 import { MenuSalas } from "./MenuSalas.js";
 import { recordarSala } from "./historial-salas.js";
+import { prepararImagen, imagenesDe, type AdjuntoPendiente } from "./imagenes.js";
+
+/** Cuántas imágenes caben en un mensaje. El server aplica el mismo tope. */
+const MAX_ADJUNTOS = 4;
 
 // El roomId vive en el hash de la URL: #/sala/taco-fiesta-42
 function readRoomFromHash(): string | null {
@@ -236,6 +240,18 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
   /** Abrir el panel solo: pasa cuando intentas invocar sin key. */
   const [keyAbrir, setKeyAbrir] = useState(false);
 
+  /**
+   * Las imágenes que pegaste pero todavía no mandas.
+   *
+   * Se procesan al pegarlas, no al enviar: encogerlas tarda un momento y hacerlo
+   * al darle a Enter dejaría el mensaje colgado sin explicación.
+   */
+  const [pendientes, setPendientes] = useState<AdjuntoPendiente[]>([]);
+  /** Si algo salió mal con una imagen. Solo para quien la pegó. */
+  const [errorAdjunto, setErrorAdjunto] = useState<string | null>(null);
+  /** Arrastrando un archivo encima del chat. */
+  const [arrastrando, setArrastrando] = useState(false);
+
   // Modo inspect activo (para seleccionar elementos del preview).
   const [inspect, setInspect] = useState(false);
   // MI selección local (la que se ancla al mandar mensaje) — cuidado 2.
@@ -364,6 +380,12 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
     });
     socket.on("auth:ok", () => setKeyError(null));
 
+    // Solo a mí: mi imagen no se pudo guardar. El mensaje tampoco salió, así que
+    // hay que decirlo o parecería que se envió.
+    socket.on("error:adjunto", ({ message }: { message: string }) => {
+      setErrorAdjunto(message);
+    });
+
     return () => {
       socket.disconnect();
     };
@@ -414,12 +436,44 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
     return () => el.removeEventListener("mousemove", onMove);
   }, [previewReady]);
 
+  /**
+   * Suma imágenes a las que van a salir con el próximo mensaje.
+   *
+   * El tope de 4 no es capricho: cada imagen cuesta tokens y los paga quien
+   * invoque al agente. Cortar aquí es más honesto que dejar mandar diez y que la
+   * factura aparezca después.
+   */
+  const agregarImagenes = async (files: File[]) => {
+    if (files.length === 0) return;
+    setErrorAdjunto(null);
+    const sitio = MAX_ADJUNTOS - pendientes.length;
+    if (sitio <= 0) {
+      setErrorAdjunto(t.maxImagenes(MAX_ADJUNTOS));
+      return;
+    }
+    try {
+      const listas = await Promise.all(files.slice(0, sitio).map(prepararImagen));
+      setPendientes((prev) => [...prev, ...listas]);
+      if (files.length > sitio) setErrorAdjunto(t.maxImagenes(MAX_ADJUNTOS));
+    } catch (err) {
+      setErrorAdjunto(err instanceof Error ? err.message : t.imagenNoSePudo);
+    }
+  };
+
   const send = () => {
     const text = draft.trim();
-    if (!text) return;
+    // Mandar solo una imagen, sin escribir nada, es un mensaje legítimo.
+    if (!text && pendientes.length === 0) return;
     // Anclar MI selección local al mensaje (cuidado 2/3/4).
-    socketRef.current?.emit("chat", { text, anchor: mySelection });
+    socketRef.current?.emit("chat", {
+      text,
+      anchor: mySelection,
+      adjuntos: pendientes.length
+        ? pendientes.map((p) => ({ nombre: p.nombre, mediaType: p.mediaType, data: p.data }))
+        : undefined,
+    });
     setDraft("");
+    setPendientes([]);
     setMention(null);
     if (mySelection) {
       setMySelection(null);
@@ -501,7 +555,7 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
             // Mensajes seguidos del mismo autor se agrupan sin repetir avatar
             // ni nombre (patrón Discord): el chat respira y se lee como
             // conversación, no como lista de tarjetas.
-            <ChatRow key={i} msg={m} seguido={esSeguido(messages, i)} />
+            <ChatRow key={i} msg={m} seguido={esSeguido(messages, i)} roomId={roomId} />
           ))}
           {/* Un bloque de streaming POR AGENTE: varios pueden hablar a la vez */}
           {Object.keys({ ...streaming, ...toolLines }).map((agentId) => {
@@ -534,13 +588,51 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
           })}
         </div>
 
-        <div className="chat-input">
+        <div
+          className={`chat-input ${arrastrando ? "arrastrando" : ""}`}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setArrastrando(true);
+          }}
+          onDragLeave={(e) => {
+            // Solo al salir del contenedor entero, no al cruzar sus hijos.
+            if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+              setArrastrando(false);
+            }
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+            setArrastrando(false);
+            void agregarImagenes(imagenesDe(e.dataTransfer));
+          }}
+        >
           {mySelection && (
             <div className="anchor-chip">
               anclado a &lt;{mySelection.tag}&gt;{mySelection.text ? ` "${mySelection.text.slice(0, 24)}"` : ""}
               <span className="anchor-x" onClick={() => { setMySelection(null); postToInspector({ type: "selection:clear" }); }}>
                 ×
               </span>
+            </div>
+          )}
+          {pendientes.length > 0 && (
+            <div className="adjuntos-pendientes">
+              {pendientes.map((p, i) => (
+                <div className="adjunto-chip" key={i} title={p.nombre}>
+                  <img src={p.previewUrl} alt={p.nombre} />
+                  <span
+                    className="adjunto-x"
+                    onClick={() => setPendientes((prev) => prev.filter((_, j) => j !== i))}
+                    title={t.quitarImagen}
+                  >
+                    ×
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+          {errorAdjunto && (
+            <div className="adjunto-error" onClick={() => setErrorAdjunto(null)}>
+              {errorAdjunto}
             </div>
           )}
           <div className="input-wrap">
@@ -553,6 +645,15 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
               placeholder={t.hablaConLaSala}
               value={draft}
               onChange={(e) => onDraftChange(e.target.value)}
+              onPaste={(e) => {
+                const imgs = imagenesDe(e.clipboardData);
+                // Solo se intercepta si de verdad venían imágenes: pegar texto
+                // tiene que seguir funcionando igual que siempre.
+                if (imgs.length) {
+                  e.preventDefault();
+                  void agregarImagenes(imgs);
+                }
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter") send();
                 if (e.key === "Escape") setMention(null);
@@ -708,14 +809,43 @@ function esSeguido(msgs: ChatMessage[], i: number): boolean {
   return prev.from === m.from && prev.role === m.role;
 }
 
-function ChatRow({ msg, seguido }: { msg: ChatMessage; seguido?: boolean }) {
+function ChatRow({
+  msg,
+  seguido,
+  roomId,
+}: {
+  msg: ChatMessage;
+  seguido?: boolean;
+  roomId: string;
+}) {
   const initial = msg.from.slice(0, msg.role === "agent" ? 2 : 1).toUpperCase();
+
+  /**
+   * Las imágenes se piden al server por su URL en vez de venir en el mensaje.
+   * Así el navegador las cachea (el id es un uuid, nunca cambia) y entrar a una
+   * sala con historial largo no arrastra megas de base64.
+   */
+  const adjuntos = msg.adjuntos?.length ? (
+    <div className="adjuntos-msg">
+      {msg.adjuntos.map((a) => (
+        <a
+          key={a.id}
+          href={`${SERVER_URL}/rooms/${roomId}/adjuntos/${a.id}`}
+          target="_blank"
+          rel="noreferrer"
+        >
+          <img src={`${SERVER_URL}/rooms/${roomId}/adjuntos/${a.id}`} alt={a.nombre} />
+        </a>
+      ))}
+    </div>
+  ) : null;
 
   // Continuación: solo el texto, alineado bajo el mensaje anterior.
   if (seguido) {
     return (
       <div className="msg-seguido">
-        <div className="burbuja">{msg.text}</div>
+        {msg.text && <div className="burbuja">{msg.text}</div>}
+        {adjuntos}
       </div>
     );
   }
@@ -737,7 +867,10 @@ function ChatRow({ msg, seguido }: { msg: ChatMessage; seguido?: boolean }) {
           </div>
         )}
         {msg.anchoredTo && <div className="anchor-note">sobre: {msg.anchoredTo}</div>}
-        <div className={msg.role === "system" ? "system-text" : "burbuja"}>{msg.text}</div>
+        {msg.text && (
+          <div className={msg.role === "system" ? "system-text" : "burbuja"}>{msg.text}</div>
+        )}
+        {adjuntos}
       </div>
     </div>
   );

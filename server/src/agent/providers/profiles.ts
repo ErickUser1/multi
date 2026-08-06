@@ -22,6 +22,15 @@ export interface Perfil {
   /** Enlace a donde se saca. */
   keyUrl?: string;
   modelosSugeridos: string[];
+  /**
+   * Si sus modelos pueden VER una imagen, no solo recibir la ruta.
+   *
+   * Se decide por proveedor, no por modelo, porque el modelo lo escribe la
+   * persona a mano y no hay lista que aguante. Ante la duda va en false: quien
+   * no ve igual recibe la ruta, que es lo que necesita para meter el logo en el
+   * header. Lo único que se pierde es pedirle que describa la imagen.
+   */
+  ve: boolean;
 }
 
 export const PERFILES = {
@@ -30,6 +39,7 @@ export const PERFILES = {
     keyHint: "sk-ant-…",
     keyUrl: "https://console.anthropic.com/settings/keys",
     modelosSugeridos: ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5-20251001"],
+    ve: true,
   },
   openrouter: {
     label: "OpenRouter",
@@ -46,34 +56,56 @@ export const PERFILES = {
       "google/gemini-3.1-pro-preview",
       "deepseek/deepseek-v4-pro",
     ],
+    // Bajo este mismo perfil conviven modelos que ven (los de Claude y GPT que
+    // revende) y modelos que no (los gratis de Gemma, los de Llama). Como el
+    // modelo lo escribe la persona a mano, no hay forma de saberlo por el perfil.
+    // Se queda en false: la ruta llega igual, que es lo que hace falta para usar
+    // la imagen en la app. Decidirlo por nombre de modelo queda pendiente.
+    ve: false,
   },
   openai: {
     label: "OpenAI",
     keyHint: "sk-…",
     keyUrl: "https://platform.openai.com/api-keys",
     modelosSugeridos: ["gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.6-sol"],
+    ve: true,
   },
   groq: {
     label: "Groq",
     keyHint: "gsk_…",
     keyUrl: "https://console.groq.com/keys",
     modelosSugeridos: ["llama-3.3-70b-versatile"],
+    ve: false,
   },
   deepseek: {
     label: "DeepSeek",
     keyHint: "sk-…",
     keyUrl: "https://platform.deepseek.com/api_keys",
     modelosSugeridos: ["deepseek-chat", "deepseek-reasoner"],
+    ve: false,
   },
   ollama: {
     label: "Ollama (local)",
     // Ollama no pide key, pero el resto del flujo espera una: cualquier texto sirve.
     keyHint: "cualquier cosa (Ollama no pide key)",
     modelosSugeridos: ["gemma3", "qwen2.5-coder"],
+    // Los modelos que corre la gente en su máquina son los chicos, y esos no ven.
+    ve: false,
   },
 } as const satisfies Record<string, Perfil>;
 
 export type ProviderId = keyof typeof PERFILES;
+
+/**
+ * Si a este proveedor se le puede mandar la imagen, no solo la ruta.
+ *
+ * Quien no ve NO se queda fuera: recibe la ruta del adjunto como texto y con eso
+ * puede copiarla al proyecto y meterla en un <img>. Lo único que no puede es
+ * decirte de qué color es.
+ */
+export function proveedorVe(id: ProviderId): boolean {
+  return PERFILES[id].ve;
+}
 
 /** URLs base, tomadas del catálogo de OpenCode. */
 const BASE_URLS: Record<Exclude<ProviderId, "anthropic">, string> = {

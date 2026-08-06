@@ -346,6 +346,11 @@ function toApiMessage(m: Message): Record<string, unknown> {
             content: block.content,
             ...(block.is_error ? { is_error: true } : {}),
           };
+        case "image":
+          return {
+            type: "image",
+            source: { type: "base64", media_type: block.mediaType, data: block.data },
+          };
       }
     }),
   };

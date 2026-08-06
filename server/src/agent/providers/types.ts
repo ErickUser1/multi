@@ -12,7 +12,21 @@ export type Role = "user" | "assistant";
 export type ContentBlock =
   | { type: "text"; text: string }
   | { type: "tool_use"; id: string; name: string; input: Record<string, unknown> }
-  | { type: "tool_result"; tool_use_id: string; content: string; is_error?: boolean };
+  | { type: "tool_result"; tool_use_id: string; content: string; is_error?: boolean }
+  /**
+   * Una imagen que alguien pegó en el chat. Solo se manda a proveedores que ven
+   * (ver `ve` en profiles.ts); a los demás les llega la ruta como texto y con eso
+   * les basta para meterla en la app.
+   *
+   * `data` es base64 pelón, sin el prefijo `data:`. Cada proveedor lo envuelve a
+   * su manera: Anthropic quiere `source.base64`, los de formato OpenAI quieren un
+   * data URI completo.
+   *
+   * Va ANTES del bloque de texto dentro del mensaje. Las dos documentaciones
+   * oficiales dicen lo mismo: el modelo responde mejor viendo la imagen primero
+   * y la pregunta después.
+   */
+  | { type: "image"; mediaType: string; data: string };
 
 export interface Message {
   role: Role;

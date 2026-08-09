@@ -205,6 +205,18 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
   /** Por dónde va el arranque del preview. null = no está arrancando. */
   const [arrancando, setArrancando] = useState<"contenedor" | "dependencias" | "servidor" | null>(null);
   const [draft, setDraft] = useState("");
+  /** Qué dice el botón de descargar ahora mismo. null = su texto normal. */
+  const [zipAviso, setZipAviso] = useState<string | null>(null);
+  /**
+   * Si la sala tiene algo guardado que llevarse.
+   *
+   * Se pregunta al server en vez de deducirlo de `previewReady`: lo que hace
+   * exportable a una sala es tener commits, no que su dev server esté arriba.
+   * Son cosas distintas y se separan por 20 segundos de arranque de Vite. Atarlo
+   * al preview hacía que un proyecto ya commiteado dijera "todavía no hay nada
+   * que descargar" mientras su preview levantaba, que es mentira.
+   */
+  const [sePuedeExportar, setSePuedeExportar] = useState(false);
 
   const socketRef = useRef<Socket | null>(null);
   // Streaming POR AGENTE: varios pueden estar hablando a la vez.
@@ -526,6 +538,69 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
 
   const copyLink = () => navigator.clipboard.writeText(window.location.href);
 
+  /**
+   * Bajar el proyecto de la sala como .zip.
+   *
+   * El zip sale del último punto guardado (el último turno cerrado), no del
+   * disco. Si hay trabajo a medias se DICE antes de bajarlo, en vez de entregar
+   * en silencio algo distinto de lo que se está viendo en el preview.
+   *
+   * La descarga va por un <a> y no por fetch: así la maneja el navegador con su
+   * propia barra de progreso, y un proyecto grande no se carga entero en
+   * memoria de la pestaña.
+   */
+  const descargarZip = async () => {
+    setZipAviso(t.preparandoZip);
+    try {
+      const r = await fetch(`${SERVER_URL}/rooms/${roomId}/export/estado`);
+      const estado = (await r.json()) as { hayCommits: boolean; cambiosSinCommitear: boolean };
+
+      if (!estado.hayCommits) {
+        setZipAviso(t.zipSalaVacia);
+        return;
+      }
+
+      const a = document.createElement("a");
+      a.href = `${SERVER_URL}/rooms/${roomId}/export`;
+      a.download = `${roomId}.zip`;
+      a.click();
+
+      setZipAviso(estado.cambiosSinCommitear ? t.zipTrabajoSinGuardar : null);
+    } catch {
+      setZipAviso(t.zipFallo);
+    }
+  };
+
+  // El aviso del botón se borra solo: es un mensaje de paso, no un estado en el
+  // que la sala se quede.
+  useEffect(() => {
+    if (!zipAviso || zipAviso === t.preparandoZip) return;
+    const id = setTimeout(() => setZipAviso(null), 4000);
+    return () => clearTimeout(id);
+  }, [zipAviso, t.preparandoZip]);
+
+  /**
+   * Si la sala ya tiene algo que llevarse. Se consulta al entrar y cada vez que
+   * aparece un punto nuevo en la línea de tiempo (`histVersion`), que es justo
+   * cuando una sala vacía deja de estarlo.
+   */
+  useEffect(() => {
+    let cancelado = false;
+    fetch(`${SERVER_URL}/rooms/${roomId}/export/estado`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((estado: { hayCommits: boolean } | null) => {
+        if (!cancelado && estado) setSePuedeExportar(estado.hayCommits);
+      })
+      .catch(() => {
+        // Sin respuesta no se apaga el botón: que el server tarde en contestar no
+        // significa que la sala esté vacía, y dejarlo apagado por eso es justo el
+        // bug que se está arreglando. Si de verdad no hay nada, el 409 lo dirá.
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, [roomId, histVersion]);
+
   return (
     <div className={`sala ${chatColapsado ? "chat-colapsado" : ""}`}>
       {/* Chat izquierda */}
@@ -737,6 +812,14 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
                 setKeyError(null);
               }}
             />
+            <button
+              className="invitar"
+              onClick={descargarZip}
+              disabled={!sePuedeExportar || zipAviso === t.preparandoZip}
+              title={sePuedeExportar ? t.descargarZip : t.zipSalaVacia}
+            >
+              {zipAviso ?? t.descargarZip}
+            </button>
             <button className="invitar" onClick={copyLink}>
               {t.copiarLink}
             </button>

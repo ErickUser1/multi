@@ -203,3 +203,67 @@ export async function filesInCommit(dir: string, hash: string): Promise<string[]
   ).catch(() => ({ stdout: "" }));
   return stdout.split("\n").filter(Boolean);
 }
+
+/** Si el repo tiene al menos un commit. Una sala recién creada no tiene ninguno. */
+export async function hayCommits(dir: string): Promise<boolean> {
+  return execFileP("git", ["rev-parse", "--verify", "HEAD"], { cwd: dir })
+    .then(() => true)
+    .catch(() => false);
+}
+
+/**
+ * Si hay trabajo en el working tree que no está en ningún commit.
+ *
+ * Sirve para AVISAR antes de exportar: el zip sale de HEAD, o sea del último
+ * turno cerrado. Si un agente está a media escritura, eso no viaja. Es mejor
+ * decirlo que entregar un zip al que le falta lo que la persona acaba de ver
+ * en el preview.
+ *
+ * Va por `status --porcelain` y NO por el `diff-index --quiet` que usa
+ * `commitSinLock`: aquel compara el índice contra HEAD, y un archivo recién
+ * creado todavía no está en el índice, así que para él "no hay cambios".
+ * `commitSinLock` no lo sufre porque hace `git add -A` justo antes; aquí no
+ * podemos, porque exportar no debe escribir nada en el repo de la sala.
+ *
+ * La diferencia no es teórica: un agente que crea archivos nuevos (el caso
+ * normal de un turno a medias) no se detectaba con `diff-index`.
+ *
+ * Sin ningún commit todavía se responde `false`: la sala recién nacida solo
+ * tiene el `.gitignore` del motor sin trackear, y llamar a eso "trabajo sin
+ * guardar" sería avisar de algo que nadie escribió.
+ */
+export async function tieneCambiosSinCommitear(dir: string): Promise<boolean> {
+  if (!(await hayCommits(dir))) return false;
+  const { stdout } = await execFileP("git", ["status", "--porcelain"], {
+    cwd: dir,
+    maxBuffer: 5 * 1024 * 1024,
+  }).catch(() => ({ stdout: "" }));
+  return stdout.trim().length > 0;
+}
+
+/**
+ * El proyecto de la sala como un .zip, listo para descargar.
+ *
+ * Sale de `git archive HEAD`, no del directorio: lo que nunca entró a un commit
+ * no puede salir en el zip. Eso deja fuera `node_modules/`, `dist/`, `.env` y
+ * lo demás del .gitignore que siembra el motor (workspace.ts) SIN filtro manual
+ * que se pueda equivocar y colar un secreto.
+ *
+ * No toma el lock de git a propósito: `archive` lee del object store y no toca
+ * el índice, igual que `log` y `diffCommit`. Si un agente commitea justo
+ * mientras esto corre, el zip sale con el commit de antes o el de después,
+ * nunca a medias.
+ *
+ * `encoding: "buffer"` NO es opcional: sin él execFile decodifica la salida
+ * como utf8 y el zip queda corrupto sin dar ningún error. Se descubre hasta
+ * que alguien intenta abrirlo.
+ */
+export async function exportarZip(dir: string): Promise<Buffer> {
+  const { stdout } = await execFileP("git", ["archive", "--format=zip", "HEAD"], {
+    cwd: dir,
+    encoding: "buffer",
+    // Un proyecto con imágenes se pasa del default (1MB) sin ser nada raro.
+    maxBuffer: 100 * 1024 * 1024,
+  });
+  return stdout;
+}

@@ -797,6 +797,15 @@ body::after {
   color: var(--texto);
   border-color: var(--dim);
 }
+/* Apagado, no escondido: se ve que la opción existe y por qué todavía no. */
+.invitar:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.invitar:disabled:hover {
+  color: var(--dim);
+  border-color: var(--linea);
+}
 
 .tabs {
   display: flex;

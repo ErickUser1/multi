@@ -36,7 +36,16 @@ import {
 import { MAX_AGENTS_PER_ROOM, resumenDeOtros } from "./engine/agents.js";
 import { fileMutation } from "./engine/file-mutation.js";
 import { startTurn, commitTurn, failTurnConCommit } from "./engine/turns.js";
-import { commitAll, discardChanges, diffCommit, revertTo, revertFile } from "./engine/git.js";
+import {
+  commitAll,
+  discardChanges,
+  diffCommit,
+  revertTo,
+  revertFile,
+  exportarZip,
+  hayCommits,
+  tieneCambiosSinCommitear,
+} from "./engine/git.js";
 import { getHistory, setBookmark } from "./engine/history.js";
 import { buildApiMap } from "./engine/api-map.js";
 import { handlePreviewRequest, handlePreviewUpgrade } from "./engine/proxy.js";
@@ -252,6 +261,55 @@ fastify.get<{ Params: { id: string; adjuntoId: string } }>(
       .send(await readFile(ruta));
   },
 );
+
+/**
+ * El proyecto de la sala, como .zip para descargar.
+ *
+ * Va colgado de `/rooms` a propósito, y no de algo como `/export`: el proxy del
+ * preview se engancha ANTES que Fastify en el server crudo y resuelve rutas de
+ * raíz por cookie y por Referer. `/rooms` está en su lista de exclusión
+ * (proxy.ts, RUTAS_DE_LA_SALA), así que aquí no la puede interceptar. Fuera de
+ * ese prefijo, el proxy se tragaría la descarga justo cuando quien la pide
+ * tiene el preview abierto, que es el caso normal.
+ */
+fastify.get<{ Params: { id: string } }>("/rooms/:id/export", async (req, reply) => {
+  const room = getRoom(req.params.id) ?? (await wakeRoom(req.params.id));
+  if (!room) return reply.code(404).send({ error: "sala no encontrada" });
+
+  // La sala nace vacía: hasta que un turno no cierra, no hay nada que llevarse.
+  if (!(await hayCommits(room.workspace.dir))) {
+    return reply.code(409).send({ error: "la sala todavía no tiene nada guardado" });
+  }
+
+  const zip = await exportarZip(room.workspace.dir);
+
+  // El id ya viene del ruteo, pero acaba dentro de una cabecera HTTP: se filtra
+  // a lo que de verdad es un id de sala para no poder inyectar nada ahí.
+  const nombre = room.id.replace(/[^a-z0-9-]/gi, "") || "proyecto";
+
+  return reply
+    .header("content-type", "application/zip")
+    .header("content-disposition", `attachment; filename="${nombre}.zip"`)
+    // Al revés que los adjuntos (que son inmutables): el proyecto de una sala
+    // cambia con cada turno, y un zip cacheado sería del estado de ayer.
+    .header("cache-control", "no-store")
+    .send(zip);
+});
+
+/**
+ * Si la sala se puede exportar y si le falta algo por guardar.
+ *
+ * El botón lo consulta antes de descargar para poder avisar: el zip sale de
+ * HEAD, así que un turno a medias no viaja en él.
+ */
+fastify.get<{ Params: { id: string } }>("/rooms/:id/export/estado", async (req, reply) => {
+  const room = getRoom(req.params.id) ?? (await wakeRoom(req.params.id));
+  if (!room) return reply.code(404).send({ error: "sala no encontrada" });
+  return {
+    hayCommits: await hayCommits(room.workspace.dir),
+    cambiosSinCommitear: await tieneCambiosSinCommitear(room.workspace.dir),
+  };
+});
 
 // Info de una sala (para saber la URL del preview al entrar).
 fastify.get<{ Params: { id: string } }>("/rooms/:id", async (req, reply) => {

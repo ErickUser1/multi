@@ -22,7 +22,7 @@ const LADO_MAXIMO = 1568;
 const CALIDAD = 0.85;
 
 /** Los formatos que el server acepta (y que los modelos con visión entienden). */
-const ACEPTADOS = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+export const ACEPTADOS = ["image/png", "image/jpeg", "image/webp", "image/gif"];
 
 export interface AdjuntoPendiente {
   nombre: string;

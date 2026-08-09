@@ -21,7 +21,13 @@ import { KeyPanel, loadStoredCredencial, type Credencial } from "./KeyPanel.js";
 import { useTextos } from "./i18n.js";
 import { MenuSalas } from "./MenuSalas.js";
 import { recordarSala } from "./historial-salas.js";
-import { prepararImagen, imagenesDe, type AdjuntoPendiente } from "./imagenes.js";
+import {
+  prepararImagen,
+  imagenesDe,
+  esImagenAceptada,
+  ACEPTADOS,
+  type AdjuntoPendiente,
+} from "./imagenes.js";
 
 /** Cuántas imágenes caben en un mensaje. El server aplica el mismo tope. */
 const MAX_ADJUNTOS = 4;
@@ -264,6 +270,8 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const escenarioRef = useRef<HTMLElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  /** El <input type="file"> escondido que abre el botón de adjuntar. */
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // El iframe apunta al PROXY del server (que inyecta el inspector), no al dev server directo.
   const previewSrc = `${SERVER_URL}/preview/${roomId}`;
@@ -639,6 +647,30 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
             {mention !== null && (
               <MentionMenu agents={agents} query={mention} onPick={pickMention} />
             )}
+            {/* Arrastrar y pegar ya funcionaban, pero no se ven: nadie adivina
+                que puede soltar un archivo aquí. Y en el teléfono no existe
+                ninguna de las dos, así que sin esto no hay forma de subir nada. */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={ACEPTADOS.join(",")}
+              multiple
+              style={{ display: "none" }}
+              onChange={(e) => {
+                void agregarImagenes(Array.from(e.target.files ?? []).filter(esImagenAceptada));
+                // Se limpia para que elegir el MISMO archivo dos veces seguidas
+                // vuelva a disparar onChange.
+                e.target.value = "";
+              }}
+            />
+            <button
+              className="adjuntar-btn"
+              onClick={() => fileInputRef.current?.click()}
+              title={t.adjuntarImagen}
+              aria-label={t.adjuntarImagen}
+            >
+              +
+            </button>
             <input
               ref={inputRef}
               className="caja"

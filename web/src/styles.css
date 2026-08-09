@@ -574,6 +574,34 @@ body::after {
 /* ── Menú de menciones (@) ────────────────────────────────────────────── */
 .input-wrap {
   position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+/* La caja se lleva el espacio que sobre; el botón se queda de su tamaño. */
+.input-wrap .caja {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Adjuntar una imagen. Arrastrar y pegar ya servían, pero no se ven, y en el
+   teléfono no existe ninguna de las dos. */
+.adjuntar-btn {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--linea);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dim);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.adjuntar-btn:hover {
+  color: var(--texto);
+  border-color: var(--dim);
 }
 .mention-menu {
   position: absolute;

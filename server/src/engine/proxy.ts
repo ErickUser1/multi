@@ -21,13 +21,34 @@ const PREFIX = "/preview/";
 const ROOM_ID_RE = /^[a-z0-9-]{1,64}$/i;
 
 /**
- * Prefijos que Vite (y dev servers en general) piden desde la RAÍZ del origen,
- * no bajo nuestro sub-path. Vite los inyecta con rutas absolutas y NO se pueden
- * reconfigurar (`server.origin` solo afecta URLs de plugins, no las transforms
- * core — ver vitejs/vite discussions #21676). La solución de la comunidad es
- * proxearlos también, resolviendo la sala por el header Referer.
+ * Lo que es de la SALA y nunca del preview.
+ *
+ * Está al revés a propósito. Antes había una lista blanca de lo que sí va al
+ * preview (`/@vite/`, `/src/`, …) y funcionaba mientras el proyecto solo pidiera
+ * módulos: Vite los inyecta con rutas absolutas desde la raíz del origen y no se
+ * pueden reconfigurar (`server.origin` solo afecta URLs de plugins, no las
+ * transforms core — vitejs/vite discussions #21676).
+ *
+ * Pero el proyecto también sirve su carpeta `public/`, y ahí cabe cualquier cosa:
+ * `/logo.png`, `/favicon.ico`, una fuente, un PDF. Ninguno empieza con un prefijo
+ * conocido, así que la lista blanca los rechazaba y el navegador recibía el HTML
+ * de la Sala en vez del archivo. Se vio con una imagen que el agente puso en el
+ * header: el `<img>` correcto, el archivo en su sitio, y el icono de rota.
+ *
+ * Enumerar lo del preview es imposible (depende del proyecto); enumerar lo de la
+ * Sala sí se puede, porque es nuestro y cambia solo cuando lo cambiamos.
  */
-const ROOT_PREFIXES = ["/@vite/", "/@react-refresh", "/@id/", "/@fs/", "/src/", "/node_modules/"];
+const RUTAS_DE_LA_SALA = [
+  "/health",
+  "/rooms",
+  "/providers",
+  "/preview",
+  "/socket.io",
+  // El build de la Sala (Vite compila a /assets/ y sirve estos en la raíz).
+  "/assets/",
+  "/index.html",
+  "/vite.svg",
+];
 
 /** Nombre de la cookie que recuerda a qué sala pertenece esta pestaña del preview. */
 const ROOM_COOKIE = "multi_room";
@@ -48,7 +69,7 @@ function roomFromCookie(cookieHeader?: string): string | null {
  *     NO envían Referer por estándar. Sin esto, React nunca arranca y el
  *     preview queda en blanco. La cookie se setea al servir la página.
  */
-function parsePreviewUrl(
+export function parsePreviewUrl(
   url: string,
   headers: { referer?: string; cookie?: string },
 ): { roomId: string; rest: string } | null {
@@ -62,10 +83,19 @@ function parsePreviewUrl(
     return { roomId, rest };
   }
 
-  // Caso 2: asset pedido desde la raíz por el dev server (ej. /src/main.jsx).
-  const isRootAsset = ROOT_PREFIXES.some((p) => url.startsWith(p));
-  if (!isRootAsset) return null;
+  // La raíz SIEMPRE es la Sala. La cookie del preview sobrevive en la pestaña,
+  // así que sin esto abrir Multi después de ver un preview te daría la app del
+  // proyecto en lugar de la Sala.
+  const soloRuta = url.split("?")[0];
+  if (soloRuta === "/") return null;
 
+  // Caso 2: algo pedido desde la RAÍZ del origen. Puede ser un módulo que Vite
+  // inyectó (/src/main.jsx, /@vite/client) o un archivo del `public/` del
+  // proyecto (/logo.png, /favicon.ico): cualquier cosa que no sea nuestra.
+  if (RUTAS_DE_LA_SALA.some((p) => soloRuta === p || soloRuta.startsWith(p))) return null;
+
+  // Y solo si sabemos de qué sala viene. Sin eso no hay a dónde mandarlo, y una
+  // petición suelta a la raíz debe seguir cayendo en la Sala.
   const fromReferer = headers.referer?.match(/\/preview\/([a-z0-9-]{1,64})(?:\/|$)/i)?.[1];
   const roomId = fromReferer ?? roomFromCookie(headers.cookie);
   if (!roomId) return null;

@@ -23,7 +23,8 @@
     "dev:test": "cross-env MULTI_TEST_MOCK=1 tsx watch src/index.ts",
     "demo:presupuesto": "tsx src/demos/presupuesto.ts",
     "demo:turno-cortado": "tsx src/demos/turno-cortado.ts",
-    "demo:imagenes": "tsx src/demos/imagenes.ts"
+    "demo:imagenes": "tsx src/demos/imagenes.ts",
+    "demo:proxy-rutas": "tsx src/demos/proxy-rutas.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.3.0",

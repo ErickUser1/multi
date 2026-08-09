@@ -44,11 +44,21 @@ const RUTAS_DE_LA_SALA = [
   "/providers",
   "/preview",
   "/socket.io",
-  // El build de la Sala (Vite compila a /assets/ y sirve estos en la raíz).
-  "/assets/",
   "/index.html",
   "/vite.svg",
 ];
+
+/**
+ * `/assets/` es de los dos y hay que desempatarlo.
+ *
+ * Ahí compila el front de Multi, pero Rails, Phoenix y otros también sirven los
+ * suyos en esa ruta. Con el referer se sabe de quién es: si la petición viene de
+ * dentro del preview, es del proyecto; si no, es de la Sala.
+ *
+ * El referer sí llega aquí — falta en los imports de módulos ES, no en un <script
+ * src> o un <link href>, que es como se piden los assets compilados.
+ */
+const RUTA_COMPARTIDA = "/assets/";
 
 /** Nombre de la cookie que recuerda a qué sala pertenece esta pestaña del preview. */
 const ROOM_COOKIE = "multi_room";
@@ -89,14 +99,19 @@ export function parsePreviewUrl(
   const soloRuta = url.split("?")[0];
   if (soloRuta === "/") return null;
 
+  if (RUTAS_DE_LA_SALA.some((p) => soloRuta === p || soloRuta.startsWith(p))) return null;
+
+  const fromReferer = headers.referer?.match(/\/preview\/([a-z0-9-]{1,64})(?:\/|$)/i)?.[1];
+
+  // `/assets/` lo usan los dos: solo va al preview si la petición viene de ahí.
+  if (soloRuta.startsWith(RUTA_COMPARTIDA) && !fromReferer) return null;
+
   // Caso 2: algo pedido desde la RAÍZ del origen. Puede ser un módulo que Vite
   // inyectó (/src/main.jsx, /@vite/client) o un archivo del `public/` del
   // proyecto (/logo.png, /favicon.ico): cualquier cosa que no sea nuestra.
-  if (RUTAS_DE_LA_SALA.some((p) => soloRuta === p || soloRuta.startsWith(p))) return null;
-
-  // Y solo si sabemos de qué sala viene. Sin eso no hay a dónde mandarlo, y una
+  //
+  // Solo si sabemos de qué sala viene. Sin eso no hay a dónde mandarlo, y una
   // petición suelta a la raíz debe seguir cayendo en la Sala.
-  const fromReferer = headers.referer?.match(/\/preview\/([a-z0-9-]{1,64})(?:\/|$)/i)?.[1];
   const roomId = fromReferer ?? roomFromCookie(headers.cookie);
   if (!roomId) return null;
   return { roomId, rest: url };

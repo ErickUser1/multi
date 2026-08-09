@@ -95,10 +95,28 @@ function main() {
     check("los modelos de un proveedor", aLaSala("/providers/openrouter/models"));
     check("el health", aLaSala("/health"));
     check("el socket", aLaSala("/socket.io/?EIO=4"));
+    // /assets/ lo usan los dos (ahí compila la Sala, y ahí sirve Rails). Sin
+    // referer del preview es de la Sala; con él, del proyecto (ver caso 5).
     check("los assets compilados de la Sala", aLaSala("/assets/index-abc123.js"));
   }
 
-  console.log("\n5. Sin sala identificada no hay a dónde mandarlo");
+  console.log("\n5. Cualquier stack, no solo Vite");
+  {
+    // La sala nace vacía y el agente elige el stack, así que el proxy no puede
+    // conocer las rutas de cada framework. Antes la lista blanca era literalmente
+    // de Vite (/@vite/, /src/, /node_modules/), y un proyecto en Django o Next
+    // habría fallado igual que la imagen.
+    check("Django estático", alPreview("/static/css/main.css"));
+    check("Django media", alPreview("/media/uploads/foto.jpg"));
+    check("Next.js", alPreview("/_next/static/chunks/main.js"));
+    check("Remix", alPreview("/build/_shared/chunk.js"));
+    check("SvelteKit", alPreview("/_app/immutable/entry/start.js"));
+    check("Astro", alPreview("/_astro/index.abc.css"));
+    check("Rails", alPreview("/assets/application-abc.js", REFERER));
+    check("un livereload cualquiera", alPreview("/livereload.js"));
+  }
+
+  console.log("\n6. Sin sala identificada no hay a dónde mandarlo");
   {
     // Alguien que abre localhost:4000 sin haber entrado a ninguna sala: sus
     // peticiones tienen que caer en la Sala, no en un preview inexistente.

@@ -45,3 +45,8 @@ landing/
 # del dia. Es cuaderno, no documentacion. Lo que un contribuidor necesita
 # esta en README, CONTRIBUTING, E2E y ROADMAP.
 ESTADO.md
+
+# Instrucciones para el agente que trabaja en ESTE repo. Es herramienta de
+# trabajo local, no documentacion del proyecto: lo que un contribuidor
+# necesita esta en README, CONTRIBUTING, E2E y ROADMAP.
+CLAUDE.md

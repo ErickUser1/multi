@@ -22,6 +22,8 @@ export interface StoredMessage {
   role: "human" | "agent" | "system";
   text: string;
   anchoredTo?: string;
+  /** Las imágenes que venían con el mensaje. Solo los datos para mostrarlas. */
+  adjuntos?: { id: string; nombre: string; mediaType: string }[];
   createdAt: number;
 }
 

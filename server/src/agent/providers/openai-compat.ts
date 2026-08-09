@@ -287,6 +287,10 @@ function toOpenAIMessages(system: string | undefined, messages: Message[]): unkn
       ContentBlock,
       { type: "tool_result" }
     >[];
+    const imagenes = m.content.filter((c) => c.type === "image") as Extract<
+      ContentBlock,
+      { type: "image" }
+    >[];
 
     // Los resultados van primero: responden a la llamada del mensaje anterior.
     for (const r of resultados) {
@@ -311,6 +315,20 @@ function toOpenAIMessages(system: string | undefined, messages: Message[]): unkn
               })),
             }
           : {}),
+      });
+    } else if (imagenes.length > 0) {
+      // Con imágenes el contenido deja de ser un string y pasa a ser una lista
+      // de partes. Las imágenes van ANTES del texto: los modelos responden mejor
+      // así, y lo dicen las dos documentaciones oficiales.
+      out.push({
+        role: "user",
+        content: [
+          ...imagenes.map((img) => ({
+            type: "image_url",
+            image_url: { url: `data:${img.mediaType};base64,${img.data}` },
+          })),
+          ...textos.map((t) => ({ type: "text", text: t.text })),
+        ],
       });
     } else if (textos.length > 0) {
       out.push({ role: "user", content: textos.map((t) => t.text).join("") });

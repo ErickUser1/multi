@@ -41,13 +41,40 @@ function readRoomFromHash(): string | null {
 export function App() {
   const [roomId, setRoomId] = useState<string | null>(readRoomFromHash());
   const [name, setName] = useState<string>(localStorage.getItem("multi-name") ?? "");
-  const [entered, setEntered] = useState(false);
+  /**
+   * Si ya diste tu nombre alguna vez, no se te vuelve a preguntar.
+   *
+   * `entered` es estado de React y se pierde al recargar, así que arrancar
+   * siempre en `false` mandaba a la pantalla del nombre CADA vez que alguien
+   * refrescaba: con el nombre ya escrito y la sala ya elegida, un botón de
+   * "entrar" que solo estorba. Recargar es lo primero que hace la gente cuando
+   * algo se ve raro, así que se topaban con eso seguido.
+   *
+   * El nombre guardado es justo la señal de que esa pantalla ya cumplió su
+   * función. Sin nombre sí se pregunta: es la primera vez.
+   */
+  const [entered, setEntered] = useState(() => !!localStorage.getItem("multi-name"));
 
   useEffect(() => {
     const onHash = () => setRoomId(readRoomFromHash());
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
+
+  /**
+   * Anotar la sala en la que de verdad estás, también al recargar.
+   *
+   * `recordarSala` vivía solo en el botón de entrar. Con el salto de arriba ese
+   * botón deja de pulsarse en la mayoría de las visitas, y sin esto la lista de
+   * "tus salas" se quedaría congelada en la primera vez que entraste a cada una.
+   *
+   * Sigue sin anotarse por el solo hecho de leer el hash: esto corre cuando
+   * `entered` ya es cierto, o sea cuando estás dentro, no cuando abriste un link
+   * que no llegaste a usar.
+   */
+  useEffect(() => {
+    if (roomId && entered) recordarSala(roomId);
+  }, [roomId, entered]);
 
   // Pantalla 1: sin sala → crear o pegar link.
   if (!roomId) return <Landing />;
@@ -61,9 +88,8 @@ export function App() {
         setName={setName}
         onEnter={() => {
           localStorage.setItem("multi-name", name || "anónimo");
-          // Se anota AQUÍ y no al leer el hash: abrir un link que no llegaste a
-          // usar no debería llenarte el historial.
-          recordarSala(roomId);
+          // La sala se anota en el efecto de arriba, en cuanto `entered` es
+          // cierto. Aquí solo se guarda el nombre y se entra.
           setEntered(true);
         }}
       />

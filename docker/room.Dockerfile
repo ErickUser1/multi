@@ -8,7 +8,11 @@
 # Solo lleva lo que hace falta para que el agente pueda instalar cosas:
 # un runtime, git, y herramientas de compilación (muchos paquetes de npm y pip
 # compilan al instalarse).
-FROM node:22-slim
+#
+# Node 24 porque es el LTS activo (soporte hasta abril de 2028). El 22 salio de
+# mantenimiento y dejaba a las salas una version atras del runtime que la gente
+# usa afuera: un proyecto que pida 24 no arrancaria dentro de la sala.
+FROM node:24-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
       git \

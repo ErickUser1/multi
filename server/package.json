@@ -25,7 +25,8 @@
     "demo:turno-cortado": "tsx src/demos/turno-cortado.ts",
     "demo:imagenes": "tsx src/demos/imagenes.ts",
     "demo:proxy-rutas": "tsx src/demos/proxy-rutas.ts",
-    "demo:exportar": "tsx src/demos/exportar.ts"
+    "demo:exportar": "tsx src/demos/exportar.ts",
+    "uso": "tsx --no-warnings src/demos/uso.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.3.0",

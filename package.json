@@ -33,7 +33,8 @@
     "dev:test": "npm run dev:test -w server",
     "demo:presupuesto": "npm run demo:presupuesto -w server",
     "demo:turno-cortado": "npm run demo:turno-cortado -w server",
-    "demo:exportar": "npm run demo:exportar -w server"
+    "demo:exportar": "npm run demo:exportar -w server",
+    "uso": "npm run uso -w server --"
   },
   "engines": {
     "node": ">=22"

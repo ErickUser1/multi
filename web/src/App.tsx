@@ -96,8 +96,18 @@ export function App() {
     );
   }
 
-  // Pantalla 3: la sala.
-  return <Sala roomId={roomId} name={name || "anónimo"} />;
+  /**
+   * Pantalla 3: la sala.
+   *
+   * La `key` es lo que hace que al cambiar de sala se empiece de cero. Sin
+   * ella React ve el mismo componente en el mismo sitio, reusa la instancia y
+   * conserva su estado: los mensajes, los agentes y el preview de la sala
+   * ANTERIOR. Al entrar a una sala con historial no se notaba, porque el
+   * `joined` llegaba con mensajes y pisaba lo viejo; al crear una sala nueva sí,
+   * porque llega vacío y nada sobrescribe. Aparecías en una sala recién creada
+   * leyendo la conversación de otra.
+   */
+  return <Sala key={roomId} roomId={roomId} name={name || "anónimo"} />;
 }
 
 // ── Pantalla: crear / entrar a sala ────────────────────────────────────────

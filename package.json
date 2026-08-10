@@ -38,5 +38,9 @@
   },
   "engines": {
     "node": ">=22"
+  },
+  "//allowScripts": "npm 11+ no corre los scripts de instalacion de un paquete sin permiso. esbuild usa el suyo para bajar su binario, y sin el `npm run build` falla al compilar la Sala. Se declara aqui para que un `npm install` limpio quede listo, en vez de que cada quien lo descubra cuando el build truena.",
+  "allowScripts": {
+    "esbuild": true
   }
 }

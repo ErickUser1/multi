@@ -20,6 +20,40 @@ const DIAS = Number(process.argv[2] ?? 7);
 const DESDE = Date.now() - DIAS * 24 * 60 * 60 * 1000;
 const DIA = 24 * 60 * 60 * 1000;
 
+/**
+ * Abre la base para leerla, por el camino que funcione.
+ *
+ * Primero en solo lectura normal, que es lo correcto: SQLite aplica el WAL y se
+ * ve TODO, incluido lo que el server acaba de escribir. Importa más de lo que
+ * parece, porque en una base recién creada las tablas viven solo en el WAL
+ * hasta el primer checkpoint: leer sin él da "no such table: rooms" sobre una
+ * base que está perfectamente sana. Pasó en el servidor el primer día.
+ *
+ * Si eso falla, se reintenta con `immutable=1`, que lee el .db sin tocar el WAL
+ * ni tomar bloqueos. Hace falta sobre el disco de Windows montado en WSL, donde
+ * la memoria compartida del WAL no funciona y cualquier apertura normal muere
+ * con "disk I/O error". Ahí se ve todo lo consolidado y pueden faltar los
+ * últimos minutos, que para contar uso da igual.
+ *
+ * En ese orden y no al revés: el respaldo miente un poco, así que solo se usa
+ * cuando el camino honesto no está disponible.
+ */
+function abrirParaLeer(): DatabaseSync {
+  try {
+    const db = new DatabaseSync(DB_PATH, { readOnly: true });
+    // Forzar una lectura de verdad: abrir puede pasar y fallar al consultar.
+    db.prepare(`SELECT COUNT(*) FROM rooms`).get();
+    return db;
+  } catch {
+    // `enableURI` existe en node:sqlite pero todavía no en sus tipos (el módulo
+    // sigue marcado como experimental): el cast es contra ese desfase.
+    return new DatabaseSync(`file:${DB_PATH}?immutable=1`, {
+      readOnly: true,
+      enableURI: true,
+    } as ConstructorParameters<typeof DatabaseSync>[1]);
+  }
+}
+
 function main() {
   if (!existsSync(DB_PATH)) {
     console.error(`no encontré la base en ${DB_PATH}`);
@@ -27,26 +61,7 @@ function main() {
     process.exit(1);
   }
 
-  /**
-   * `immutable=1`, no un simple readOnly.
-   *
-   * Le dice a SQLite que el archivo no cambia, así que no toma bloqueos ni
-   * intenta recuperar el WAL. Dos cosas se ganan: este reporte no puede
-   * estorbar al server aunque corra con Multi encendido, y funciona sobre el
-   * disco de Windows montado en WSL, donde la memoria compartida del WAL no
-   * anda y un `readOnly` normal muere con "disk I/O error".
-   *
-   * Lo que se paga: lee el .db sin aplicar el WAL, así que los últimos minutos
-   * pueden faltar si el server acaba de escribir. Para contar uso da igual;
-   * para algo que dependa del dato exacto de hace un segundo, no serviría.
-   */
-  // `enableURI` existe en node:sqlite pero todavía no en sus tipos (el módulo
-  // sigue marcado como experimental), así que el cast es contra el desfase, no
-  // contra la API.
-  const db = new DatabaseSync(`file:${DB_PATH}?immutable=1`, {
-    readOnly: true,
-    enableURI: true,
-  } as ConstructorParameters<typeof DatabaseSync>[1]);
+  const db = abrirParaLeer();
   const uno = <T>(sql: string, ...args: unknown[]): T =>
     (db.prepare(sql).get(...(args as never[])) as T) ?? ({} as T);
   const todos = <T>(sql: string, ...args: unknown[]): T[] =>

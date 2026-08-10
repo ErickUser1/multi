@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { salasVisitadas, olvidarSala, type SalaVisitada } from "./historial-salas.js";
+import { createRoom } from "./socket.js";
 import { useTextos } from "./i18n.js";
 
 /**
@@ -15,7 +16,23 @@ export function MenuSalas({ actual }: { actual?: string }) {
   const { t, idioma } = useTextos();
   const [abierto, setAbierto] = useState(false);
   const [salas, setSalas] = useState<SalaVisitada[]>([]);
+  const [creando, setCreando] = useState(false);
   const cajaRef = useRef<HTMLDivElement>(null);
+
+  const crearOtra = async () => {
+    setCreando(true);
+    try {
+      const id = await createRoom();
+      window.location.hash = `#/sala/${id}`;
+      setAbierto(false);
+    } catch (e) {
+      // Sin sala nueva el menú se queda como estaba, que es un sitio válido:
+      // las salas de siempre siguen ahí y se puede volver a intentar.
+      alert(t.noSePudoCrear + String(e));
+    } finally {
+      setCreando(false);
+    }
+  };
 
   // Se lee al abrir, no al montar: así refleja lo que haya pasado en otra
   // pestaña sin tener que escuchar el evento `storage`.
@@ -84,9 +101,17 @@ export function MenuSalas({ actual }: { actual?: string }) {
             </ul>
           )}
 
-          <a className="menu-nueva" href="#/" onClick={() => setAbierto(false)}>
-            {t.crearOtraSala}
-          </a>
+          {/*
+            Crea la sala aquí mismo, no manda al inicio.
+
+            Era un enlace a `#/`, así que "crear otra sala" te dejaba frente a
+            otro botón de crear sala: la acción prometida ocurría un click
+            después. Se notaba poco cuando de por medio estaba la pantalla del
+            nombre; en cuanto esa dejó de aparecer, el rodeo quedó a la vista.
+          */}
+          <button className="menu-nueva" onClick={crearOtra} disabled={creando}>
+            {creando ? t.creandoSala : t.crearOtraSala}
+          </button>
         </div>
       )}
     </div>

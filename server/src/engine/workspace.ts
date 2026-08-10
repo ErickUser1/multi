@@ -83,6 +83,11 @@ async function ensureGitignore(dir: string): Promise<void> {
     "# commit del turno.",
     "*.tmp-*",
     "",
+    "# El HOME del contenedor de la sala (container.ts). Es cache de npm, no",
+    "# proyecto: sin esto entra a los commits y viaja en el .zip que la gente",
+    "# se descarga.",
+    ".multi-home/",
+    "",
   ];
   await writeFile(path, lineas.join("\n"), "utf8");
 }

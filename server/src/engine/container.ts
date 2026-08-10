@@ -105,40 +105,65 @@ export async function startContainer(
     // Un contenedor parado con la config vieja no sirve: se rehace.
     if (existing !== null) await removeContainer(name);
 
+    // Los argumentos van en UNA sola lista porque abajo hay un reintento: con
+    // dos copias, cualquier arreglo que se hiciera aquí y no allá revivía en el
+    // segundo intento. Ya pasó con `--user`.
+    const args = [
+      "run",
+      "-d",
+      "--name", name,
+      // El proyecto vive en el host; adentro se ve como /work.
+      "-v", `${workspaceDir}:/work`,
+      "--workdir", "/work",
+      /**
+       * El contenedor corre como el MISMO usuario que el server de Multi.
+       *
+       * El workspace es una carpeta del host montada adentro, y sus archivos
+       * son de quien corre Multi. Si adentro se es otro usuario, el proyecto se
+       * ve pero no se puede escribir: `npm install` falla con EACCES y el agente
+       * cree que el stack no se puede instalar. En vez de parar, improvisa (lo
+       * vimos armar una landing "sin dependencias" para esquivarlo), así que el
+       * síntoma no es un error sino trabajo entregado a medias.
+       *
+       * No se ve en desarrollo porque ahí tu usuario suele ser uid 1000, el
+       * mismo que trae la imagen. Sale en cuanto Multi corre como root, que es
+       * lo normal en un servidor.
+       */
+      "--user", `${process.getuid?.() ?? 1000}:${process.getgid?.() ?? 1000}`,
+      /**
+       * Y con un HOME que ese usuario sí posea.
+       *
+       * La imagen trae HOME=/home/node, de `node`. Al entrar como otro usuario
+       * esa carpeta es ajena, y npm escribe ahí su caché y su config antes de
+       * instalar nada: sin esto, arreglar el dueño del workspace no alcanzaba y
+       * `npm install` seguía muriendo, ahora por el caché.
+       *
+       * Va dentro del propio workspace porque es lo único que con certeza le
+       * pertenece a quien corre Multi. Queda en `.multi-home`, con punto: los
+       * `.gitignore` que escriben los agentes suelen ignorar los ocultos, y de
+       * todos modos el del motor ya excluye lo pesado.
+       */
+      "--env", "HOME=/work/.multi-home",
+      "--env", "npm_config_cache=/work/.multi-home/.npm",
+      // Puerto 0 = que Docker elija uno libre del host. Evita colisiones entre salas.
+      "-p", `0:${devPort}`,
+      "--memory", MEMORY_LIMIT,
+      "--cpus", CPU_LIMIT,
+      // Sin privilegios extra y sin poder ganarlos (un sudo dentro no escala).
+      "--security-opt", "no-new-privileges",
+      // Si el server de Multi muere, el contenedor no se queda huérfano para siempre.
+      "--label", "multi.room=" + roomId,
+      IMAGE_TAG,
+    ];
+
     try {
-      await execFileP("docker", [
-        "run",
-        "-d",
-        "--name", name,
-        // El proyecto vive en el host; adentro se ve como /work.
-        "-v", `${workspaceDir}:/work`,
-        "--workdir", "/work",
-        // Puerto 0 = que Docker elija uno libre del host. Evita colisiones entre salas.
-        "-p", `0:${devPort}`,
-        "--memory", MEMORY_LIMIT,
-        "--cpus", CPU_LIMIT,
-        // Sin privilegios extra y sin poder ganarlos (un sudo dentro no escala).
-        "--security-opt", "no-new-privileges",
-        // Si el server de Multi muere, el contenedor no se queda huérfano para siempre.
-        "--label", "multi.room=" + roomId,
-        IMAGE_TAG,
-      ], { timeout: 60_000 });
+      await execFileP("docker", args, { timeout: 60_000 });
     } catch (err) {
       // Cinturón por si el nombre quedó tomado de todos modos (un contenedor
       // que Docker seguía borrando, por ejemplo): se limpia y se reintenta una vez.
       if (!String(err).includes("already in use")) throw err;
       await removeContainer(name);
-      await execFileP("docker", [
-        "run", "-d", "--name", name,
-        "-v", `${workspaceDir}:/work`,
-        "--workdir", "/work",
-        "-p", `0:${devPort}`,
-        "--memory", MEMORY_LIMIT,
-        "--cpus", CPU_LIMIT,
-        "--security-opt", "no-new-privileges",
-        "--label", "multi.room=" + roomId,
-        IMAGE_TAG,
-      ], { timeout: 60_000 });
+      await execFileP("docker", args, { timeout: 60_000 });
     }
 
     return { roomId, name, publishedPort: await readPublishedPort(name, devPort) };

@@ -91,6 +91,19 @@ export class SqliteStorage implements Storage {
     this.db.prepare(`UPDATE rooms SET last_active_at = ? WHERE id = ?`).run(Date.now(), id);
   }
 
+  /**
+   * Los mensajes y los historiales se van solos: sus tablas declaran
+   * `ON DELETE CASCADE` contra `rooms(id)` y el PRAGMA de claves foráneas está
+   * activo desde el constructor. Aun así se borran a mano primero, porque si
+   * ese PRAGMA se cayera algún día esto dejaría filas huérfanas en silencio y
+   * la BD crecería sin que nadie lo notara.
+   */
+  async deleteRoom(id: string): Promise<void> {
+    this.db.prepare(`DELETE FROM agent_histories WHERE room_id = ?`).run(id);
+    this.db.prepare(`DELETE FROM messages WHERE room_id = ?`).run(id);
+    this.db.prepare(`DELETE FROM rooms WHERE id = ?`).run(id);
+  }
+
   async appendMessage(m: StoredMessage): Promise<void> {
     this.db
       .prepare(

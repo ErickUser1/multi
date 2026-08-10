@@ -20,7 +20,7 @@ import { BackCanvas, type Endpoint } from "./BackCanvas.js";
 import { KeyPanel, loadStoredCredencial, type Credencial } from "./KeyPanel.js";
 import { useTextos } from "./i18n.js";
 import { MenuSalas } from "./MenuSalas.js";
-import { recordarSala } from "./historial-salas.js";
+import { recordarSala, olvidarSala } from "./historial-salas.js";
 import {
   prepararImagen,
   imagenesDe,
@@ -428,6 +428,15 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
     });
 
     socket.on("error:join", ({ message }: { message: string }) => alert(message));
+
+    // Alguien borró esta sala mientras estabas dentro. Sin esto te quedabas
+    // frente a un preview que ya no responde y un chat que no manda nada,
+    // sin saber por qué.
+    socket.on("room:deleted", () => {
+      olvidarSala(roomId);
+      alert(t.salaBorrada);
+      window.location.hash = "#/";
+    });
 
     // Solo a mí: mi key faltaba o el server la rechazó. Abre el panel.
     socket.on("error:key", ({ message }: { message: string }) => {

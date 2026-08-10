@@ -36,6 +36,13 @@ export interface Storage {
   listRooms(): Promise<StoredRoom[]>;
   /** Marca actividad reciente (para saber qué salas siguen vivas). */
   touchRoom(id: string): Promise<void>;
+  /**
+   * Borra la sala y todo lo suyo: mensajes e historiales de agentes.
+   *
+   * Solo la parte de base de datos. El workspace en disco y el contenedor los
+   * quita quien llama, porque no viven aquí.
+   */
+  deleteRoom(id: string): Promise<void>;
 
   appendMessage(msg: StoredMessage): Promise<void>;
   /** Los mensajes de una sala, en orden. */

@@ -104,6 +104,14 @@ const TEXTOS = {
     sinOtrasSalas: "Todavía no has entrado a otra sala.",
     crearOtraSala: "Crear otra sala",
     quitarDeLaLista: "Quitar de la lista",
+    borrarSala: "Borrar la sala",
+    // Se nombra la sala y se dice que es para todos: borrarla se lleva el
+    // trabajo de quien estuviera ahí, no solo tu acceso.
+    confirmarBorrarSala: (id: string) =>
+      `¿Borrar la sala ${id}? Se va el proyecto y el chat, para ti y para todos los que entren con el link. No se puede deshacer.`,
+    noSePudoBorrar: "no se pudo borrar la sala: ",
+    salaBorrada: "Alguien borró esta sala. El proyecto y el chat ya no existen.",
+    salaBorradaOk: (id: string) => `Se borró ${id}.`,
 
     // Historial
     historial: "Historial",
@@ -246,6 +254,12 @@ const TEXTOS = {
     sinOtrasSalas: "You haven't joined another room yet.",
     crearOtraSala: "Create another room",
     quitarDeLaLista: "Remove from the list",
+    borrarSala: "Delete the room",
+    confirmarBorrarSala: (id: string) =>
+      `Delete room ${id}? The project and the chat are gone, for you and for anyone with the link. This can't be undone.`,
+    noSePudoBorrar: "couldn't delete the room: ",
+    salaBorrada: "Someone deleted this room. The project and the chat are gone.",
+    salaBorradaOk: (id: string) => `${id} deleted.`,
 
     // Historial
     historial: "History",

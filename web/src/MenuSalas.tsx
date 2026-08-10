@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { salasVisitadas, olvidarSala, type SalaVisitada } from "./historial-salas.js";
-import { createRoom } from "./socket.js";
+import { createRoom, borrarSala } from "./socket.js";
 import { useTextos } from "./i18n.js";
 
 /**
@@ -17,7 +17,50 @@ export function MenuSalas({ actual }: { actual?: string }) {
   const [abierto, setAbierto] = useState(false);
   const [salas, setSalas] = useState<SalaVisitada[]>([]);
   const [creando, setCreando] = useState(false);
+  /** El id de la sala que se está borrando ahora mismo, o null. */
+  const [borrando, setBorrando] = useState<string | null>(null);
+  /** La que se acaba de borrar, para avisarlo. Se limpia sola. */
+  const [borrada, setBorrada] = useState<string | null>(null);
   const cajaRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!borrada) return;
+    const id = setTimeout(() => setBorrada(null), 4000);
+    return () => clearTimeout(id);
+  }, [borrada]);
+
+  /**
+   * Borrar una sala de verdad, no solo quitarla de esta lista.
+   *
+   * Se pregunta antes porque es irreversible y NO es personal: la sala es de
+   * quien tenga el link, así que borrarla se lleva el trabajo de los compas que
+   * estén ahí. El nombre va en la pregunta para que se vea cuál se va a ir: en
+   * una lista de salas que se llaman parecido, "¿seguro?" a secas no dice nada.
+   *
+   * Si el server falla, la sala NO se quita de la lista: seguiría existiendo y
+   * borrarla del menú solo escondería algo que sigue ocupando disco.
+   */
+  const borrar = async (id: string) => {
+    if (!confirm(t.confirmarBorrarSala(id))) return;
+    setBorrando(id);
+    try {
+      await borrarSala(id);
+      olvidarSala(id);
+      setSalas(salasVisitadas());
+      if (id === actual) {
+        // Borraste la sala donde estabas: ahí ya no hay nada que ver, y como el
+        // menú se va contigo, el aviso de abajo no se alcanzaría a leer.
+        alert(t.salaBorradaOk(id));
+        window.location.hash = "#/";
+      } else {
+        setBorrada(id);
+      }
+    } catch (e) {
+      alert(t.noSePudoBorrar + String(e));
+    } finally {
+      setBorrando(null);
+    }
+  };
 
   const crearOtra = async () => {
     setCreando(true);
@@ -75,6 +118,11 @@ export function MenuSalas({ actual }: { actual?: string }) {
         <div className="menu-panel">
           <div className="menu-cab">{t.tusSalas}</div>
 
+          {/* Que la fila desaparezca no dice si se borró la sala o solo se quitó
+              del menú. Este aviso lo confirma, y se va solo: es una noticia de
+              paso, no un estado en el que la interfaz se quede. */}
+          {borrada && <p className="menu-borrada">{t.salaBorradaOk(borrada)}</p>}
+
           {otras.length === 0 ? (
             <p className="menu-vacio">{t.sinOtrasSalas}</p>
           ) : (
@@ -87,14 +135,12 @@ export function MenuSalas({ actual }: { actual?: string }) {
                   </a>
                   <button
                     className="menu-olvidar"
-                    title={t.quitarDeLaLista}
-                    aria-label={`${t.quitarDeLaLista}: ${s.id}`}
-                    onClick={() => {
-                      olvidarSala(s.id);
-                      setSalas(salasVisitadas());
-                    }}
+                    title={t.borrarSala}
+                    aria-label={`${t.borrarSala}: ${s.id}`}
+                    disabled={borrando === s.id}
+                    onClick={() => borrar(s.id)}
                   >
-                    ×
+                    {borrando === s.id ? "…" : "×"}
                   </button>
                 </li>
               ))}

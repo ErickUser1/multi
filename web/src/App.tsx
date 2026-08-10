@@ -20,7 +20,7 @@ import { BackCanvas, type Endpoint } from "./BackCanvas.js";
 import { KeyPanel, loadStoredCredencial, type Credencial } from "./KeyPanel.js";
 import { useTextos } from "./i18n.js";
 import { MenuSalas } from "./MenuSalas.js";
-import { recordarSala } from "./historial-salas.js";
+import { recordarSala, olvidarSala } from "./historial-salas.js";
 import {
   prepararImagen,
   imagenesDe,
@@ -96,8 +96,18 @@ export function App() {
     );
   }
 
-  // Pantalla 3: la sala.
-  return <Sala roomId={roomId} name={name || "anónimo"} />;
+  /**
+   * Pantalla 3: la sala.
+   *
+   * La `key` es lo que hace que al cambiar de sala se empiece de cero. Sin
+   * ella React ve el mismo componente en el mismo sitio, reusa la instancia y
+   * conserva su estado: los mensajes, los agentes y el preview de la sala
+   * ANTERIOR. Al entrar a una sala con historial no se notaba, porque el
+   * `joined` llegaba con mensajes y pisaba lo viejo; al crear una sala nueva sí,
+   * porque llega vacío y nada sobrescribe. Aparecías en una sala recién creada
+   * leyendo la conversación de otra.
+   */
+  return <Sala key={roomId} roomId={roomId} name={name || "anónimo"} />;
 }
 
 // ── Pantalla: crear / entrar a sala ────────────────────────────────────────
@@ -418,6 +428,15 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
     });
 
     socket.on("error:join", ({ message }: { message: string }) => alert(message));
+
+    // Alguien borró esta sala mientras estabas dentro. Sin esto te quedabas
+    // frente a un preview que ya no responde y un chat que no manda nada,
+    // sin saber por qué.
+    socket.on("room:deleted", () => {
+      olvidarSala(roomId);
+      alert(t.salaBorrada);
+      window.location.hash = "#/";
+    });
 
     // Solo a mí: mi key faltaba o el server la rechazó. Abre el panel.
     socket.on("error:key", ({ message }: { message: string }) => {

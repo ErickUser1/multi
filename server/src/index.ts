@@ -18,6 +18,7 @@ import {
   maybeStartPreview,
   ensureRunner,
   loadRoomIndex,
+  deleteRoom,
   type Room,
   type SelectedElement,
 } from "./rooms.js";
@@ -309,6 +310,27 @@ fastify.get<{ Params: { id: string } }>("/rooms/:id/export/estado", async (req, 
     hayCommits: await hayCommits(room.workspace.dir),
     cambiosSinCommitear: await tieneCambiosSinCommitear(room.workspace.dir),
   };
+});
+
+/**
+ * Borrar una sala: su proyecto, su contenedor y su historial.
+ *
+ * Es DELETE y no un POST a algo: destruye un recurso entero, y el método dice
+ * eso solo. Va bajo `/rooms` por lo mismo que el export (el proxy del preview
+ * no toca ese prefijo).
+ *
+ * No hay dueño que comprobar: la sala es de quien tenga el link, y sin cuentas
+ * no existe forma de saber quién la creó. Lo que protege de un borrado por
+ * accidente es la confirmación de la interfaz, no este endpoint.
+ */
+fastify.delete<{ Params: { id: string } }>("/rooms/:id", async (req, reply) => {
+  const borrada = await deleteRoom(req.params.id);
+  if (!borrada) return reply.code(404).send({ error: "sala no encontrada" });
+
+  // A quien esté dentro se le avisa: su sala acaba de dejar de existir y el
+  // preview que tiene enfrente ya no responde.
+  io.to(req.params.id).emit("room:deleted", {});
+  return { ok: true };
 });
 
 // Info de una sala (para saber la URL del preview al entrar).

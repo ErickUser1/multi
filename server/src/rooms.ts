@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { createWorkspace, type Workspace } from "./engine/workspace.js";
 import { startPreview, detectLaunch, type Preview } from "./engine/preview.js";
@@ -345,6 +345,42 @@ export async function stopAllPreviews(): Promise<void> {
       if (r.container) await stopContainer(r.id);
     }),
   );
+}
+
+/**
+ * Borra una sala del todo: su proyecto, su contenedor y su rastro en la BD.
+ *
+ * Es irreversible y es PARA TODOS: la sala es de quien tenga el link, no de
+ * quien aprieta el botón. Por eso la confirmación vive en la interfaz, y por eso
+ * la Sala ofrece bajarse el .zip antes.
+ *
+ * El orden importa. Primero se apaga lo que está corriendo (el dev server tiene
+ * el workspace abierto y el contenedor lo tiene montado); borrar el directorio
+ * con ellos vivos deja procesos escribiendo en archivos que ya no existen y, en
+ * el caso del contenedor, un montaje colgado. Al final se saca de memoria, para
+ * que nadie la resucite a media limpieza.
+ */
+export async function deleteRoom(id: string): Promise<boolean> {
+  const room = rooms.get(id) ?? (await wakeRoom(id));
+  if (!room) return false;
+
+  // Fuera de memoria antes de tocar nada: si alguien pide entrar mientras se
+  // borra, se encuentra una sala que ya no existe en vez de una a medio morir.
+  rooms.delete(id);
+
+  await room.preview?.stop().catch(() => {});
+  if (room.container) await stopContainer(id).catch(() => {});
+
+  // El workspace y lo que cuelga de él: los adjuntos y los turnos viven al lado,
+  // como hermanos con el id de la sala por prefijo (workspaces/<id>.adjuntos).
+  const dir = room.workspace.dir;
+  await rm(dir, { recursive: true, force: true }).catch(() => {});
+  await rm(`${dir}.adjuntos`, { recursive: true, force: true }).catch(() => {});
+  await rm(`${dir}.turns.json`, { force: true }).catch(() => {});
+  await rm(`${dir}.bookmarks.json`, { force: true }).catch(() => {});
+
+  await (await getStorage()).deleteRoom(id);
+  return true;
 }
 
 export function addMember(room: Room, socketId: string, name: string): Member {

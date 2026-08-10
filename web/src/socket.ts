@@ -110,6 +110,17 @@ export async function createRoom(): Promise<string> {
   return data.id;
 }
 
+/**
+ * Borra la sala del servidor: proyecto, contenedor e historial.
+ *
+ * Irreversible, y para todos los que estén en ella. Quien llame a esto tiene
+ * que haber preguntado antes.
+ */
+export async function borrarSala(id: string): Promise<void> {
+  const res = await fetch(`${SERVER_URL}/rooms/${id}`, { method: "DELETE" });
+  if (!res.ok) throw new Error("no se pudo borrar la sala");
+}
+
 // ── Socket ──────────────────────────────────────────────────────────────────
 
 export function connectSocket(): Socket {

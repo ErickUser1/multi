@@ -117,6 +117,17 @@ export function parsePreviewUrl(
   return { roomId, rest: url };
 }
 
+/**
+ * Si lo que se pide es la página de entrada de la sala, y no un asset suyo.
+ *
+ * `parsed.rest` ya viene sin el `/preview/:roomId`, así que la entrada es "/"
+ * (o vacío). Cualquier otra cosa es un archivo del proyecto.
+ */
+export function esLaPaginaDeLaSala(rest: string): boolean {
+  const soloRuta = rest.split("?")[0];
+  return soloRuta === "/" || soloRuta === "" || soloRuta === "/index.html";
+}
+
 /** Puerto del dev server de una sala, o null si aún no arrancó. */
 function roomPreviewPort(roomId: string): number | null {
   const room = getRoom(roomId);
@@ -156,6 +167,22 @@ export function handlePreviewRequest(req: IncomingMessage, res: ServerResponse):
   delete fwdHeaders["connection"];
   fwdHeaders["host"] = `127.0.0.1:${port}`;
 
+  /**
+   * Pedir la PÁGINA de la sala siempre fresca, nunca revalidada.
+   *
+   * Es la que trae la cookie que dice de qué sala son los módulos siguientes.
+   * Si el navegador la revalida, Vite contesta 304 sin cuerpo, el proxy no
+   * llega a poner la cookie, y queda la de la última sala visitada. Quitar las
+   * cabeceras de revalidación obliga a un 200 con HTML de verdad.
+   *
+   * Solo para la entrada del preview (`/preview/:roomId` o `/preview/:roomId/`).
+   * Los assets siguen cacheando normal: ahí el 304 es justo lo que se quiere.
+   */
+  if (esLaPaginaDeLaSala(parsed.rest)) {
+    delete fwdHeaders["if-none-match"];
+    delete fwdHeaders["if-modified-since"];
+  }
+
   const upstream = httpRequest(
     {
       host: "127.0.0.1",
@@ -190,6 +217,29 @@ export function handlePreviewRequest(req: IncomingMessage, res: ServerResponse):
       // Referer, así que sin esto los assets de raíz no se pueden atribuir a
       // ninguna sala y el preview queda en blanco.
       headers["set-cookie"] = `${ROOM_COOKIE}=${parsed.roomId}; Path=/; SameSite=Lax`;
+
+      /**
+       * Y que ese HTML NO se cachee, porque la cookie viaja con él.
+       *
+       * La cookie es una sola para todo el navegador, así que entrar a otra
+       * sala la sobrescribe. Al volver a la primera, su HTML salía del caché
+       * del navegador (un 304 seco, sin llegar aquí), la cookie se quedaba
+       * apuntando a la OTRA sala, y los módulos que Vite pide desde la raíz
+       * (`/src/main.tsx`, sin Referer útil) se resolvían contra el proyecto
+       * equivocado: React duplicado, "Invalid hook call", preview en negro.
+       *
+       * Sin caché, cada vez que se abre una sala su HTML se vuelve a pedir y la
+       * cookie queda correcta ANTES de que se pidan los módulos. Cuesta una
+       * petición de HTML por entrada, que al lado de un dev server no es nada.
+       *
+       * Se quita también el ETag: con él, el navegador revalida y Vite
+       * responde 304, que es justo el camino que dejaba la cookie vieja.
+       */
+      headers["cache-control"] = "no-store, must-revalidate";
+      delete headers["etag"];
+      delete headers["Etag"];
+      delete headers["ETag"];
+      delete headers["last-modified"];
 
       // HTML: bufferizar, transformar, reenviar.
       const chunks: Buffer[] = [];

@@ -353,11 +353,28 @@ body::after {
   cursor: default;
   opacity: 0.6;
 }
+/* Es un <button> para que se pueda renombrar con el teclado y lo anuncien los
+   lectores de pantalla, así que hay que apagarle lo que trae de fábrica. */
 .sala-nombre {
   font-family: "Bodoni MT", "Didot", Georgia, serif;
   font-size: 19px;
   letter-spacing: 1px;
+  color: var(--texto);
+  background: transparent;
+  border: none;
+  padding: 0;
+  text-align: left;
   cursor: text;
+  /* El subrayado invisible reserva su espacio desde el principio: sin esto el
+     título brinca un pixel al pasar el mouse. */
+  border-bottom: 1px solid transparent;
+}
+/* Que se note que se puede tocar. Sin esto nadie descubre que es editable:
+   un título se ve igual sea editable o no. */
+.sala-nombre:hover,
+.sala-nombre:focus-visible {
+  border-bottom-color: var(--dim);
+  outline: none;
 }
 /* El input hereda la misma tipografía y tamaño para que renombrar no mueva
    nada de sitio: escribes donde estaba el nombre, no en otra caja. */

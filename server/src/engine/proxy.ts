@@ -63,6 +63,20 @@ const RUTA_COMPARTIDA = "/assets/";
 /** Nombre de la cookie que recuerda a qué sala pertenece esta pestaña del preview. */
 const ROOM_COOKIE = "multi_room";
 
+/**
+ * Cuánto esperar antes de cada reintento cuando el dev server corta la conexión.
+ *
+ * Creciente y no fijo: casi siempre basta el primero, porque la ventana en que
+ * Vite acepta conexiones sin poder servir es de décimas. Los siguientes son
+ * para arranques lentos, que los hay (un proyecto pesado tardó 18s en levantar).
+ *
+ * Y con techo, ~3.75s en total: el dev server está en la misma máquina, así que
+ * si a esas alturas no contesta es que está caído, no ocupado. Insistir más solo
+ * acumularía conexiones colgadas — un preview pide decenas de archivos, y con
+ * todas esperando la sala parecería congelada en vez de decir que algo falló.
+ */
+const ESPERAS = [250, 500, 1000, 2000];
+
 /** Lee el roomId de la cookie (si viene). */
 function roomFromCookie(cookieHeader?: string): string | null {
   if (!cookieHeader) return null;
@@ -139,7 +153,19 @@ function roomPreviewPort(roomId: string): number | null {
  * http.Server crudo (para poder transformar el body sin que Fastify lo toque).
  * Devuelve true si manejó la request; false si no era del proxy.
  */
-export function handlePreviewRequest(req: IncomingMessage, res: ServerResponse): boolean {
+export function handlePreviewRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+  /**
+   * Cuántos reintentos se han hecho ya, si el dev server corta la conexión.
+   *
+   * Vite acepta conexiones un instante antes de poder servir de verdad, así que
+   * la primera petición del navegador (normalmente `/@vite/client`) se topa a
+   * veces con un `socket hang up` y el preview sale roto. Recargar lo arregla,
+   * que es justo la señal de que solo faltaba esperar un momento.
+   */
+  intento = 0,
+): boolean {
   const D = process.env.PROXY_DEBUG === "1";
   const parsed = parsePreviewUrl(req.url ?? "", {
     referer: req.headers.referer,
@@ -258,6 +284,24 @@ export function handlePreviewRequest(req: IncomingMessage, res: ServerResponse):
   );
 
   upstream.on("error", (err) => {
+    /**
+     * El dev server acaba de arrancar y todavía no atiende: se espera un poco y
+     * se vuelve a pedir, en vez de devolver un 502 a quien llegó medio segundo
+     * antes de tiempo.
+     *
+     * Solo con ECONNRESET (la conexión cortada a media), solo si no se le mandó
+     * nada al cliente todavía, y solo en peticiones sin cuerpo: el cuerpo de la
+     * original ya se consumió y no se puede reenviar. Los assets del arranque,
+     * que es lo que falla, son todos GET.
+     */
+    const seCorto = (err as NodeJS.ErrnoException).code === "ECONNRESET";
+    if (seCorto && !res.headersSent && intento < ESPERAS.length && req.method === "GET") {
+      const espera = ESPERAS[intento];
+      if (D) console.log(`[proxy] ${parsed.rest} se cortó, reintento en ${espera}ms`);
+      setTimeout(() => handlePreviewRequest(req, res, intento + 1), espera);
+      return;
+    }
+
     console.error(
       `[proxy] error upstream: sala=${parsed.roomId} puerto=${port} path=${parsed.rest} método=${req.method}`,
       err,

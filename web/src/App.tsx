@@ -699,13 +699,13 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
                 }}
               />
             ) : (
-              <div
+              <button
                 className="sala-nombre"
-                onDoubleClick={() => setEditandoNombre(true)}
+                onClick={() => setEditandoNombre(true)}
                 title={nombre ? `${roomId} — ${t.renombrarSala}` : t.renombrarSala}
               >
                 {nombre ?? roomId}
-              </div>
+              </button>
             )}
             <div className="sala-meta">{t.enLaSala(members.length)}</div>
           </div>

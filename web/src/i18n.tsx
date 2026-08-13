@@ -26,21 +26,18 @@ function idiomaInicial(): Idioma {
 const TEXTOS = {
   es: {
     // Entrada
-    tagline: "un lugar para vibecodear con tus compas",
     tuNombre: "¿cómo te llamas?",
-    crearSala: "Crear una sala",
     creandoSala: "creando sala…",
-    pegaLink: "pega el link o el nombre de la sala",
     entrar: "Entrar",
-    oEntraConLink: "o entra con el link que te pasó tu compa",
     vasAEntrar: "vas a entrar a la sala",
-    noEncontreSala: "no encontré el nombre de la sala ahí",
     noSePudoCrear: "no se pudo crear la sala: ",
     anonimo: "anónimo",
 
     // Sala
     enLaSala: (n: number) => `${n} en la sala`,
     renombrarSala: "clic para ponerle nombre",
+    ningunaSala: "ninguna sala abierta",
+    eligeOCrea: "abre una de tus salas o crea una nueva con el +",
     salaVacia: "La sala está vacía.",
     pideAlgo: "@agente crea un Next con Tailwind",
     hablaConLaSala: "habla con la sala — o escribe @agente para pedir algo",
@@ -177,21 +174,18 @@ const TEXTOS = {
 
   en: {
     // Entrada
-    tagline: "a place to vibe code with your friends",
     tuNombre: "what's your name?",
-    crearSala: "Create a room",
     creandoSala: "creating room…",
-    pegaLink: "paste the link or the room name",
     entrar: "Join",
-    oEntraConLink: "or join with the link a friend sent you",
     vasAEntrar: "you're joining room",
-    noEncontreSala: "couldn't find a room name in there",
     noSePudoCrear: "couldn't create the room: ",
     anonimo: "anonymous",
 
     // Sala
     enLaSala: (n: number) => `${n} in the room`,
     renombrarSala: "click to name it",
+    ningunaSala: "no room open",
+    eligeOCrea: "open one of your rooms or create a new one with the +",
     salaVacia: "The room is empty.",
     pideAlgo: "@agente build a Next app with Tailwind",
     hablaConLaSala: "talk to the room — or type @agente to ask for something",

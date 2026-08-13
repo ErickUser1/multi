@@ -18,6 +18,7 @@ import { MentionMenu } from "./MentionMenu.js";
 import { Historial } from "./Historial.js";
 import { BackCanvas, type Endpoint } from "./BackCanvas.js";
 import { KeyPanel, loadStoredCredencial, type Credencial } from "./KeyPanel.js";
+import { EnvPanel } from "./EnvPanel.js";
 import { useTextos } from "./i18n.js";
 import { MenuSalas } from "./MenuSalas.js";
 import { recordarSala, olvidarSala, recordarNombre } from "./historial-salas.js";
@@ -892,6 +893,9 @@ function Sala({ roomId, name }: { roomId: string | null; name: string }) {
             >
               {zipAviso ?? t.descargarZip}
             </button>
+            {/* Las variables son del proyecto de la sala, así que sin sala no
+                hay dónde escribirlas. */}
+            {roomId && <EnvPanel roomId={roomId} />}
             {/* Sin sala no hay link que compartir: copiaría la URL pelada. */}
             <button className="invitar" onClick={copyLink} disabled={!roomId}>
               {t.copiarLink}

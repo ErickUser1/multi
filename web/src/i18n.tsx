@@ -59,6 +59,21 @@ const TEXTOS = {
     zipTrabajoSinGuardar: "hay trabajo sin guardar, el .zip lleva el último punto guardado",
     zipFallo: "no se pudo preparar el .zip",
     ponerMiKey: "poner mi key",
+
+    // Variables del proyecto (.env)
+    envBoton: "Variables",
+    envTitulo: "Variables del proyecto",
+    envNota:
+      "Van al .env de esta sala: la app y el agente las leen. Son de la sala, así que las ve quien entre.",
+    envVacio: "Todavía no hay ninguna.",
+    envNombre: "NOMBRE",
+    envValor: "valor",
+    envAgregar: "Agregar",
+    envQuitar: "Quitar",
+    envGuardando: "Guardando…",
+    envGuardado: "Guardado",
+    envReinicio: "Reinicia el proyecto para que las tome (pídeselo al agente).",
+    envNoSePudo: "no se pudieron guardar: ",
     seleccionarElemento: "Seleccionar elemento",
     selecciono: "seleccionó",
     contraer: "contraer",
@@ -207,6 +222,21 @@ const TEXTOS = {
     zipTrabajoSinGuardar: "there's unsaved work, the .zip has the last saved point",
     zipFallo: "couldn't prepare the .zip",
     ponerMiKey: "add my key",
+
+    // Variables del proyecto (.env)
+    envBoton: "Variables",
+    envTitulo: "Project variables",
+    envNota:
+      "They go in this room's .env: the app and the agent read them. They belong to the room, so anyone who joins can see them.",
+    envVacio: "None yet.",
+    envNombre: "NAME",
+    envValor: "value",
+    envAgregar: "Add",
+    envQuitar: "Remove",
+    envGuardando: "Saving…",
+    envGuardado: "Saved",
+    envReinicio: "Restart the project so it picks them up (ask the agent).",
+    envNoSePudo: "couldn't save them: ",
     seleccionarElemento: "Select element",
     selecciono: "selected",
     contraer: "collapse",

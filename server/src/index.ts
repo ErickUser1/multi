@@ -37,6 +37,7 @@ import {
 } from "./engine/adjuntos.js";
 import { MAX_AGENTS_PER_ROOM, resumenDeOtros } from "./engine/agents.js";
 import { fileMutation } from "./engine/file-mutation.js";
+import { leerVariables, guardarVariables } from "./engine/env.js";
 import { startTurn, commitTurn, failTurnConCommit } from "./engine/turns.js";
 import {
   commitAll,
@@ -312,6 +313,40 @@ fastify.get<{ Params: { id: string } }>("/rooms/:id/export/estado", async (req, 
     cambiosSinCommitear: await tieneCambiosSinCommitear(room.workspace.dir),
   };
 });
+
+/**
+ * Las variables de entorno del proyecto de la sala.
+ *
+ * GET devuelve las que hay; PUT reemplaza la lista completa (lo que manda el
+ * panel es lo que queda, así que borrar es no mandarla).
+ *
+ * Van por HTTP y no por el chat a propósito: el chat se guarda en la BD, se le
+ * muestra a todos y se manda al modelo. Una credencial ahí quedaría escrita para
+ * siempre. Aquí solo van al `.env` del workspace, que el .gitignore ya excluye.
+ *
+ * Lo que SÍ hay que saber: el agente puede leer ese archivo, porque el proyecto
+ * necesita conectarse. Quien las pone las está compartiendo con la sala, y eso
+ * lo dice el panel.
+ */
+fastify.get<{ Params: { id: string } }>("/rooms/:id/env", async (req, reply) => {
+  const room = getRoom(req.params.id) ?? (await wakeRoom(req.params.id));
+  if (!room) return reply.code(404).send({ error: "sala no encontrada" });
+  return { variables: await leerVariables(room.workspace.dir) };
+});
+
+fastify.put<{ Params: { id: string }; Body: { variables?: unknown } }>(
+  "/rooms/:id/env",
+  async (req, reply) => {
+    const room = getRoom(req.params.id) ?? (await wakeRoom(req.params.id));
+    if (!room) return reply.code(404).send({ error: "sala no encontrada" });
+
+    const variables = await guardarVariables(room.workspace.dir, req.body?.variables);
+    // A la sala se le dice CUÁNTAS quedaron, nunca sus valores: el aviso es para
+    // que nadie se pregunte por qué el proyecto cambió de comportamiento solo.
+    io.to(room.id).emit("env:changed", { cuantas: variables.length });
+    return { variables };
+  },
+);
 
 /**
  * Borrar una sala: su proyecto, su contenedor y su historial.

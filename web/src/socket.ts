@@ -89,6 +89,8 @@ export interface SelectionInfo {
 
 export interface JoinedPayload {
   roomId: string;
+  /** Cómo le dicen a esta sala, o null si nadie la ha nombrado (se ve el id). */
+  nombre?: string | null;
   you: Member;
   members: Member[];
   previewUrl: string | null;

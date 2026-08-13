@@ -130,8 +130,14 @@ export function MenuSalas({ actual }: { actual?: string }) {
               {otras.map((s) => (
                 <li key={s.id} className="menu-item">
                   <a className="menu-link" href={`#/sala/${s.id}`} onClick={() => setAbierto(false)}>
-                    <span className="menu-sala-id">{s.id}</span>
-                    <span className="menu-sala-fecha">{cuando(s.visitadaEn, idioma)}</span>
+                    {/* El nombre manda, porque es lo que hace reconocible la
+                        sala. El id se queda debajo: sigue siendo lo que va en
+                        el link y lo que se dicta por teléfono. */}
+                    <span className="menu-sala-id">{s.nombre || s.id}</span>
+                    <span className="menu-sala-fecha">
+                      {s.nombre ? `${s.id} · ` : ""}
+                      {cuando(s.visitadaEn, idioma)}
+                    </span>
                   </a>
                   <button
                     className="menu-olvidar"

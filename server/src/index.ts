@@ -19,6 +19,7 @@ import {
   ensureRunner,
   loadRoomIndex,
   deleteRoom,
+  renameRoom,
   type Room,
   type SelectedElement,
 } from "./rooms.js";
@@ -339,6 +340,7 @@ fastify.get<{ Params: { id: string } }>("/rooms/:id", async (req, reply) => {
   if (!room) return reply.code(404).send({ error: "sala no encontrada" });
   return {
     id: room.id,
+    nombre: room.nombre ?? null,
     previewUrl: room.preview?.url ?? null,
     members: membersList(room),
   };
@@ -431,6 +433,8 @@ io.on("connection", (socket) => {
     const history = await storage.getMessages(roomId);
     socket.emit("joined", {
       roomId,
+      // Null si nadie la ha nombrado: la Sala muestra el id en ese caso.
+      nombre: room.nombre ?? null,
       you: member,
       members: membersList(room),
       previewUrl: room.preview?.url ?? null,
@@ -698,6 +702,28 @@ io.on("connection", (socket) => {
     if (!room || !/^[0-9a-f]{7,40}$/i.test(hash)) return;
     await setBookmark(room.workspace.dir, hash, label);
     io.to(room.id).emit("history:changed", {});
+  });
+
+  /**
+   * Ponerle nombre a la sala. Lo ven todos los que estén dentro.
+   *
+   * Se avisa en el chat quién fue: el nombre está en la cabecera de todos, y
+   * verlo cambiar solo, sin saber por quién, se siente a error. Es el mismo
+   * trato que se le da a regresar el proyecto o a resolver turnos huérfanos.
+   */
+  socket.on("room:rename", async ({ nombre }: { nombre: unknown }) => {
+    const room = joinedRoom;
+    if (!room) return;
+    const member = room.members.get(socket.id);
+    const quien = member?.name ?? "alguien";
+
+    const puesto = await renameRoom(room, nombre);
+    io.to(room.id).emit("room:renamed", { nombre: puesto });
+    systemMsg(
+      room,
+      puesto ? `${quien} le puso "${puesto}" a la sala` : `${quien} le quitó el nombre a la sala`,
+      member?.color,
+    );
   });
 
   // El humano decide qué hacer con el trabajo que quedó a medias por un crash.

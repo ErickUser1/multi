@@ -20,7 +20,7 @@ import { BackCanvas, type Endpoint } from "./BackCanvas.js";
 import { KeyPanel, loadStoredCredencial, type Credencial } from "./KeyPanel.js";
 import { useTextos } from "./i18n.js";
 import { MenuSalas } from "./MenuSalas.js";
-import { recordarSala, olvidarSala } from "./historial-salas.js";
+import { recordarSala, olvidarSala, recordarNombre } from "./historial-salas.js";
 import {
   prepararImagen,
   imagenesDe,
@@ -241,6 +241,12 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
   /** Por dónde va el arranque del preview. null = no está arrancando. */
   const [arrancando, setArrancando] = useState<"contenedor" | "dependencias" | "servidor" | null>(null);
   const [draft, setDraft] = useState("");
+  /**
+   * El nombre de la sala, o null si nadie la ha nombrado (ahí se ve el id).
+   * Es de la sala, así que llega en el `joined` y cambia para todos a la vez.
+   */
+  const [nombre, setNombre] = useState<string | null>(null);
+  const [editandoNombre, setEditandoNombre] = useState(false);
   /** Qué dice el botón de descargar ahora mismo. null = su texto normal. */
   const [zipAviso, setZipAviso] = useState<string | null>(null);
   /**
@@ -339,6 +345,8 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
 
     socket.on("joined", (p: JoinedPayload) => {
       setMembers(p.members);
+      setNombre(p.nombre ?? null);
+      recordarNombre(roomId, p.nombre ?? null);
       if (p.previewUrl) setPreviewReady(true);
       if (p.agents) setAgents(p.agents);
       if (p.orphanTurns?.length) setOrphans(p.orphanTurns);
@@ -353,6 +361,13 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
       if (p.previewArrancando && !p.previewUrl) setArrancando("servidor");
     });
     socket.on("presence", ({ members }: { members: Member[] }) => setMembers(members));
+
+    // Alguien de la sala le cambió el nombre: se ve al momento en la cabecera
+    // de todos, sin recargar. Quién fue sale en el chat.
+    socket.on("room:renamed", ({ nombre }: { nombre: string | null }) => {
+      setNombre(nombre);
+      recordarNombre(roomId, nombre);
+    });
     socket.on("preview:ready", () => {
       setPreviewReady(true);
       setArrancando(null);
@@ -584,6 +599,19 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
   const copyLink = () => navigator.clipboard.writeText(window.location.href);
 
   /**
+   * Guardar el nombre nuevo de la sala.
+   *
+   * No se pinta aquí lo que quedó: se manda al server y se espera su
+   * `room:renamed`, que llega igual para todos. Así el que renombra ve
+   * exactamente lo mismo que sus compas, recortes y espacios incluidos.
+   */
+  const guardarNombre = (valor: string) => {
+    setEditandoNombre(false);
+    if (valor.trim() === (nombre ?? "")) return; // no cambió: nada que mandar
+    socketRef.current?.emit("room:rename", { nombre: valor });
+  };
+
+  /**
    * Bajar el proyecto de la sala como .zip.
    *
    * El zip sale del último punto guardado (el último turno cerrado), no del
@@ -653,7 +681,32 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
         <div className="sala-cab">
           <MenuSalas actual={roomId} />
           <div className="sala-titulo">
-            <div className="sala-nombre">{roomId}</div>
+            {editandoNombre ? (
+              <input
+                className="sala-nombre-input"
+                defaultValue={nombre ?? ""}
+                placeholder={roomId}
+                maxLength={60}
+                autoFocus
+                onBlur={(e) => guardarNombre(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") e.currentTarget.blur();
+                  // Escape descarta: se sale sin guardar lo que se llevaba escrito.
+                  if (e.key === "Escape") {
+                    e.currentTarget.value = nombre ?? "";
+                    e.currentTarget.blur();
+                  }
+                }}
+              />
+            ) : (
+              <button
+                className="sala-nombre"
+                onClick={() => setEditandoNombre(true)}
+                title={nombre ? `${roomId} — ${t.renombrarSala}` : t.renombrarSala}
+              >
+                {nombre ?? roomId}
+              </button>
+            )}
             <div className="sala-meta">{t.enLaSala(members.length)}</div>
           </div>
         </div>

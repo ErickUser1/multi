@@ -357,6 +357,24 @@ body::after {
   font-family: "Bodoni MT", "Didot", Georgia, serif;
   font-size: 19px;
   letter-spacing: 1px;
+  cursor: text;
+}
+/* El input hereda la misma tipografía y tamaño para que renombrar no mueva
+   nada de sitio: escribes donde estaba el nombre, no en otra caja. */
+.sala-nombre-input {
+  font-family: "Bodoni MT", "Didot", Georgia, serif;
+  font-size: 19px;
+  letter-spacing: 1px;
+  color: var(--texto);
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--lavanda);
+  padding: 0;
+  width: 100%;
+  outline: none;
+}
+.sala-nombre-input::placeholder {
+  color: var(--dim);
 }
 .sala-meta {
   font-size: 9px;

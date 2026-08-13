@@ -40,6 +40,7 @@ const TEXTOS = {
 
     // Sala
     enLaSala: (n: number) => `${n} en la sala`,
+    renombrarSala: "doble clic para ponerle nombre",
     salaVacia: "La sala está vacía.",
     pideAlgo: "@agente crea un Next con Tailwind",
     hablaConLaSala: "habla con la sala — o escribe @agente para pedir algo",
@@ -190,6 +191,7 @@ const TEXTOS = {
 
     // Sala
     enLaSala: (n: number) => `${n} in the room`,
+    renombrarSala: "double-click to name it",
     salaVacia: "The room is empty.",
     pideAlgo: "@agente build a Next app with Tailwind",
     hablaConLaSala: "talk to the room — or type @agente to ask for something",

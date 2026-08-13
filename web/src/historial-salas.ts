@@ -24,6 +24,15 @@ export interface SalaVisitada {
   id: string;
   /** Última vez que entraste, en milisegundos. Es el orden de la lista. */
   visitadaEn: number;
+  /**
+   * Cómo se llamaba la sala la última vez que entraste.
+   *
+   * El nombre de verdad vive en el server (lo ven todos), pero se copia aquí
+   * para poder pintar la lista sin preguntar por cada sala. Si alguien lo
+   * cambió mientras no estabas, verás el viejo hasta que vuelvas a entrar: en
+   * un menú para reconocer tus salas, eso alcanza.
+   */
+  nombre?: string | null;
 }
 
 /** Las salas donde entraste, de la más reciente a la más vieja. */
@@ -45,11 +54,36 @@ export function salasVisitadas(): SalaVisitada[] {
 /** Anota que entraste a una sala. Si ya estaba, sube al principio. */
 export function recordarSala(id: string): void {
   try {
+    const previa = salasVisitadas().find((s) => s.id === id);
     const otras = salasVisitadas().filter((s) => s.id !== id);
-    const lista = [{ id, visitadaEn: Date.now() }, ...otras].slice(0, MAXIMO);
+    // Se conserva el nombre que ya se tenía: esto corre AL ENTRAR, cuando el
+    // server todavía no ha dicho cómo se llama la sala. Sin esto, cada visita
+    // borraba el nombre y el menú volvía a mostrar el id.
+    const lista = [
+      { id, visitadaEn: Date.now(), nombre: previa?.nombre ?? null },
+      ...otras,
+    ].slice(0, MAXIMO);
     localStorage.setItem(CLAVE, JSON.stringify(lista));
   } catch {
     // Modo incógnito o almacenamiento lleno: se pierde el historial, no la sala.
+  }
+}
+
+/**
+ * Anota cómo se llama una sala, para que el menú la muestre por su nombre.
+ *
+ * Se llama cuando el server lo dice: al entrar y cuando alguien lo cambia. Si
+ * la sala no está en la lista todavía, no hace nada: entrar es lo que la mete.
+ */
+export function recordarNombre(id: string, nombre: string | null): void {
+  try {
+    const lista = salasVisitadas();
+    const sala = lista.find((s) => s.id === id);
+    if (!sala || sala.nombre === nombre) return;
+    sala.nombre = nombre;
+    localStorage.setItem(CLAVE, JSON.stringify(lista));
+  } catch {
+    // Igual que arriba: no vale la pena romper la interfaz por el historial.
   }
 }
 

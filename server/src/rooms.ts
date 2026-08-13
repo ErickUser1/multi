@@ -45,6 +45,11 @@ export interface SelectedElement {
 /** Estado de una sala en memoria (v1: no persiste; Fase 7 lo lleva a Supabase). */
 export interface Room {
   id: string;
+  /**
+   * Cómo le dice la gente a esta sala, o null si nadie la ha nombrado (ahí se
+   * muestra el id). Es de la sala: lo ven todos los que entren.
+   */
+  nombre?: string | null;
   workspace: Workspace;
   preview: Preview | null;
   /** Hay un arranque de preview en curso (evita dos npm install a la vez). */
@@ -96,6 +101,8 @@ export async function createRoom(): Promise<Room> {
 
   const room: Room = {
     id,
+    // Nace sin nombre: se ve el id hasta que alguien de la sala le ponga uno.
+    nombre: null,
     workspace,
     preview: null,
     members: new Map(),
@@ -144,6 +151,7 @@ async function despertarSala(id: string): Promise<Room | null> {
 
   const room: Room = {
     id,
+    nombre: stored.nombre ?? null,
     // El workspace ya existe en disco: NO se re-siembra ni se limpia.
     workspace: await createWorkspace(id),
     preview: null,
@@ -422,6 +430,34 @@ export async function deleteRoom(id: string): Promise<boolean> {
 
   await (await getStorage()).deleteRoom(id);
   return true;
+}
+
+/** Lo más largo que puede ser el nombre de una sala. */
+export const MAX_NOMBRE_SALA = 60;
+
+/**
+ * Le pone nombre a una sala. Devuelve el nombre que quedó, o null si se quitó.
+ *
+ * Gana el último que escribe, como el título de un documento compartido: es un
+ * campo chico, se toca poco, y quien no esté de acuerdo lo vuelve a cambiar
+ * viendo ya lo que puso el otro. Por eso no hay bloqueo ni resolución de
+ * conflictos, pero sí se avisa a la sala (en index.ts): un nombre que cambia
+ * solo, sin saber quién fue, se siente a error.
+ *
+ * El id NO se toca. Es la URL y lo que se dicta por teléfono, así que renombrar
+ * nunca rompe un link ya compartido.
+ */
+export async function renameRoom(room: Room, crudo: unknown): Promise<string | null> {
+  // Vacío = quitar el nombre y volver a ver el id. Es la única forma de
+  // deshacer, y es más natural que un botón aparte.
+  const texto = typeof crudo === "string" ? crudo.trim() : "";
+  // Los saltos de línea romperían la cabecera de la sala, y no aportan nada a
+  // un nombre.
+  const nombre = texto ? texto.replace(/\s+/g, " ").slice(0, MAX_NOMBRE_SALA) : null;
+
+  room.nombre = nombre;
+  await (await getStorage()).renameRoom(room.id, nombre);
+  return nombre;
 }
 
 export function addMember(room: Room, socketId: string, name: string): Member {

@@ -13,6 +13,15 @@ export interface StoredRoom {
   workspaceDir: string;
   createdAt: number;
   lastActiveAt: number;
+  /**
+   * Cómo le dice la gente a esta sala. Null hasta que alguien la nombre, y
+   * entonces la interfaz cae al id.
+   *
+   * Es de la SALA, no de quien la nombró: la ven todos los que entren. El id
+   * sigue siendo lo que va en la URL y lo que se dicta por teléfono, así que
+   * renombrar no rompe ningún link ya compartido.
+   */
+  nombre?: string | null;
 }
 
 export interface StoredMessage {
@@ -36,6 +45,8 @@ export interface Storage {
   listRooms(): Promise<StoredRoom[]>;
   /** Marca actividad reciente (para saber qué salas siguen vivas). */
   touchRoom(id: string): Promise<void>;
+  /** Le pone nombre a la sala. `null` lo quita y se vuelve a ver el id. */
+  renameRoom(id: string, nombre: string | null): Promise<void>;
   /**
    * Borra la sala y todo lo suyo: mensajes e historiales de agentes.
    *

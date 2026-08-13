@@ -28,7 +28,10 @@ export class SqliteStorage implements Storage {
         id             TEXT PRIMARY KEY,
         workspace_dir  TEXT NOT NULL,
         created_at     INTEGER NOT NULL,
-        last_active_at INTEGER NOT NULL
+        last_active_at INTEGER NOT NULL,
+        -- Cómo le dice la gente a esta sala. El id no cambia nunca (es la URL y
+        -- lo que se dicta por teléfono); esto es solo la etiqueta que se ve.
+        nombre         TEXT
       );
 
       CREATE TABLE IF NOT EXISTS messages (
@@ -62,6 +65,14 @@ export class SqliteStorage implements Storage {
     } catch {
       // ya la tiene
     }
+
+    // El nombre que la gente le pone a la sala. Nullable a propósito: sin él la
+    // interfaz cae al id, que es lo que se ha visto siempre.
+    try {
+      this.db.exec(`ALTER TABLE rooms ADD COLUMN nombre TEXT`);
+    } catch {
+      // ya la tiene
+    }
   }
 
   async createRoom(room: StoredRoom): Promise<void> {
@@ -89,6 +100,10 @@ export class SqliteStorage implements Storage {
 
   async touchRoom(id: string): Promise<void> {
     this.db.prepare(`UPDATE rooms SET last_active_at = ? WHERE id = ?`).run(Date.now(), id);
+  }
+
+  async renameRoom(id: string, nombre: string | null): Promise<void> {
+    this.db.prepare(`UPDATE rooms SET nombre = ? WHERE id = ?`).run(nombre, id);
   }
 
   /**
@@ -201,5 +216,8 @@ function toRoom(r: Record<string, unknown>): StoredRoom {
     workspaceDir: String(r.workspace_dir),
     createdAt: Number(r.created_at),
     lastActiveAt: Number(r.last_active_at),
+    // Las salas de antes de esta columna la traen en null, y ahí la interfaz
+    // cae al id.
+    nombre: r.nombre == null ? null : String(r.nombre),
   };
 }

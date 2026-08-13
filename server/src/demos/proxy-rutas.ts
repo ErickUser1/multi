@@ -1,4 +1,4 @@
-import { parsePreviewUrl } from "../engine/proxy.js";
+import { parsePreviewUrl, esLaPaginaDeLaSala } from "../engine/proxy.js";
 
 /**
  * Demo: qué peticiones van al preview y cuáles se quedan en la Sala.
@@ -122,6 +122,28 @@ function main() {
     // peticiones tienen que caer en la Sala, no en un preview inexistente.
     check("una imagen sin cookie ni referer", aLaSala("/logo.png", {}));
     check("un módulo sin cookie ni referer", aLaSala("/src/main.tsx", {}));
+  }
+
+  console.log("\n7. La página de la sala se distingue de sus archivos");
+  {
+    /**
+     * De qué sirve: esa página es la que trae la cookie que dice a qué sala
+     * pertenecen los módulos siguientes, así que se pide siempre fresca. Los
+     * archivos del proyecto sí pueden cachearse, y deben poder.
+     *
+     * El bug que cubre: al volver a una sala visitada antes, su HTML salía del
+     * caché del navegador (304, sin llegar al proxy), la cookie se quedaba
+     * apuntando a la ÚLTIMA sala abierta, y los módulos de esta se resolvían
+     * contra el proyecto de aquella. El preview quedaba negro con un "Invalid
+     * hook call" por dos copias de React.
+     */
+    check("la entrada de la sala", esLaPaginaDeLaSala("/"));
+    check("la entrada, sin barra", esLaPaginaDeLaSala(""));
+    check("index.html explícito", esLaPaginaDeLaSala("/index.html"));
+    check("la entrada con query", esLaPaginaDeLaSala("/?x=1"));
+    check("un módulo NO es la entrada", !esLaPaginaDeLaSala("/src/main.tsx"));
+    check("una imagen NO es la entrada", !esLaPaginaDeLaSala("/logo.png"));
+    check("el cliente de Vite NO es la entrada", !esLaPaginaDeLaSala("/@vite/client"));
   }
 
   console.log(`\n${pass} pasaron, ${fail} fallaron\n`);

@@ -78,6 +78,17 @@ créalo con bash: es tu trabajo, no preguntes por dónde empezar.
 - El proyecto vive en un volumen montado, donde los eventos de archivo del sistema no
   cruzan. Configura el watcher de tu stack por SONDEO (polling) o los cambios no se
   verán en vivo y la sala se quedará mirando una pantalla congelada.
+- Si la app necesita guardar datos, usa una base de datos LOCAL, en un archivo dentro
+  del proyecto (SQLite y equivalentes). No pidas credenciales ni servicios en la nube.
+  Con Node tienes node:sqlite sin instalar nada.
+  Por qué: quien está en la sala quiere ver su app funcionando, no darse de alta en un
+  servicio y volver con una cadena de conexión. Un archivo se crea solo y arranca al
+  instante.
+  El archivo de la base NO entra al historial (está en el .gitignore): lo de aquí son
+  datos de prueba. Deja el esquema en el código o en una migración, para que la app
+  arranque sola en una base vacía.
+  Si te dan credenciales de una base externa, úsalas: estarán en el .env. Léelo antes
+  de asumir que no hay ninguna.
 </sala_vacia>
 
 <alcance>

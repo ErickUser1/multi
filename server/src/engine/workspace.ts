@@ -88,6 +88,17 @@ async function ensureGitignore(dir: string): Promise<void> {
     "# se descarga.",
     ".multi-home/",
     "",
+    "# La base de datos del proyecto. Los datos de aquí son de prueba: quien se",
+    "# lleva la app la quiere publicar con su base vacía, no con lo que se tecleó",
+    "# probando. Y en el historial estorban: es un binario que cambia entero en",
+    "# cada turno, y regresar a un punto anterior tiraría los datos de hoy junto",
+    "# con el código de ayer (el scrubber ya avisa que los datos NO vuelven).",
+    "*.db",
+    "*.sqlite",
+    "*.sqlite3",
+    "*.db-shm",
+    "*.db-wal",
+    "",
   ];
   await writeFile(path, lineas.join("\n"), "utf8");
 }

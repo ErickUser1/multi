@@ -35,35 +35,48 @@ export interface SalaVisitada {
   nombre?: string | null;
 }
 
-/** Las salas donde entraste, de la más reciente a la más vieja. */
+/**
+ * Las salas donde entraste, de la más nueva a la más vieja.
+ *
+ * En el orden en que están guardadas, sin reordenar: la posición la fija el
+ * momento en que conociste cada sala y no se mueve después. Ordenarlas por
+ * última visita las revolvía en cada entrada, y encontrar la de siempre se
+ * volvía un juego de buscar dónde quedó.
+ */
 export function salasVisitadas(): SalaVisitada[] {
   try {
     const crudo = localStorage.getItem(CLAVE);
     if (!crudo) return [];
     const lista = JSON.parse(crudo);
     if (!Array.isArray(lista)) return [];
-    return lista
-      .filter((s): s is SalaVisitada => typeof s?.id === "string" && typeof s?.visitadaEn === "number")
-      .sort((a, b) => b.visitadaEn - a.visitadaEn);
+    return lista.filter(
+      (s): s is SalaVisitada => typeof s?.id === "string" && typeof s?.visitadaEn === "number",
+    );
   } catch {
     // Un localStorage corrupto no debe impedirte entrar a una sala.
     return [];
   }
 }
 
-/** Anota que entraste a una sala. Si ya estaba, sube al principio. */
+/** Anota que entraste a una sala. Si es nueva, entra al principio de la lista. */
 export function recordarSala(id: string): void {
   try {
-    const previa = salasVisitadas().find((s) => s.id === id);
-    const otras = salasVisitadas().filter((s) => s.id !== id);
-    // Se conserva el nombre que ya se tenía: esto corre AL ENTRAR, cuando el
-    // server todavía no ha dicho cómo se llama la sala. Sin esto, cada visita
-    // borraba el nombre y el menú volvía a mostrar el id.
-    const lista = [
-      { id, visitadaEn: Date.now(), nombre: previa?.nombre ?? null },
-      ...otras,
-    ].slice(0, MAXIMO);
-    localStorage.setItem(CLAVE, JSON.stringify(lista));
+    const lista = salasVisitadas();
+    const ya = lista.find((s) => s.id === id);
+
+    // Una sala que ya estaba NO se mueve de sitio: solo se anota que pasaste.
+    //
+    // Antes cada visita la mandaba al principio, así que la lista se revolvía
+    // sola y la sala que buscabas nunca estaba donde la habías dejado. Ahora la
+    // posición la fija el orden en que las conociste y ahí se queda: es una
+    // cola, la nueva entra arriba y las demás se recorren.
+    if (ya) {
+      ya.visitadaEn = Date.now();
+    } else {
+      lista.unshift({ id, visitadaEn: Date.now(), nombre: null });
+    }
+
+    localStorage.setItem(CLAVE, JSON.stringify(lista.slice(0, MAXIMO)));
   } catch {
     // Modo incógnito o almacenamiento lleno: se pierde el historial, no la sala.
   }

@@ -13,6 +13,7 @@ import {
 import { containerRunner, localRunner, type Runner } from "./engine/runner.js";
 import type { Message } from "./agent/providers/types.js";
 import { AgentRegistry } from "./engine/agents.js";
+import { KeyedMutex } from "./engine/keyed-mutex.js";
 import { RunCoordinator } from "./engine/coordinator.js";
 import { sweepOrphans, type Turn } from "./engine/turns.js";
 import { getStorage } from "./storage/index.js";
@@ -205,7 +206,29 @@ async function bootPreview(room: Room): Promise<void> {
  */
 export type EtapaPreview = "contenedor" | "dependencias" | "servidor";
 
+/**
+ * Un arranque de preview a la vez por sala. Salas distintas van en paralelo,
+ * que es lo normal: es el mismo KeyedMutex que ya serializa los contenedores.
+ */
+const arranquesDePreview = new KeyedMutex();
+
 export async function maybeStartPreview(
+  room: Room,
+  onEtapa?: (etapa: EtapaPreview) => void,
+): Promise<string | null> {
+  // Serializado por sala: dos caminos piden el preview casi a la vez (wakeRoom
+  // al despertarla, y el `join` de quien entra). La bandera de abajo no bastaba
+  // porque entre leerla y ponerla hay un `await detectLaunch` que toca disco:
+  // los dos la leían en false y los dos arrancaban un dev server.
+  //
+  // El síntoma era Vite avisando "Port 5173 is in use, trying another one" y
+  // quedando DOS por sala, uno en cada puerto. El proxy apunta a uno solo, así
+  // que la mitad de las peticiones le pegaban al que no era y el preview salía
+  // en blanco o con módulos de un servidor distinto.
+  return arranquesDePreview.run(room.id, () => arrancarPreview(room, onEtapa));
+}
+
+async function arrancarPreview(
   room: Room,
   onEtapa?: (etapa: EtapaPreview) => void,
 ): Promise<string | null> {

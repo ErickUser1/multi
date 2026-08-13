@@ -180,6 +180,43 @@ body::after {
 }
 .sala-titulo {
   min-width: 0;
+  /* Empuja el botón de crear sala hasta la derecha de la cabecera. */
+  flex: 1;
+}
+
+/* Crear otra sala. Vive aquí y no dentro del menú porque era justo lo que
+   nadie encontraba: escondido, el único camino visible para llegar a una sala
+   era crear otra, y así se acumulaban las vacías. */
+.sala-nueva {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--linea);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dim);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.sala-nueva:hover {
+  color: var(--texto);
+  border-color: var(--dim);
+}
+.sala-nueva:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Sin sala abierta no hay nombre: se deja el hueco con el texto apagado, para
+   que la cabecera no se colapse y se vea que falta elegir. */
+.sala-nombre-vacio {
+  color: var(--dim);
+  font-style: italic;
 }
 
 /* ── Menú de salas ────────────────────────────────────────────────────── */
@@ -661,6 +698,10 @@ body::after {
   line-height: 1;
   cursor: pointer;
   transition: color 0.15s, border-color 0.15s;
+  /* Lleva un SVG dentro: sin esto queda pegado a una esquina. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 .adjuntar-btn:hover {
   color: var(--texto);
@@ -925,9 +966,15 @@ body::after {
   cursor: pointer;
   background: transparent;
 }
-.inspect-btn:hover {
+.inspect-btn:hover:not(:disabled) {
   color: var(--texto);
   border-color: var(--dim);
+}
+/* Apagado, no escondido: se ve que la opción existe y que falta una sala. */
+.inspect-btn:disabled,
+.adjuntar-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 .inspect-btn.on {
   color: var(--fondo2);

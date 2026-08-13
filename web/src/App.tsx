@@ -76,10 +76,21 @@ export function App() {
     if (roomId && entered) recordarSala(roomId);
   }, [roomId, entered]);
 
-  // Pantalla 1: sin sala → crear o pegar link.
-  if (!roomId) return <Landing />;
+  /**
+   * Sin sala en la URL se entra igual, a la Sala vacía.
+   *
+   * Antes había una portada con un botón de "crear una sala", y eso hacía dos
+   * cosas malas: quien ya tenía salas no las veía (viven en el menú, que solo
+   * existe dentro), así que creaba otra; y el único camino para llegar a
+   * cualquier lado era crear una, aunque solo quisieras volver a la de ayer.
+   * Cuatro de nueve salas acabaron vacías.
+   *
+   * Ahora se cae dentro con el menú a mano, y crear es un botón más.
+   */
+  if (!roomId) return <Sala key="sin-sala" roomId={null} name={name || "anónimo"} />;
 
-  // Pantalla 2: hay sala pero falta nombre.
+  // Hay sala pero falta decir cómo te llamas. Sigue haciendo falta para quien
+  // llega por un link que le pasaron: la sala necesita saber quién entró.
   if (!entered) {
     return (
       <NamePrompt
@@ -110,98 +121,6 @@ export function App() {
   return <Sala key={roomId} roomId={roomId} name={name || "anónimo"} />;
 }
 
-// ── Pantalla: crear / entrar a sala ────────────────────────────────────────
-
-function Landing() {
-  const { t } = useTextos();
-  const [busy, setBusy] = useState(false);
-  const [pegando, setPegando] = useState(false);
-  const [link, setLink] = useState("");
-  const [error, setError] = useState<string | null>(null);
-
-  const nueva = async () => {
-    setBusy(true);
-    try {
-      const id = await createRoom();
-      window.location.hash = `#/sala/${id}`;
-    } catch (e) {
-      alert(t.noSePudoCrear + String(e));
-      setBusy(false);
-    }
-  };
-
-  /**
-   * Entrar con lo que te pasó tu compa.
-   *
-   * Normalmente el link se abre y ya (el id vive en el hash), pero llega por
-   * WhatsApp o Discord y a veces se copia mal, se parte, o te pasan solo el
-   * nombre de la sala. Acepta las tres formas en vez de exigir la URL exacta.
-   */
-  const entrar = () => {
-    const id = extraerRoomId(link);
-    if (!id) {
-      setError(t.noEncontreSala);
-      return;
-    }
-    window.location.hash = `#/sala/${id}`;
-  };
-
-  return (
-    <div className="center-screen">
-      <div className="card">
-        <h1 className="brand">MULTI</h1>
-        <p className="sub">{t.tagline}</p>
-        <button className="cta" onClick={nueva} disabled={busy}>
-          {busy ? t.creandoSala : t.crearSala}
-        </button>
-
-        {pegando ? (
-          <div className="entrar-bloque">
-            <input
-              className="name-input"
-              placeholder={t.pegaLink}
-              value={link}
-              onChange={(e) => {
-                setLink(e.target.value);
-                setError(null);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") entrar();
-                if (e.key === "Escape") setPegando(false);
-              }}
-              autoFocus
-            />
-            <button className="entrar-btn" onClick={entrar} disabled={!link.trim()}>
-              {t.entrar}
-            </button>
-            {error && <p className="entrar-error">{error}</p>}
-          </div>
-        ) : (
-          <button className="hint hint-btn" onClick={() => setPegando(true)}>
-            {t.oEntraConLink}
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/**
- * Saca el id de la sala de lo que sea que hayan pegado: la URL completa, solo el
- * fragmento `#/sala/x`, o el nombre pelón. Los ids son de la forma
- * `palabra-palabra-numero`.
- */
-function extraerRoomId(raw: string): string | null {
-  const texto = raw.trim();
-  if (!texto) return null;
-  const enRuta = texto.match(/\/sala\/([\w-]+)/);
-  if (enRuta) return enRuta[1];
-  // Solo el nombre: debe parecer un id de sala, no una frase cualquiera.
-  if (/^[a-z]+-[a-z]+-\d+$/i.test(texto)) return texto;
-  return null;
-}
-
-// ── Pantalla: pedir nombre ─────────────────────────────────────────────────
 
 function NamePrompt(props: {
   roomId: string;
@@ -233,7 +152,12 @@ function NamePrompt(props: {
 
 // ── La Sala ─────────────────────────────────────────────────────────────────
 
-function Sala({ roomId, name }: { roomId: string; name: string }) {
+/**
+ * La Sala. Con `roomId` en null se ve el mismo marco pero vacío: es lo que hay
+ * al entrar a Multi sin haber elegido sala, con el menú y el botón de crear a
+ * la mano.
+ */
+function Sala({ roomId, name }: { roomId: string | null; name: string }) {
   const { t } = useTextos();
   const [members, setMembers] = useState<Member[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -247,6 +171,7 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
    */
   const [nombre, setNombre] = useState<string | null>(null);
   const [editandoNombre, setEditandoNombre] = useState(false);
+  const [creandoSala, setCreandoSala] = useState(false);
   /** Qué dice el botón de descargar ahora mismo. null = su texto normal. */
   const [zipAviso, setZipAviso] = useState<string | null>(null);
   /**
@@ -333,6 +258,10 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
   const proxyOrigin = new URL(SERVER_URL).origin;
 
   useEffect(() => {
+    // Sin sala no hay a qué conectarse: la Sala vacía es solo el marco con el
+    // menú y el botón de crear.
+    if (!roomId) return;
+
     const socket = connectSocket();
     socketRef.current = socket;
 
@@ -598,6 +527,18 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
 
   const copyLink = () => navigator.clipboard.writeText(window.location.href);
 
+  /** Crear otra sala y entrar a ella. El hash es lo que cambia de sala. */
+  const crearSala = async () => {
+    setCreandoSala(true);
+    try {
+      window.location.hash = `#/sala/${await createRoom()}`;
+    } catch (e) {
+      alert(t.noSePudoCrear + String(e));
+    } finally {
+      setCreandoSala(false);
+    }
+  };
+
   /**
    * Guardar el nombre nuevo de la sala.
    *
@@ -679,9 +620,13 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
       {/* Chat izquierda */}
       <aside className="chat">
         <div className="sala-cab">
-          <MenuSalas actual={roomId} />
+          <MenuSalas actual={roomId ?? undefined} />
           <div className="sala-titulo">
-            {editandoNombre ? (
+            {!roomId ? (
+              // Sin sala elegida no hay nombre que mostrar ni que editar: la
+              // cabecera se queda con el menú y el botón de crear.
+              <div className="sala-nombre sala-nombre-vacio">{t.ningunaSala}</div>
+            ) : editandoNombre ? (
               <input
                 className="sala-nombre-input"
                 defaultValue={nombre ?? ""}
@@ -707,8 +652,20 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
                 {nombre ?? roomId}
               </button>
             )}
-            <div className="sala-meta">{t.enLaSala(members.length)}</div>
+            {roomId && <div className="sala-meta">{t.enLaSala(members.length)}</div>}
           </div>
+          {/* Crear otra sala, a la vista. Vivía dentro del menú, donde nadie lo
+              encontraba: quien ya tenía salas tampoco las veía, así que el único
+              camino visible era la portada, y de ahí salían las salas vacías. */}
+          <button
+            className="sala-nueva"
+            onClick={crearSala}
+            disabled={creandoSala}
+            title={t.crearOtraSala}
+            aria-label={t.crearOtraSala}
+          >
+            +
+          </button>
         </div>
 
         {/* Los agentes de la sala, como jugadores visibles */}
@@ -736,7 +693,8 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
             // Mensajes seguidos del mismo autor se agrupan sin repetir avatar
             // ni nombre (patrón Discord): el chat respira y se lee como
             // conversación, no como lista de tarjetas.
-            <ChatRow key={i} msg={m} seguido={esSeguido(messages, i)} roomId={roomId} />
+            // Sin sala no hay mensajes que pintar, así que aquí siempre lo hay.
+            <ChatRow key={i} msg={m} seguido={esSeguido(messages, i)} roomId={roomId!} />
           ))}
           {/* Un bloque de streaming POR AGENTE: varios pueden hablar a la vez */}
           {Object.keys({ ...streaming, ...toolLines }).map((agentId) => {
@@ -839,15 +797,30 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
             <button
               className="adjuntar-btn"
               onClick={() => fileInputRef.current?.click()}
+              disabled={!roomId}
               title={t.adjuntarImagen}
               aria-label={t.adjuntarImagen}
             >
-              +
+              {/* Un clip, no un "+": el más ya es crear sala, ahí arriba, y dos
+                  botones con el mismo símbolo en la misma pantalla se confunden.
+                  Va en SVG y no como emoji para que se vea igual en todos lados. */}
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path
+                  d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
             </button>
             <input
               ref={inputRef}
               className="caja"
-              placeholder={t.hablaConLaSala}
+              // Sin sala no hay a dónde mandar nada: se apaga en vez de dejar
+              // escribir un mensaje que se perdería al darle enter.
+              disabled={!roomId}
+              placeholder={roomId ? t.hablaConLaSala : t.eligeOCrea}
               value={draft}
               onChange={(e) => onDraftChange(e.target.value)}
               onPaste={(e) => {
@@ -882,6 +855,7 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
           <button
             className={`inspect-btn ${inspect ? "on" : ""}`}
             onClick={() => setInspect((v) => !v)}
+            disabled={!roomId}
             title={t.tituloSelector}
           >
             {inspect ? t.seleccionando : t.seleccionarBtn}
@@ -918,7 +892,8 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
             >
               {zipAviso ?? t.descargarZip}
             </button>
-            <button className="invitar" onClick={copyLink}>
+            {/* Sin sala no hay link que compartir: copiaría la URL pelada. */}
+            <button className="invitar" onClick={copyLink} disabled={!roomId}>
               {t.copiarLink}
             </button>
           </div>
@@ -933,7 +908,7 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
           </button>
         </div>
 
-        {tab === "back" && (
+        {tab === "back" && roomId && (
           <div className="lienzo">
             <BackCanvas roomId={roomId} version={apiVersion} onAnclar={anclarEndpoint} />
           </div>
@@ -966,6 +941,13 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
                   <p>{t.levantandoPreview}</p>
                   <p className="preview-loading-sub">{t.etapaPreview[arrancando]}</p>
                 </>
+              ) : !roomId ? (
+                // Ni siquiera hay sala: lo que falta no es pedirle algo a un
+                // agente, es elegir dónde.
+                <>
+                  <p>{t.ningunaSala}</p>
+                  <p className="preview-loading-sub">{t.eligeOCrea}</p>
+                </>
               ) : (
                 <>
                   <p>{t.salaVacia}</p>
@@ -996,13 +978,15 @@ function Sala({ roomId, name }: { roomId: string; name: string }) {
           ))}
         </div>
 
-        {/* La línea de tiempo de la sala */}
-        <Historial
-          roomId={roomId}
-          version={histVersion}
-          onRevert={(hash, file) => socketRef.current?.emit("history:revert", { hash, file })}
-          onBookmark={(hash, label) => socketRef.current?.emit("history:bookmark", { hash, label })}
-        />
+        {/* La línea de tiempo de la sala. Sin sala no hay historial que pintar. */}
+        {roomId && (
+          <Historial
+            roomId={roomId}
+            version={histVersion}
+            onRevert={(hash, file) => socketRef.current?.emit("history:revert", { hash, file })}
+            onBookmark={(hash, label) => socketRef.current?.emit("history:bookmark", { hash, label })}
+          />
+        )}
       </section>
     </div>
   );

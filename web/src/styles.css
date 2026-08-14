@@ -1709,3 +1709,122 @@ body::after {
 .tool-cerrar:hover {
   color: var(--texto);
 }
+
+/* ── Variables del proyecto (.env) ────────────────────────────────────────
+   Mismo patrón que el panel de la key: un botón en la barra que abre una caja
+   flotante. La diferencia es de quién son las cosas: la key es tuya, estas son
+   de la sala. */
+.env-panel {
+  position: relative;
+}
+.env-caja {
+  position: absolute;
+  top: 34px;
+  right: 0;
+  z-index: 40;
+  width: 380px;
+  background: var(--panel);
+  border: 1px solid var(--linea);
+  border-radius: 8px;
+  padding: 14px 16px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  /* Con muchas variables la caja crecería más que la pantalla. */
+  max-height: 70vh;
+  overflow-y: auto;
+}
+.env-cab {
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin-bottom: 8px;
+}
+.env-nota,
+.env-vacio,
+.env-reinicio {
+  font-size: 11px;
+  color: var(--dim);
+  line-height: 1.5;
+  margin: 0 0 10px;
+}
+.env-vacio {
+  font-style: italic;
+}
+.env-reinicio {
+  margin: 10px 0 0;
+  color: var(--lavanda);
+}
+.env-fila {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.env-nombre,
+.env-valor {
+  min-width: 0;
+  background: var(--fondo2);
+  border: 1px solid var(--linea);
+  border-radius: 4px;
+  padding: 6px 8px;
+  color: var(--texto);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11.5px;
+}
+/* El nombre es corto y en mayúsculas; el valor puede ser una cadena larga, así
+   que se lleva el espacio que sobra. */
+.env-nombre {
+  width: 38%;
+  text-transform: uppercase;
+}
+.env-valor {
+  flex: 1;
+}
+.env-nombre:focus,
+.env-valor:focus {
+  outline: none;
+  border-color: var(--lavanda);
+}
+.env-quitar {
+  flex-shrink: 0;
+  width: 26px;
+  background: transparent;
+  border: none;
+  color: var(--dim);
+  font-size: 16px;
+  cursor: pointer;
+}
+.env-quitar:hover {
+  color: var(--texto);
+}
+.env-acciones {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.env-agregar,
+.env-guardar {
+  flex: 1;
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  padding: 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  border: 1px solid var(--linea);
+  background: transparent;
+  color: var(--dim);
+}
+.env-agregar:hover,
+.env-guardar:hover:not(:disabled) {
+  color: var(--texto);
+  border-color: var(--dim);
+}
+.env-guardar {
+  background: var(--lavanda);
+  border-color: var(--lavanda);
+  color: var(--fondo2);
+}
+.env-guardar:disabled {
+  opacity: 0.6;
+  cursor: default;
+}

@@ -26,7 +26,8 @@
     "demo:imagenes": "tsx src/demos/imagenes.ts",
     "demo:proxy-rutas": "tsx src/demos/proxy-rutas.ts",
     "demo:exportar": "tsx src/demos/exportar.ts",
-    "uso": "tsx --no-warnings src/demos/uso.ts"
+    "uso": "tsx --no-warnings src/demos/uso.ts",
+    "demo:variables": "tsx src/demos/variables.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.3.0",

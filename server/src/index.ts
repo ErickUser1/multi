@@ -394,6 +394,8 @@ async function publicarEnSegundoPlano(room: Room, cred: Credencial): Promise<voi
   try {
     avisar("compilando");
     const url = await publicarSala(room.workspace, await ensureRunner(room), cred, avisar);
+    room.urlPublicada = url;
+    await (await getStorage()).setUrlPublicada(room.id, url);
     io.to(room.id).emit("deploy:listo", { url });
     // Y al chat, para que el link quede en el historial de la sala y no solo en
     // la pantalla de quien estaba mirando cuando terminó.
@@ -539,6 +541,9 @@ io.on("connection", (socket) => {
       // Igual que el preview: quien llega a media publicación no recibió el
       // evento de progreso (ya pasó) y vería el botón como si no hubiera nada.
       publicando: room.publicando ?? null,
+      // Dónde está publicada, si lo está: es un dato de la sala, no una noticia
+      // de hace rato. Quien entra mañana tiene que poder abrirla igual.
+      urlPublicada: room.urlPublicada ?? null,
       agents: room.agents.list(),
       orphanTurns: room.orphanTurns ?? [],
       messages: history.map((m) => ({

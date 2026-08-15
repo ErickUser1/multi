@@ -22,6 +22,8 @@ export interface StoredRoom {
    * renombrar no rompe ningún link ya compartido.
    */
   nombre?: string | null;
+  /** Dónde quedó publicada la app, o null si la sala nunca se publicó. */
+  urlPublicada?: string | null;
 }
 
 export interface StoredMessage {
@@ -45,6 +47,14 @@ export interface Storage {
   listRooms(): Promise<StoredRoom[]>;
   /** Marca actividad reciente (para saber qué salas siguen vivas). */
   touchRoom(id: string): Promise<void>;
+  /**
+   * Anota dónde quedó publicada la app.
+   *
+   * Se guarda para que al volver mañana la sala siga sabiendo que está en vivo:
+   * sin esto, la única señal de que se publicó era un mensaje en el chat que se
+   * pierde entre los demás.
+   */
+  setUrlPublicada(id: string, url: string): Promise<void>;
   /** Le pone nombre a la sala. `null` lo quita y se vuelve a ver el id. */
   renameRoom(id: string, nombre: string | null): Promise<void>;
   /**

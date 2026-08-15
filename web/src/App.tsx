@@ -19,6 +19,7 @@ import { Historial } from "./Historial.js";
 import { BackCanvas, type Endpoint } from "./BackCanvas.js";
 import { KeyPanel, loadStoredCredencial, type Credencial } from "./KeyPanel.js";
 import { EnvPanel } from "./EnvPanel.js";
+import { PublicarPanel } from "./PublicarPanel.js";
 import { useTextos } from "./i18n.js";
 import { MenuSalas } from "./MenuSalas.js";
 import { recordarSala, olvidarSala, recordarNombre } from "./historial-salas.js";
@@ -183,6 +184,13 @@ function Sala({ roomId, name }: { roomId: string | null; name: string }) {
    */
   const [publicando, setPublicando] = useState<"compilando" | "subiendo" | null>(null);
   /**
+   * Dónde está publicada la app, o null si nunca se publicó.
+   *
+   * Viene de la BD en el `joined`, así que sigue ahí mañana: el link es un dato
+   * de la sala, no un mensaje de hace rato.
+   */
+  const [urlPublicada, setUrlPublicada] = useState<string | null>(null);
+  /**
    * Si la sala tiene algo guardado que llevarse.
    *
    * Se pregunta al server en vez de deducirlo de `previewReady`: lo que hace
@@ -285,6 +293,7 @@ function Sala({ roomId, name }: { roomId: string | null; name: string }) {
       setNombre(p.nombre ?? null);
       recordarNombre(roomId, p.nombre ?? null);
       setPublicando(p.publicando ?? null);
+      setUrlPublicada(p.urlPublicada ?? null);
       if (p.previewUrl) setPreviewReady(true);
       if (p.agents) setAgents(p.agents);
       if (p.orphanTurns?.length) setOrphans(p.orphanTurns);
@@ -312,7 +321,10 @@ function Sala({ roomId, name }: { roomId: string | null; name: string }) {
     socket.on("deploy:progreso", ({ etapa }: { etapa: "compilando" | "subiendo" }) =>
       setPublicando(etapa),
     );
-    socket.on("deploy:listo", () => setPublicando(null));
+    socket.on("deploy:listo", ({ url }: { url: string }) => {
+      setPublicando(null);
+      setUrlPublicada(url);
+    });
     socket.on("deploy:fallo", () => setPublicando(null));
     socket.on("preview:ready", () => {
       setPreviewReady(true);
@@ -932,16 +944,13 @@ function Sala({ roomId, name }: { roomId: string | null; name: string }) {
             >
               {zipAviso ?? t.descargarZip}
             </button>
-            {/* Publicar tarda minutos, así que el botón dice por dónde va en
-                lugar de quedarse quieto: mismo trato que el de descargar. */}
-            <button
-              className="invitar"
-              onClick={publicar}
-              disabled={!sePuedeExportar || !!publicando}
-              title={sePuedeExportar ? t.publicarTitulo : t.zipSalaVacia}
-            >
-              {publicando ? t.etapaDeploy[publicando] : t.publicar}
-            </button>
+            <PublicarPanel
+              roomId={roomId}
+              urlPublicada={urlPublicada}
+              publicando={publicando}
+              puedePublicar={sePuedeExportar}
+              onPublicar={publicar}
+            />
             {/* Las variables son del proyecto de la sala, así que sin sala no
                 hay dónde escribirlas. */}
             {roomId && <EnvPanel roomId={roomId} />}

@@ -98,6 +98,8 @@ export interface JoinedPayload {
   previewArrancando?: boolean;
   /** Se está publicando la app ahora mismo, y por dónde va. */
   publicando?: "compilando" | "subiendo" | null;
+  /** Dónde está publicada la app, o null si la sala nunca se publicó. */
+  urlPublicada?: string | null;
   agents?: Agent[];
   /** Turnos que quedaron a medias por un crash; el humano decide qué hacer. */
   orphanTurns?: OrphanTurn[];

@@ -2,7 +2,7 @@ import { writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { createWorkspace } from "../engine/workspace.js";
 import { detectBuild, buscarSalida } from "../engine/preview.js";
-import { credencialDeDeploy, motivoDeFallo } from "../engine/publicar.js";
+import { credencialDeDeploy, motivoDeFallo, sacarUrl } from "../engine/publicar.js";
 
 /**
  * Demo: qué se compila y qué se sube al publicar la app de una sala.
@@ -106,6 +106,25 @@ async function main() {
     const dicho = motivoDeFallo(salidaDeWrangler);
     check("saca el error de verdad", dicho.includes("does not exist"), dicho);
     check("y no la barra decorativa", !dicho.includes("─"), dicho);
+  }
+
+  console.log("\n9. El link que se comparte es el que no cambia");
+  {
+    /**
+     * El bug que cubre: wrangler imprime la URL de ESE deploy, con un prefijo
+     * distinto cada vez. Se mostró esa, y el link que se comparte se habría
+     * quedado congelado en la versión de ese momento.
+     */
+    const salida = `✨ Deployment complete! Take a peek over at https://3217c505.una-sala.pages.dev`;
+    const url = sacarUrl(salida, "una-sala");
+    check("devuelve la estable", url === "https://una-sala.pages.dev", String(url));
+
+    // Si wrangler responde algo que no es del proyecto esperado, se prefiere lo
+    // que dijo antes que inventar una URL que a lo mejor no carga.
+    const otra = sacarUrl("https://otra-cosa.pages.dev", "una-sala");
+    check("si no es del proyecto, se respeta lo que dijo", otra === "https://otra-cosa.pages.dev");
+
+    check("sin URL en la salida, no se inventa una", sacarUrl("todo mal", "una-sala") === null);
   }
 
   console.log(`\n${pass} pasaron, ${fail} fallaron\n`);

@@ -120,9 +120,17 @@ export async function publicarSala(
     )
     .catch(() => null);
 
+  /**
+   * `--branch=main` no es opcional: sin él wrangler sube a una rama de preview,
+   * y entonces la URL estable del proyecto queda vacía ("Nothing is here yet")
+   * mientras el contenido solo vive en una URL con prefijo que cambia en cada
+   * publicación. Pasó en el primer deploy que funcionó.
+   *
+   * Tiene que coincidir con la `--production-branch` de arriba.
+   */
   const subido = await runner.exec(
     `${cd}npx --yes wrangler@latest pages deploy ${JSON.stringify(salida)} ` +
-      `--project-name=${JSON.stringify(proyecto)} --commit-dirty=true`,
+      `--project-name=${JSON.stringify(proyecto)} --branch=main --commit-dirty=true`,
     {
       timeoutMs: 600_000,
       maxOutput: 8000,
@@ -130,7 +138,7 @@ export async function publicarSala(
     },
   );
 
-  const url = sacarUrl(subido.stdout + "\n" + subido.stderr);
+  const url = sacarUrl(subido.stdout + "\n" + subido.stderr, proyecto);
   if (subido.code !== 0 || !url) {
     // El texto crudo de wrangler NO se propaga: lleva el account id y, cuando
     // falla la autenticación, fragmentos de lo que se le pasó. Se traduce a lo
@@ -141,15 +149,25 @@ export async function publicarSala(
 }
 
 /**
- * La URL que wrangler imprime al terminar.
+ * La URL de la app, que es la ESTABLE del proyecto.
  *
- * Se busca en la salida en vez de armarla como `${proyecto}.pages.dev` porque el
- * primer deploy de un proyecto responde con una URL por rama, y adivinarla daría
- * un link que no carga.
+ * Wrangler imprime la de este deploy en concreto, con un prefijo que cambia cada
+ * vez (`3217c505.la-sala.pages.dev`). Esa sirve para ver lo que se acaba de
+ * subir, pero es la equivocada para compartir: el link que le pasaste a alguien
+ * se quedaría mostrando la versión de ese momento, y republicar no lo
+ * actualizaría.
+ *
+ * La estable (`la-sala.pages.dev`) siempre apunta a lo último, que es lo que se
+ * quiere de un link que se comparte. Se confirma contra la salida en vez de
+ * darla por hecha: si wrangler no menciona el proyecto, algo salió distinto de
+ * lo esperado y es mejor no inventar una URL que quizá no carga.
  */
-function sacarUrl(salida: string): string | null {
-  const m = salida.match(/https:\/\/[a-z0-9.-]*\.pages\.dev[^\s]*/i);
-  return m ? m[0] : null;
+export function sacarUrl(salida: string, proyecto: string): string | null {
+  const conPrefijo = salida.match(/https:\/\/[a-z0-9.-]*\.pages\.dev[^\s]*/i)?.[0];
+  if (!conPrefijo) return null;
+  return conPrefijo.includes(`${proyecto}.pages.dev`)
+    ? `https://${proyecto}.pages.dev`
+    : conPrefijo;
 }
 
 /**

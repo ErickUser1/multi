@@ -61,6 +61,14 @@ const TEXTOS = {
       subiendo: "Subiendo…",
     } as Record<string, string>,
     publicarFallo: "no se pudo publicar",
+    enVivo: "En vivo",
+    republicar: "Publicar los cambios",
+    publicadaTitulo: "Publicada",
+    sinPublicarTitulo: "Sin publicar",
+    publicarNota:
+      "Publicar pone la app en internet, con un link que puedes pasarle a quien sea. Nadie tiene que entrar a Multi para verla.",
+    publicarNotaViva:
+      "Lo que cambies aquí no se ve afuera hasta que vuelvas a publicar.",
     preparandoZip: "Preparando…",
     zipSalaVacia: "todavía no hay nada que descargar",
     zipTrabajoSinGuardar: "hay trabajo sin guardar, el .zip lleva el último punto guardado",
@@ -231,6 +239,13 @@ const TEXTOS = {
       subiendo: "Uploading…",
     } as Record<string, string>,
     publicarFallo: "couldn't publish it",
+    enVivo: "Live",
+    republicar: "Publish changes",
+    publicadaTitulo: "Published",
+    sinPublicarTitulo: "Not published",
+    publicarNota:
+      "Publishing puts the app online, with a link you can send to anyone. They don't need to join Multi to see it.",
+    publicarNotaViva: "What you change here isn't live until you publish again.",
     preparandoZip: "Preparing…",
     zipSalaVacia: "nothing to download yet",
     zipTrabajoSinGuardar: "there's unsaved work, the .zip has the last saved point",

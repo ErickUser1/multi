@@ -62,6 +62,14 @@ export interface Room {
    * quieto. También impide que dos personas suban a la vez.
    */
   publicando?: "compilando" | "subiendo" | null;
+  /**
+   * Dónde está publicada la app, o null si nunca se publicó.
+   *
+   * Se guarda en la BD y sobrevive a los reinicios: antes la única señal de que
+   * una sala estaba en vivo era un mensaje en el chat, que al día siguiente ya
+   * estaba enterrado entre los demás.
+   */
+  urlPublicada?: string | null;
   /** El contenedor que aísla esta sala. null si se está corriendo sin Docker. */
   container?: Container | null;
   /** Dónde se ejecutan los comandos del agente (contenedor o local). */
@@ -160,6 +168,7 @@ async function despertarSala(id: string): Promise<Room | null> {
   const room: Room = {
     id,
     nombre: stored.nombre ?? null,
+    urlPublicada: stored.urlPublicada ?? null,
     // El workspace ya existe en disco: NO se re-siembra ni se limpia.
     workspace: await createWorkspace(id),
     preview: null,

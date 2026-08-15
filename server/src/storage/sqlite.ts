@@ -31,7 +31,9 @@ export class SqliteStorage implements Storage {
         last_active_at INTEGER NOT NULL,
         -- Cómo le dice la gente a esta sala. El id no cambia nunca (es la URL y
         -- lo que se dicta por teléfono); esto es solo la etiqueta que se ve.
-        nombre         TEXT
+        nombre         TEXT,
+        -- Dónde quedó publicada la app, si es que se publicó.
+        url_publicada  TEXT
       );
 
       CREATE TABLE IF NOT EXISTS messages (
@@ -62,6 +64,14 @@ export class SqliteStorage implements Storage {
     // versiones de esquema, que para una columna nueva sería desproporcionado.
     try {
       this.db.exec(`ALTER TABLE messages ADD COLUMN adjuntos TEXT`);
+    } catch {
+      // ya la tiene
+    }
+
+    // Dónde quedó publicada la app de esta sala, si es que se publicó. Nullable:
+    // sin esto no hay forma de saber, al volver mañana, si la sala está en vivo.
+    try {
+      this.db.exec(`ALTER TABLE rooms ADD COLUMN url_publicada TEXT`);
     } catch {
       // ya la tiene
     }
@@ -104,6 +114,10 @@ export class SqliteStorage implements Storage {
 
   async renameRoom(id: string, nombre: string | null): Promise<void> {
     this.db.prepare(`UPDATE rooms SET nombre = ? WHERE id = ?`).run(nombre, id);
+  }
+
+  async setUrlPublicada(id: string, url: string): Promise<void> {
+    this.db.prepare(`UPDATE rooms SET url_publicada = ? WHERE id = ?`).run(url, id);
   }
 
   /**
@@ -219,5 +233,6 @@ function toRoom(r: Record<string, unknown>): StoredRoom {
     // Las salas de antes de esta columna la traen en null, y ahí la interfaz
     // cae al id.
     nombre: r.nombre == null ? null : String(r.nombre),
+    urlPublicada: r.url_publicada == null ? null : String(r.url_publicada),
   };
 }

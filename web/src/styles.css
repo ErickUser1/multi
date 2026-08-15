@@ -1828,3 +1828,106 @@ body::after {
   opacity: 0.6;
   cursor: default;
 }
+
+/* ── Publicar ─────────────────────────────────────────────────────────────
+   Mismo patrón que los otros paneles de la barra. El link vive aquí y no en el
+   chat porque es un dato de la sala: al día siguiente sigue siendo cierto. */
+.publicar-panel {
+  position: relative;
+}
+/* Cuando está en vivo, el botón lo dice de un vistazo, sin abrir nada. */
+.invitar.publicada {
+  color: var(--lavanda);
+  border-color: var(--lavanda);
+}
+.publicar-caja {
+  position: absolute;
+  top: 34px;
+  right: 0;
+  z-index: 40;
+  width: 320px;
+  background: var(--panel);
+  border: 1px solid var(--linea);
+  border-radius: 8px;
+  padding: 14px 16px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+}
+.publicar-cab {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin-bottom: 10px;
+}
+.publicar-punto {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--dim);
+  flex-shrink: 0;
+}
+.publicar-punto.vivo {
+  background: var(--lavanda);
+}
+.publicar-url {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--fondo2);
+  border: 1px solid var(--linea);
+  border-radius: 4px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+}
+.publicar-url a {
+  flex: 1;
+  min-width: 0;
+  color: var(--texto);
+  font-size: 11.5px;
+  text-decoration: none;
+  /* Una URL larga no debe estirar el panel. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.publicar-url a:hover {
+  color: var(--lavanda);
+}
+.publicar-copiar {
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  color: var(--dim);
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.publicar-copiar:hover {
+  color: var(--texto);
+}
+.publicar-nota {
+  font-size: 11px;
+  color: var(--dim);
+  line-height: 1.5;
+  margin: 0 0 12px;
+}
+.publicar-btn {
+  width: 100%;
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  padding: 9px;
+  border-radius: 4px;
+  cursor: pointer;
+  background: var(--lavanda);
+  border: 1px solid var(--lavanda);
+  color: var(--fondo2);
+}
+.publicar-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

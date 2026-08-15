@@ -10,7 +10,18 @@ import { execInContainer, type ExecResult } from "./container.js";
  */
 export interface Runner {
   readonly isolated: boolean;
-  exec(command: string, opts: { timeoutMs: number; maxOutput: number }): Promise<ExecResult>;
+  exec(
+    command: string,
+    opts: {
+      timeoutMs: number;
+      maxOutput: number;
+      /**
+       * Variables solo para este comando. Las usa el deploy para pasarle el
+       * token de la plataforma a `wrangler` sin dejarlo en ningún lado.
+       */
+      env?: Record<string, string>;
+    },
+  ): Promise<ExecResult>;
 }
 
 /** El normal: el comando corre encerrado en el contenedor de la sala. */
@@ -34,7 +45,11 @@ export function localRunner(workspaceDir: string): Runner {
     isolated: false,
     exec(command, opts) {
       return new Promise((resolve, reject) => {
-        const child = spawn(command, { cwd: workspaceDir, shell: true, env: process.env });
+        const child = spawn(command, {
+          cwd: workspaceDir,
+          shell: true,
+          env: { ...process.env, ...opts.env },
+        });
 
         let stdout = "";
         let stderr = "";

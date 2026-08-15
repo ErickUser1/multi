@@ -176,6 +176,13 @@ function Sala({ roomId, name }: { roomId: string | null; name: string }) {
   /** Qué dice el botón de descargar ahora mismo. null = su texto normal. */
   const [zipAviso, setZipAviso] = useState<string | null>(null);
   /**
+   * Por dónde va la publicación, o null si no hay ninguna.
+   *
+   * Es de la SALA, no de quien apretó: llega en el `joined` y por socket, así
+   * que quien entre a media publicación ve el progreso igual que los demás.
+   */
+  const [publicando, setPublicando] = useState<"compilando" | "subiendo" | null>(null);
+  /**
    * Si la sala tiene algo guardado que llevarse.
    *
    * Se pregunta al server en vez de deducirlo de `previewReady`: lo que hace
@@ -277,6 +284,7 @@ function Sala({ roomId, name }: { roomId: string | null; name: string }) {
       setMembers(p.members);
       setNombre(p.nombre ?? null);
       recordarNombre(roomId, p.nombre ?? null);
+      setPublicando(p.publicando ?? null);
       if (p.previewUrl) setPreviewReady(true);
       if (p.agents) setAgents(p.agents);
       if (p.orphanTurns?.length) setOrphans(p.orphanTurns);
@@ -298,6 +306,14 @@ function Sala({ roomId, name }: { roomId: string | null; name: string }) {
       setNombre(nombre);
       recordarNombre(roomId, nombre);
     });
+
+    // La publicación la ve toda la sala. El link y los fallos llegan además al
+    // chat, así que aquí solo se mueve el estado del botón.
+    socket.on("deploy:progreso", ({ etapa }: { etapa: "compilando" | "subiendo" }) =>
+      setPublicando(etapa),
+    );
+    socket.on("deploy:listo", () => setPublicando(null));
+    socket.on("deploy:fallo", () => setPublicando(null));
     socket.on("preview:ready", () => {
       setPreviewReady(true);
       setArrancando(null);
@@ -527,6 +543,29 @@ function Sala({ roomId, name }: { roomId: string | null; name: string }) {
   };
 
   const copyLink = () => navigator.clipboard.writeText(window.location.href);
+
+  /**
+   * Publicar la app de la sala.
+   *
+   * No espera a que termine: el server responde en cuanto arranca y lo demás
+   * llega por socket. Un build tarda minutos, y una petición colgada ese rato se
+   * moriría por timeout antes de contar nada.
+   */
+  const publicar = async () => {
+    if (!roomId) return;
+    setPublicando("compilando"); // respuesta inmediata; el server confirma en seguida
+    try {
+      const r = await fetch(`${SERVER_URL}/rooms/${roomId}/publicar`, { method: "POST" });
+      if (!r.ok) {
+        const d = (await r.json().catch(() => null)) as { error?: string } | null;
+        setPublicando(null);
+        alert(d?.error ?? t.publicarFallo);
+      }
+    } catch {
+      setPublicando(null);
+      alert(t.publicarFallo);
+    }
+  };
 
   /** Crear otra sala y entrar a ella. El hash es lo que cambia de sala. */
   const crearSala = async () => {
@@ -892,6 +931,16 @@ function Sala({ roomId, name }: { roomId: string | null; name: string }) {
               title={sePuedeExportar ? t.descargarZip : t.zipSalaVacia}
             >
               {zipAviso ?? t.descargarZip}
+            </button>
+            {/* Publicar tarda minutos, así que el botón dice por dónde va en
+                lugar de quedarse quieto: mismo trato que el de descargar. */}
+            <button
+              className="invitar"
+              onClick={publicar}
+              disabled={!sePuedeExportar || !!publicando}
+              title={sePuedeExportar ? t.publicarTitulo : t.zipSalaVacia}
+            >
+              {publicando ? t.etapaDeploy[publicando] : t.publicar}
             </button>
             {/* Las variables son del proyecto de la sala, así que sin sala no
                 hay dónde escribirlas. */}

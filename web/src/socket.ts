@@ -96,6 +96,8 @@ export interface JoinedPayload {
   previewUrl: string | null;
   /** El preview se está levantando ahora mismo (llegaste a media cuesta). */
   previewArrancando?: boolean;
+  /** Se está publicando la app ahora mismo, y por dónde va. */
+  publicando?: "compilando" | "subiendo" | null;
   agents?: Agent[];
   /** Turnos que quedaron a medias por un crash; el humano decide qué hacer. */
   orphanTurns?: OrphanTurn[];

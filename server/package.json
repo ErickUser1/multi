@@ -27,7 +27,8 @@
     "demo:proxy-rutas": "tsx src/demos/proxy-rutas.ts",
     "demo:exportar": "tsx src/demos/exportar.ts",
     "uso": "tsx --no-warnings src/demos/uso.ts",
-    "demo:variables": "tsx src/demos/variables.ts"
+    "demo:variables": "tsx src/demos/variables.ts",
+    "demo:publicar": "tsx src/demos/publicar.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.3.0",

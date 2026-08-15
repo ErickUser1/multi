@@ -246,12 +246,28 @@ export interface ExecResult {
 export function execInContainer(
   roomId: string,
   command: string,
-  opts: { timeoutMs: number; maxOutput: number },
+  opts: {
+    timeoutMs: number;
+    maxOutput: number;
+    /**
+     * Variables solo para ESTE comando, no para el contenedor.
+     *
+     * Es el camino por el que el token de la plataforma de deploy llega a
+     * `wrangler`: vive en el `.env` del server, entra con el comando y se va con
+     * él. No queda en el `docker run`, no queda en el `.env` del proyecto, y el
+     * agente no lo encuentra aunque vaya a buscarlo.
+     *
+     * Por aquí y no interpolado en el comando: ahí quedaría a la vista en la
+     * lista de procesos de adentro.
+     */
+    env?: Record<string, string>;
+  },
 ): Promise<ExecResult> {
   const name = CONTAINER_PREFIX + roomId;
+  const envArgs = Object.entries(opts.env ?? {}).flatMap(([k, v]) => ["-e", `${k}=${v}`]);
 
   return new Promise((resolve, reject) => {
-    const child = spawn("docker", ["exec", "-i", name, "sh", "-c", command]);
+    const child = spawn("docker", ["exec", "-i", ...envArgs, name, "sh", "-c", command]);
 
     let stdout = "";
     let stderr = "";

@@ -366,3 +366,75 @@ async function killDevServersIn(roomId: string, puerto: number): Promise<void> {
     // Sin contenedor vivo: no hay nada que limpiar.
   }
 }
+
+// ── Compilar para publicar ──────────────────────────────────────────────────
+
+/**
+ * Cómo compilar el proyecto, si es que se puede.
+ *
+ * Hermano de `detectLaunch`: lee lo que el proyecto DECLARA en vez de asumir el
+ * stack. Un proyecto sin script de build no es un error — hay apps que se sirven
+ * tal cual y no compilan nada.
+ */
+export async function detectBuild(dir: string): Promise<Launch | null> {
+  const enRaiz = await leerBuild(dir);
+  if (enRaiz) return enRaiz;
+  return buscarBuildEnSubcarpetas(dir);
+}
+
+async function leerBuild(dir: string): Promise<Launch | null> {
+  const pkgPath = join(dir, "package.json");
+  if (!existsSync(pkgPath)) return null;
+
+  let scripts: Record<string, string> = {};
+  try {
+    const pkg = JSON.parse(await readFile(pkgPath, "utf8"));
+    scripts = pkg?.scripts ?? {};
+  } catch {
+    return null; // package.json a medio escribir (el agente sigue trabajando)
+  }
+
+  // Orden por convención, igual que el arranque: "build" es el universal, y
+  // "generate"/"export" los usan los que producen sitio estático (Nuxt, Next).
+  const script = ["build", "generate", "export"].find((s) => typeof scripts[s] === "string");
+  if (!script) return null;
+
+  return { command: "npm", args: ["run", script], cwd: dir };
+}
+
+/** Mismo rodeo que el arranque: el generador pudo dejar el proyecto anidado. */
+async function buscarBuildEnSubcarpetas(dir: string): Promise<Launch | null> {
+  let entradas;
+  try {
+    entradas = await readdir(dir, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+  for (const e of entradas) {
+    if (!e.isDirectory()) continue;
+    if (e.name.startsWith(".") || e.name === "node_modules") continue;
+    const encontrado = await leerBuild(join(dir, e.name));
+    if (encontrado) return encontrado;
+  }
+  return null;
+}
+
+/**
+ * Dónde dejó el build los archivos que se pueden publicar.
+ *
+ * Se busca DESPUÉS de compilar, a propósito: antes no hay nada que mirar, y
+ * deducirla del stack sería justo lo que el motor no hace. Después del build la
+ * carpeta existe, y con eso basta para saber cuál es.
+ *
+ * El orden importa: `public` va al final porque muchos proyectos la tienen como
+ * fuente (los archivos que el dev server sirve tal cual), no como salida. Si hay
+ * un `dist` recién hecho, ese gana.
+ */
+const CARPETAS_DE_SALIDA = ["dist", "build", "out", ".output/public", ".svelte-kit/output/client", "public"];
+
+export function buscarSalida(dir: string): string | null {
+  for (const c of CARPETAS_DE_SALIDA) {
+    if (existsSync(join(dir, c))) return c;
+  }
+  return null;
+}

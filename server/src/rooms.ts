@@ -54,6 +54,14 @@ export interface Room {
   preview: Preview | null;
   /** Hay un arranque de preview en curso (evita dos npm install a la vez). */
   previewBooting?: boolean;
+  /**
+   * Por dónde va la publicación, o null si no hay ninguna en curso.
+   *
+   * Vive en la sala y no en quien apretó el botón: publicar tarda minutos, y
+   * quien entre a media publicación tiene que ver el progreso en vez de un botón
+   * quieto. También impide que dos personas suban a la vez.
+   */
+  publicando?: "compilando" | "subiendo" | null;
   /** El contenedor que aísla esta sala. null si se está corriendo sin Docker. */
   container?: Container | null;
   /** Dónde se ejecutan los comandos del agente (contenedor o local). */

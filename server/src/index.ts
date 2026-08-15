@@ -38,6 +38,13 @@ import {
 import { MAX_AGENTS_PER_ROOM, resumenDeOtros } from "./engine/agents.js";
 import { fileMutation } from "./engine/file-mutation.js";
 import { leerVariables, guardarVariables } from "./engine/env.js";
+import {
+  publicarSala,
+  credencialDeDeploy,
+  NoSePudoPublicar,
+  type Credencial,
+  type EtapaDeploy,
+} from "./engine/publicar.js";
 import { startTurn, commitTurn, failTurnConCommit } from "./engine/turns.js";
 import {
   commitAll,
@@ -349,6 +356,59 @@ fastify.put<{ Params: { id: string }; Body: { variables?: unknown } }>(
 );
 
 /**
+ * Publicar la app de la sala en internet.
+ *
+ * Compila el proyecto y lo sube; devuelve la URL. La credencial es de quien
+ * corre este Multi, no de quien aprieta el botón: pedirle una cuenta en otro
+ * servicio a alguien que solo quiere enseñar su app es la fricción que este
+ * producto existe para quitar.
+ *
+ * Responde en cuanto arranca, no al terminar: un build tarda minutos y dejar la
+ * petición colgada ese rato la mataría por timeout. Lo que pasa después viaja
+ * por socket, que además llega a TODA la sala y no solo a quien lo pidió.
+ */
+fastify.post<{ Params: { id: string } }>("/rooms/:id/publicar", async (req, reply) => {
+  const room = getRoom(req.params.id) ?? (await wakeRoom(req.params.id));
+  if (!room) return reply.code(404).send({ error: "sala no encontrada" });
+
+  const cred = credencialDeDeploy();
+  if (!cred) {
+    // Sin credencial no se degrada en silencio: se dice que este Multi no tiene
+    // publicación configurada, que es algo que solo su dueño puede resolver.
+    return reply.code(409).send({ error: "este Multi no tiene configurada la publicación" });
+  }
+  if (room.publicando) {
+    return reply.code(409).send({ error: "ya se está publicando", etapa: room.publicando });
+  }
+
+  void publicarEnSegundoPlano(room, cred);
+  return { ok: true };
+});
+
+async function publicarEnSegundoPlano(room: Room, cred: Credencial): Promise<void> {
+  const avisar = (etapa: EtapaDeploy) => {
+    room.publicando = etapa;
+    io.to(room.id).emit("deploy:progreso", { etapa });
+  };
+
+  try {
+    avisar("compilando");
+    const url = await publicarSala(room.workspace, await ensureRunner(room), cred, avisar);
+    io.to(room.id).emit("deploy:listo", { url });
+    // Y al chat, para que el link quede en el historial de la sala y no solo en
+    // la pantalla de quien estaba mirando cuando terminó.
+    systemMsg(room, `la app está publicada: ${url}`);
+  } catch (err) {
+    console.error(`[sala ${room.id}] falló la publicación:`, err);
+    const mensaje = err instanceof NoSePudoPublicar ? err.message : "no se pudo publicar";
+    io.to(room.id).emit("deploy:fallo", { mensaje });
+    systemMsg(room, `no se pudo publicar: ${mensaje}`, "#d95d63");
+  } finally {
+    room.publicando = null;
+  }
+}
+
+/**
  * Borrar una sala: su proyecto, su contenedor y su historial.
  *
  * Es DELETE y no un POST a algo: destruye un recurso entero, y el método dice
@@ -476,6 +536,9 @@ io.on("connection", (socket) => {
       // Quien llega a media cuesta no recibió el "preview:arrancando" (ya pasó),
       // y sin esto vería "la sala está vacía" mientras el proyecto se levanta.
       previewArrancando: room.previewBooting === true,
+      // Igual que el preview: quien llega a media publicación no recibió el
+      // evento de progreso (ya pasó) y vería el botón como si no hubiera nada.
+      publicando: room.publicando ?? null,
       agents: room.agents.list(),
       orphanTurns: room.orphanTurns ?? [],
       messages: history.map((m) => ({

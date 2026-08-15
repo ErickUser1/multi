@@ -35,7 +35,8 @@
     "demo:turno-cortado": "npm run demo:turno-cortado -w server",
     "demo:exportar": "npm run demo:exportar -w server",
     "uso": "npm run uso -w server --",
-    "demo:variables": "npm run demo:variables -w server"
+    "demo:variables": "npm run demo:variables -w server",
+    "demo:publicar": "npm run demo:publicar -w server"
   },
   "engines": {
     "node": ">=22"

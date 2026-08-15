@@ -30,6 +30,19 @@ export interface Credencial {
 export class NoSePudoPublicar extends Error {}
 
 /**
+ * La credencial como variables del comando.
+ *
+ * Por aquí y no interpolada en el comando: así no queda a la vista en la lista
+ * de procesos de adentro del contenedor.
+ */
+function variablesDe(cred: Credencial): Record<string, string> {
+  return {
+    CLOUDFLARE_API_TOKEN: cred.token,
+    CLOUDFLARE_ACCOUNT_ID: cred.accountId,
+  };
+}
+
+/**
  * Compila el proyecto y lo sube. Devuelve la URL pública.
  *
  * `onEtapa` avisa por dónde va: un build de verdad tarda minutos, y sin eso la
@@ -65,7 +78,7 @@ export async function publicarSala(
     throw new NoSePudoPublicar(
       compilado.timedOut
         ? "el proyecto tardó demasiado en compilar"
-        : `el proyecto no compila: ${ultimaLinea(compilado.stderr || compilado.stdout)}`,
+        : `el proyecto no compila: ${motivoDeFallo(compilado.stderr || compilado.stdout)}`,
     );
   }
 
@@ -89,18 +102,31 @@ export async function publicarSala(
   const proyecto = workspace.roomId.replace(/[^a-z0-9-]/gi, "").toLowerCase().slice(0, 58);
 
   onEtapa?.("subiendo");
+
+  /**
+   * Crear el proyecto antes de subir, porque `deploy` no lo crea solo: la
+   * primera publicación de una sala fallaba con "The Pages project does not
+   * exist".
+   *
+   * Se intenta siempre y se ignora el resultado: si ya existe, el comando falla
+   * y da igual — lo que importa es que exista cuando `deploy` llegue. Preguntar
+   * primero si está sería una llamada más para el mismo desenlace.
+   */
+  await runner
+    .exec(
+      `${cd}npx --yes wrangler@latest pages project create ${JSON.stringify(proyecto)} ` +
+        `--production-branch=main`,
+      { timeoutMs: 120_000, maxOutput: 2000, env: variablesDe(cred) },
+    )
+    .catch(() => null);
+
   const subido = await runner.exec(
     `${cd}npx --yes wrangler@latest pages deploy ${JSON.stringify(salida)} ` +
       `--project-name=${JSON.stringify(proyecto)} --commit-dirty=true`,
     {
       timeoutMs: 600_000,
       maxOutput: 8000,
-      // Por aquí y no interpolado en el comando: así no queda a la vista en la
-      // lista de procesos de adentro.
-      env: {
-        CLOUDFLARE_API_TOKEN: cred.token,
-        CLOUDFLARE_ACCOUNT_ID: cred.accountId,
-      },
+      env: variablesDe(cred),
     },
   );
 
@@ -126,10 +152,28 @@ function sacarUrl(salida: string): string | null {
   return m ? m[0] : null;
 }
 
-/** Lo último que dijo un comando que falló, que es donde suele estar el motivo. */
-function ultimaLinea(texto: string): string {
-  const lineas = texto.trim().split("\n").filter(Boolean);
-  return (lineas[lineas.length - 1] ?? "sin detalle").slice(0, 150);
+/**
+ * El motivo de un comando que falló.
+ *
+ * Se busca la última línea CON CONTENIDO, saltándose las decorativas: wrangler
+ * cierra su salida con una barra de guiones y una nota de dónde dejó el log, así
+ * que quedarse con la última literal daba un mensaje que solo decía
+ * "────────────────────". Pasó de verdad, y dejó sin ver el error real.
+ */
+export function motivoDeFallo(texto: string): string {
+  const lineas = texto
+    .trim()
+    .split("\n")
+    .map((l) => l.trim())
+    // Fuera lo que no dice nada: separadores, banderas de versión, la ruta del
+    // log, y los códigos de color que wrangler mete en cada línea.
+    .map((l) => l.replace(/\[[0-9;]*m/g, ""))
+    .filter((l) => l && !/^[─━=*-]+$/.test(l) && !/^[🪵⛅]/u.test(l));
+
+  // Si hay una línea marcada como error, esa es la buena: suele estar antes de
+  // la explicación larga, no al final.
+  const error = lineas.find((l) => /^(✘|✖|x)?\s*\[?ERROR\]?/i.test(l));
+  return (error ?? lineas[lineas.length - 1] ?? "sin detalle").slice(0, 200);
 }
 
 /**
@@ -153,7 +197,7 @@ function explicarWrangler(texto: string): string {
   if (/ENOTFOUND|ETIMEDOUT|network|fetch failed/i.test(texto)) {
     return "no se pudo hablar con el servicio de publicación. Vuelve a intentar";
   }
-  return `no se pudo publicar — ${ultimaLinea(texto)}`;
+  return `no se pudo publicar — ${motivoDeFallo(texto)}`;
 }
 
 /**

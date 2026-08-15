@@ -2,7 +2,7 @@ import { writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { createWorkspace } from "../engine/workspace.js";
 import { detectBuild, buscarSalida } from "../engine/preview.js";
-import { credencialDeDeploy } from "../engine/publicar.js";
+import { credencialDeDeploy, motivoDeFallo } from "../engine/publicar.js";
 
 /**
  * Demo: qué se compila y qué se sube al publicar la app de una sala.
@@ -83,6 +83,30 @@ async function main() {
   process.env.CLOUDFLARE_ACCOUNT_ID = "falsa";
   check("con las dos ya sirve", credencialDeDeploy() !== null);
   process.env = antes;
+
+  console.log("\n8. Cuando falla, se dice POR QUÉ");
+  {
+    /**
+     * El bug que cubre: wrangler cierra su salida con una barra de guiones y la
+     * ruta de su log, así que quedarse con la última línea daba un mensaje que
+     * decía "────────────────────" y nada más. Pasó en el primer deploy real y
+     * dejó sin ver el error, que era que el proyecto no existía todavía.
+     */
+    const salidaDeWrangler = [
+      " ⛅️ wrangler 4.123.0",
+      "────────────────────",
+      "",
+      '✘ [ERROR] The Pages project "una-sala" does not exist.',
+      "",
+      "  Maybe you intended to deploy a Worker project instead?",
+      "",
+      '🪵  Logs were written to "/work/.multi-home/.config/.wrangler/logs/x.log"',
+    ].join("\n");
+
+    const dicho = motivoDeFallo(salidaDeWrangler);
+    check("saca el error de verdad", dicho.includes("does not exist"), dicho);
+    check("y no la barra decorativa", !dicho.includes("─"), dicho);
+  }
 
   console.log(`\n${pass} pasaron, ${fail} fallaron\n`);
   process.exit(fail > 0 ? 1 : 0);

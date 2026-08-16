@@ -222,7 +222,11 @@ function Sala({ roomId, name }: { roomId: string | null; name: string }) {
   /** Se incrementa cuando cambia un archivo, para que el mapa del back recargue. */
   const [apiVersion, setApiVersion] = useState(0);
   /** Qué tab del escenario se ve. */
-  const [tab, setTab] = useState<"app" | "back">("app");
+  /**
+   * Qué se está viendo. "chat" solo existe en pantallas chicas, donde el chat
+   * no cabe al lado del preview y pasa a ser una vista más.
+   */
+  const [tab, setTab] = useState<"chat" | "app" | "back">("app");
   /**
    * El chat colapsado deja el preview a pantalla completa.
    *
@@ -668,7 +672,9 @@ function Sala({ roomId, name }: { roomId: string | null; name: string }) {
   }, [roomId, histVersion]);
 
   return (
-    <div className={`sala ${chatColapsado ? "chat-colapsado" : ""}`}>
+    // `ver-*` es lo que el CSS usa en móvil para decidir qué se muestra. En
+    // escritorio se ignora: ahí el chat y el preview conviven en dos columnas.
+    <div className={`sala ver-${tab} ${chatColapsado ? "chat-colapsado" : ""}`}>
       {/* Chat izquierda */}
       <aside className="chat">
         <div className="sala-cab">
@@ -962,6 +968,15 @@ function Sala({ roomId, name }: { roomId: string | null; name: string }) {
         </div>
 
         <div className="tabs">
+          {/* Solo en pantallas chicas: ahí el chat no cabe al lado del preview,
+              así que pasa a ser una pestaña más. En escritorio se esconde por
+              CSS, porque ahí el chat vive en su columna y no es una vista. */}
+          <button
+            className={`tab tab-chat ${tab === "chat" ? "activa" : ""}`}
+            onClick={() => setTab("chat")}
+          >
+            {t.elChat}
+          </button>
           <button className={`tab ${tab === "app" ? "activa" : ""}`} onClick={() => setTab("app")}>
             {t.laApp}
           </button>

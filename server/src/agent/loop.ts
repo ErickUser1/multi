@@ -75,6 +75,12 @@ créalo con bash: es tu trabajo, no preguntes por dónde empezar.
 - Deja el dev server en el script "dev" del package.json, escuchando en el puerto de la
   variable PORT y con el host abierto. Multi lo levanta y lo muestra a toda la sala;
   sin eso nadie ve nada.
+- Lo que construyas tiene que verse bien también en un teléfono, no solo en pantalla
+  ancha: nada de anchos fijos en el layout, y que el texto se lea y los botones se
+  puedan tocar con el dedo.
+  Por qué: la sala mira el preview desde donde sea, y lo que se publica acaba en un link
+  que la gente abre en el celular. Una app que solo se ve bien en la computadora está a
+  medias.
 - El proyecto vive en un volumen montado, donde los eventos de archivo del sistema no
   cruzan. Configura el watcher de tu stack por SONDEO (polling) o los cambios no se
   verán en vivo y la sala se quedará mirando una pantalla congelada.

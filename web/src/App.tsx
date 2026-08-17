@@ -34,6 +34,25 @@ import {
 /** Cuántas imágenes caben en un mensaje. El server aplica el mismo tope. */
 const MAX_ADJUNTOS = 4;
 
+/**
+ * A qué ancho se mira el preview.
+ *
+ * Un solo botón las cicla en este orden, en vez de tres botones en la barra:
+ * ya hay siete controles ahí arriba y este se toca poco.
+ *
+ * Los anchos son los de siempre para cada clase de pantalla; lo que importa no
+ * es el número exacto sino cruzar los puntos donde un layout se rompe.
+ */
+const VISTAS = ["escritorio", "tablet", "movil"] as const;
+type Vista = (typeof VISTAS)[number];
+
+const ANCHO_DE_VISTA: Record<Vista, string | undefined> = {
+  // Sin ancho: el preview ocupa lo que haya, como siempre.
+  escritorio: undefined,
+  tablet: "768px",
+  movil: "390px",
+};
+
 // El roomId vive en el hash de la URL: #/sala/taco-fiesta-42
 function readRoomFromHash(): string | null {
   const m = window.location.hash.match(/#\/sala\/([\w-]+)/);
@@ -227,6 +246,13 @@ function Sala({ roomId, name }: { roomId: string | null; name: string }) {
    * no cabe al lado del preview y pasa a ser una vista más.
    */
   const [tab, setTab] = useState<"chat" | "app" | "back">("app");
+  /**
+   * A qué ancho se está viendo el preview.
+   *
+   * Es solo del que mira: cambiarlo no le mueve nada a los demás de la sala, ni
+   * toca la app. Se angosta el marco, no el proyecto.
+   */
+  const [vista, setVista] = useState<Vista>("escritorio");
   /**
    * El chat colapsado deja el preview a pantalla completa.
    *
@@ -990,6 +1016,20 @@ function Sala({ roomId, name }: { roomId: string | null; name: string }) {
           <button className={`tab ${tab === "back" ? "activa" : ""}`} onClick={() => setTab("back")}>
             {t.elBack}
           </button>
+
+          {/* A qué ancho se ve el preview. Un solo botón que cicla, y no tres,
+              porque se toca poco y la barra de arriba ya va llena. Solo aparece
+              con la app a la vista: en el back no hay nada que redimensionar. */}
+          {tab === "app" && (
+            <button
+              className="vista-btn"
+              onClick={() => setVista(VISTAS[(VISTAS.indexOf(vista) + 1) % VISTAS.length])}
+              title={t.verEn[vista]}
+              aria-label={t.verEn[vista]}
+            >
+              <IconoDeVista vista={vista} />
+            </button>
+          )}
         </div>
 
         {tab === "back" && roomId && (
@@ -1001,12 +1041,17 @@ function Sala({ roomId, name }: { roomId: string | null; name: string }) {
         <div className="lienzo" style={tab === "back" ? { display: "none" } : undefined}>
           {previewReady ? (
             <>
-              <iframe
-                ref={iframeRef}
-                className="preview-frame"
-                src={previewSrc}
-                title={t.tituloPreview}
-              />
+              {/* El ancho va en el marco, no en el iframe, y el iframe NUNCA se
+                  desmonta: recargarlo perdería el estado de la app (formularios
+                  a medias, en qué pantalla ibas) y costaría segundos. */}
+              <div className="preview-marco" style={{ maxWidth: ANCHO_DE_VISTA[vista] }}>
+                <iframe
+                  ref={iframeRef}
+                  className="preview-frame"
+                  src={previewSrc}
+                  title={t.tituloPreview}
+                />
+              </div>
               {/* Selecciones de OTROS (con su color/nombre). Nota: se dibujan
                   como badges de aviso; el outline exacto vive dentro del iframe. */}
               <div className="others-selections">
@@ -1081,6 +1126,45 @@ function Sala({ roomId, name }: { roomId: string | null; name: string }) {
  * dos es del sistema (los avisos siempre se ven aparte). Los anclados tampoco
  * se agrupan: llevan su propia nota de contexto.
  */
+/**
+ * El icono del botón: dice a qué ancho se está viendo ahora.
+ *
+ * Van dibujados y no como emoji para que se vean igual en todos lados, y para
+ * que hereden el color del botón como el resto de la interfaz.
+ */
+function IconoDeVista({ vista }: { vista: Vista }) {
+  // Un rectángulo por cada clase de pantalla, con sus proporciones: el monitor
+  // ancho, la tablet casi cuadrada, el teléfono alto y angosto.
+  const caja =
+    vista === "escritorio"
+      ? { x: 2, y: 4, w: 20, h: 14, r: 2 }
+      : vista === "tablet"
+        ? { x: 5, y: 3, w: 14, h: 18, r: 2 }
+        : { x: 7, y: 2, w: 10, h: 20, r: 2 };
+
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect
+        x={caja.x}
+        y={caja.y}
+        width={caja.w}
+        height={caja.h}
+        rx={caja.r}
+        stroke="currentColor"
+        strokeWidth="1.8"
+      />
+      {/* El pie del monitor, que es lo que lo distingue de una tablet apaisada. */}
+      {vista === "escritorio" && (
+        <path d="M9 21h6M12 18v3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      )}
+      {/* El botón del teléfono, por lo mismo. */}
+      {vista === "movil" && (
+        <path d="M11 19h2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      )}
+    </svg>
+  );
+}
+
 function esSeguido(msgs: ChatMessage[], i: number): boolean {
   if (i === 0) return false;
   const prev = msgs[i - 1];

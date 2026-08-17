@@ -22,7 +22,12 @@ body {
   font-family: "Segoe UI", system-ui, sans-serif;
   color: var(--texto);
   background: linear-gradient(180deg, var(--fondo) 0%, var(--fondo2) 100%);
+  /* Las dos alturas a propósito, y en este orden: `dvh` descuenta la barra del
+     navegador del celular, que `vh` ignora. Sin ella la página queda más alta
+     que la pantalla y lo de abajo se corta, que en la Sala es justo donde está
+     la caja de escribir. El navegador que no entienda `dvh` se queda con `vh`. */
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
 }
 
@@ -41,12 +46,14 @@ body::after {
 
 #root {
   height: 100vh;
+  height: 100dvh;
 }
 
 /* ── Pantallas de entrada ─────────────────────────────────────────────── */
 
 .center-screen {
   height: 100vh;
+  height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -128,6 +135,7 @@ body::after {
 .sala {
   display: flex;
   height: 100vh;
+  height: 100dvh;
 }
 
 /* Chat izquierda — una sola línea vertical, sin cruces (estilo Discord) */
@@ -1930,4 +1938,188 @@ body::after {
 .publicar-btn:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+/* ── En el celular ────────────────────────────────────────────────────────
+   La Sala nació para pantalla ancha: el chat a la izquierda y el preview a la
+   derecha, los dos a la vez. En un teléfono eso no cabe, así que el chat pasa a
+   ser una pestaña más junto a "La app" y "El back", y se ve una a la vez.
+
+   Todo lo de aquí vive dentro de la media query: en escritorio no cambia nada. */
+
+/* La pestaña del chat solo tiene sentido donde el chat no cabe al lado. */
+.tab-chat {
+  display: none;
+}
+
+@media (max-width: 820px) {
+  .tab-chat {
+    display: block;
+  }
+
+  /* De dos columnas a una sola: lo que se ve lo decide la pestaña. */
+  .sala {
+    flex-direction: column;
+  }
+  /**
+   * El chat se queda SIEMPRE en pantalla, pero de dos tamaños: entero cuando su
+   * pestaña está activa, y solo su cabecera cuando no.
+   *
+   * Entero no se puede esconder del todo porque la cabecera vive dentro (el
+   * nombre de la sala, el menú, el botón de crear), y esconderlo se los llevaba
+   * a todos. Y nunca se desmonta: perdería el scroll y lo que llevaras escrito.
+   */
+  .chat {
+    width: 100%;
+    border-right: none;
+  }
+  .sala.ver-chat .chat {
+    flex: 1;
+    min-height: 0;
+  }
+  /**
+   * Con el chat en pantalla, el preview no ocupa espacio. Las pestañas se
+   * salvan porque están fijas abajo: viven dentro del escenario, y esconderlo
+   * entero se las llevaba, dejándote en el chat sin manera de volver.
+   */
+  .sala.ver-chat .escenario > *:not(.tabs) {
+    display: none;
+  }
+  .sala.ver-chat .escenario {
+    flex: 0 0 auto;
+  }
+
+  .escenario {
+    min-height: 0;
+  }
+  /**
+   * Las pestañas se anclan abajo, como la barra de navegación de cualquier app
+   * de teléfono.
+   *
+   * En el orden del documento viven dentro del escenario, o sea después del
+   * chat, así que en una columna caerían en medio de la pantalla o al final del
+   * scroll. Fijas abajo están siempre donde el pulgar las busca, y no hay que
+   * moverlas en el JSX (en escritorio están bien donde están).
+   */
+  .tabs {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 50;
+    padding: 0;
+    gap: 0;
+    background: var(--fondo2);
+    border-top: 1px solid var(--linea);
+  }
+  .tab {
+    flex: 1;
+    padding: 14px 8px;
+    letter-spacing: 1.5px;
+    border-radius: 0;
+  }
+  /**
+   * El hueco para la barra se hace ACORTANDO la sala, no con padding.
+   *
+   * Con padding la sala seguía midiendo una pantalla completa y crecía hacia
+   * abajo; el `overflow: hidden` del body recortaba ese sobrante, y lo que se
+   * recortaba era justo la barra de pestañas: quedabas en el chat sin manera de
+   * volver a la app.
+   */
+  .sala {
+    height: calc(100vh - 46px);
+    height: calc(100dvh - 46px);
+  }
+
+  /**
+   * La cabecera vive dentro del chat, así que al esconder el chat se iba con él
+   * y desaparecían el nombre de la sala, el menú y el botón de crear.
+   *
+   * En vez de moverla en el JSX (que cambiaría el escritorio, donde está bien),
+   * el chat se muestra SIEMPRE pero encogido a solo su cabecera cuando la
+   * pestaña activa es otra. Así el nombre no se va y los mensajes no estorban.
+   */
+  .sala:not(.ver-chat) .chat {
+    flex: 0 0 auto;
+  }
+  .sala:not(.ver-chat) .chat > *:not(.sala-cab) {
+    display: none;
+  }
+  .sala-cab {
+    padding: 12px 14px 10px;
+  }
+
+  /**
+   * La barra: en una pantalla chica no caben siete controles en fila.
+   *
+   * Se dejan bajar de renglón, y además se les quita el ancho mínimo que traen
+   * de fábrica: sin eso los botones no se encogen, empujan la fila, y la barra
+   * entera se sale de la pantalla por la izquierda. Se veía con "SELECCIONAR
+   * ELEMENTO" y "PUBLICAR" cortados a la mitad.
+   */
+  .sala,
+  .escenario,
+  .barra-sup,
+  .presencia {
+    max-width: 100%;
+    min-width: 0;
+  }
+  .barra-sup {
+    padding: 10px 12px 0;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .presencia {
+    /* Sin el margin-left: auto, que en una fila que ya envuelve solo empuja
+       cosas fuera de la pantalla. */
+    margin-left: 0;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  /* Los botones de la barra, más chicos y sin obligar a un ancho mínimo. */
+  .invitar,
+  .inspect-btn {
+    font-size: 9px;
+    letter-spacing: 1px;
+    padding: 7px 9px;
+    min-width: 0;
+  }
+  /* Colapsar el chat es un control de escritorio: en móvil las pestañas ya
+     hacen ese trabajo. */
+  .colapsar-btn {
+    display: none;
+  }
+  /* Y si alguien colapsó en la compu y luego achicó la ventana, ese estado no
+     debe dejar el chat en cero: aquí manda la pestaña. */
+  .sala.chat-colapsado .chat {
+    width: 100%;
+    opacity: 1;
+    overflow: visible;
+    pointer-events: auto;
+  }
+
+  /* Los paneles flotantes medían más que la pantalla: se ajustan a lo que hay
+     y se anclan a la derecha para no salirse por el otro lado. */
+  .env-caja,
+  .publicar-caja,
+  .key-panel,
+  .menu-panel {
+    width: auto;
+    min-width: 0;
+    max-width: calc(100vw - 24px);
+    right: 0;
+    left: auto;
+  }
+
+  /* El preview muestra la app de la sala, que puede ser más ancha que un
+     teléfono: se contiene aquí para que no empuje la Sala entera de lado. */
+  .lienzo {
+    margin: 0 12px 12px;
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .preview-frame {
+    max-width: 100%;
+  }
 }

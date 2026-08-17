@@ -103,6 +103,8 @@ const TEXTOS = {
     imagenNoSePudo: "no se pudo preparar la imagen",
 
     // Pestañas
+    /** Pestaña del chat: solo se ve en pantallas chicas. */
+    elChat: "El chat",
     laApp: "La app",
     elBack: "El back",
 
@@ -280,6 +282,7 @@ const TEXTOS = {
     imagenNoSePudo: "couldn't prepare the image",
 
     // Pestañas
+    elChat: "Chat",
     laApp: "The app",
     elBack: "The back",
 

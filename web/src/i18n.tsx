@@ -106,6 +106,12 @@ const TEXTOS = {
     /** Pestaña del chat: solo se ve en pantallas chicas. */
     elChat: "El chat",
     laApp: "La app",
+    /** Qué se ve ahora, en el botón que cicla los anchos del preview. */
+    verEn: {
+      escritorio: "Viendo en computadora — clic para tablet",
+      tablet: "Viendo en tablet — clic para celular",
+      movil: "Viendo en celular — clic para computadora",
+    } as Record<string, string>,
     elBack: "El back",
 
     // Preview
@@ -284,6 +290,11 @@ const TEXTOS = {
     // Pestañas
     elChat: "Chat",
     laApp: "The app",
+    verEn: {
+      escritorio: "Desktop view — click for tablet",
+      tablet: "Tablet view — click for mobile",
+      movil: "Mobile view — click for desktop",
+    } as Record<string, string>,
     elBack: "The back",
 
     // Preview

@@ -655,6 +655,13 @@ function Sala({ roomId, name }: { roomId: string | null; name: string }) {
    * cuando una sala vacía deja de estarlo.
    */
   useEffect(() => {
+    // Sin sala no hay nada que preguntar: la URL salía con "null" dentro y el
+    // server contestaba 404 en cada visita a la Sala vacía.
+    if (!roomId) {
+      setSePuedeExportar(false);
+      return;
+    }
+
     let cancelado = false;
     fetch(`${SERVER_URL}/rooms/${roomId}/export/estado`)
       .then((r) => (r.ok ? r.json() : null))

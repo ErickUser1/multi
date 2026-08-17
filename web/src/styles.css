@@ -1977,22 +1977,58 @@ body::after {
     flex: 1;
     min-height: 0;
   }
-  /* Con el chat en pantalla, el preview no ocupa espacio. */
-  .sala.ver-chat .escenario {
+  /**
+   * Con el chat en pantalla, el preview no ocupa espacio. Las pestañas se
+   * salvan porque están fijas abajo: viven dentro del escenario, y esconderlo
+   * entero se las llevaba, dejándote en el chat sin manera de volver.
+   */
+  .sala.ver-chat .escenario > *:not(.tabs) {
     display: none;
   }
+  .sala.ver-chat .escenario {
+    flex: 0 0 auto;
+  }
 
-  /* Las pestañas mandan aquí, así que van arriba del todo y se quedan fijas. */
   .escenario {
     min-height: 0;
   }
+  /**
+   * Las pestañas se anclan abajo, como la barra de navegación de cualquier app
+   * de teléfono.
+   *
+   * En el orden del documento viven dentro del escenario, o sea después del
+   * chat, así que en una columna caerían en medio de la pantalla o al final del
+   * scroll. Fijas abajo están siempre donde el pulgar las busca, y no hay que
+   * moverlas en el JSX (en escritorio están bien donde están).
+   */
   .tabs {
-    padding: 10px 12px 0;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 50;
+    padding: 0;
+    gap: 0;
+    background: var(--fondo2);
+    border-top: 1px solid var(--linea);
   }
   .tab {
     flex: 1;
-    padding: 10px 8px;
+    padding: 14px 8px;
     letter-spacing: 1.5px;
+    border-radius: 0;
+  }
+  /**
+   * El hueco para la barra se hace ACORTANDO la sala, no con padding.
+   *
+   * Con padding la sala seguía midiendo una pantalla completa y crecía hacia
+   * abajo; el `overflow: hidden` del body recortaba ese sobrante, y lo que se
+   * recortaba era justo la barra de pestañas: quedabas en el chat sin manera de
+   * volver a la app.
+   */
+  .sala {
+    height: calc(100vh - 46px);
+    height: calc(100dvh - 46px);
   }
 
   /**
@@ -2013,9 +2049,21 @@ body::after {
     padding: 12px 14px 10px;
   }
 
-  /* La barra: en una pantalla chica no caben siete controles en fila. Se
-     permite que bajen de renglón en vez de salirse o encogerse hasta ser
-     ilegibles. */
+  /**
+   * La barra: en una pantalla chica no caben siete controles en fila.
+   *
+   * Se dejan bajar de renglón, y además se les quita el ancho mínimo que traen
+   * de fábrica: sin eso los botones no se encogen, empujan la fila, y la barra
+   * entera se sale de la pantalla por la izquierda. Se veía con "SELECCIONAR
+   * ELEMENTO" y "PUBLICAR" cortados a la mitad.
+   */
+  .sala,
+  .escenario,
+  .barra-sup,
+  .presencia {
+    max-width: 100%;
+    min-width: 0;
+  }
   .barra-sup {
     padding: 10px 12px 0;
     flex-wrap: wrap;
@@ -2026,6 +2074,15 @@ body::after {
        cosas fuera de la pantalla. */
     margin-left: 0;
     flex-wrap: wrap;
+    gap: 6px;
+  }
+  /* Los botones de la barra, más chicos y sin obligar a un ancho mínimo. */
+  .invitar,
+  .inspect-btn {
+    font-size: 9px;
+    letter-spacing: 1px;
+    padding: 7px 9px;
+    min-width: 0;
   }
   /* Colapsar el chat es un control de escritorio: en móvil las pestañas ya
      hacen ese trabajo. */
@@ -2054,7 +2111,15 @@ body::after {
     left: auto;
   }
 
+  /* El preview muestra la app de la sala, que puede ser más ancha que un
+     teléfono: se contiene aquí para que no empuje la Sala entera de lado. */
   .lienzo {
-    padding: 10px 12px 12px;
+    margin: 0 12px 12px;
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .preview-frame {
+    max-width: 100%;
   }
 }

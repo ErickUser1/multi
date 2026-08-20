@@ -3,6 +3,7 @@ import {
   type Message,
   type ContentBlock,
   type StreamCallbacks,
+  type Usage,
 } from "./providers/types.js";
 import { toolRegistry, toolSpecs, type ToolContext, type ToolEvent, ToolError } from "./tools/index.js";
 
@@ -252,6 +253,8 @@ export async function runAgent(opts: {
       throw err;
     }
 
+    reportarGasto(end.usage, turn);
+
     // Guardar el mensaje del assistant en el historial.
     messages.push(end.message);
 
@@ -330,4 +333,28 @@ function textOf(message: Message): string {
     .map((c) => c.text)
     .join("")
     .trim();
+}
+
+/**
+ * Cuánto costó la vuelta, en la consola del server.
+ *
+ * El usage ya venía parseado y nadie lo miraba: se podía vaciar el saldo de una
+ * semana en una tarde sin ver un solo número. Pasó.
+ *
+ * Lo que hay que vigilar es `cache`: en un loop agéntico el historial solo crece
+ * y se reenvía entero cada vuelta, así que a partir de la segunda casi todo
+ * debería leerse del caché. Si sale en cero vuelta tras vuelta, algo cambia el
+ * prefijo entre requests (el caché es un prefix match; un byte distinto antes
+ * del breakpoint lo tira completo) y se está pagando todo a precio de lista sin
+ * que nada falle de forma visible.
+ */
+function reportarGasto(usage: Usage | undefined, vuelta: number): void {
+  if (!usage) return;
+  const partes = [
+    `entrada ${usage.inputTokens}`,
+    `salida ${usage.outputTokens}`,
+    `cache ${usage.cacheReadTokens ?? 0}`,
+  ];
+  if (usage.cacheCreationTokens) partes.push(`escrito ${usage.cacheCreationTokens}`);
+  console.log(`[agente] vuelta ${vuelta + 1}: ${partes.join(", ")}`);
 }

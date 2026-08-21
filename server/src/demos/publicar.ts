@@ -127,6 +127,25 @@ async function main() {
     check("sin URL en la salida, no se inventa una", sacarUrl("todo mal", "una-sala") === null);
   }
 
+  console.log("\n10. Una app con servidor propio no cabe, y se dice antes de subir");
+  {
+    /**
+     * El caso real: el agente montó un Express con su base en un archivo, la
+     * sala lo vio funcionar durante horas, y al darle a Publicar no había nada
+     * que subir. Publicar sirve archivos, así que un proceso que escucha no
+     * entra.
+     *
+     * Aquí se comprueba la señal que lo detecta: un proyecto que compila pero no
+     * deja carpeta de salida. El aviso de que va a pasar es cosa del prompt del
+     * agente, que ahora elige base local o externa según quién usa los datos.
+     */
+    const servidor = await createWorkspace("demo-publicar-servidor", { clean: true });
+    await conScripts(servidor.dir, { dev: "node server.js", build: "echo sin front" });
+
+    check("el build se detecta igual", (await detectBuild(servidor.dir))?.args.join(" ") === "run build");
+    check("pero no hay carpeta que subir", buscarSalida(servidor.dir) === null);
+  }
+
   console.log(`\n${pass} pasaron, ${fail} fallaron\n`);
   process.exit(fail > 0 ? 1 : 0);
 }

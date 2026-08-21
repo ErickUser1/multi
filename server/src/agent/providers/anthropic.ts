@@ -11,7 +11,12 @@ import {
 
 const API_URL = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION = "2023-06-01";
-const DEFAULT_MODEL = "claude-opus-5";
+// Sonnet en vez de Opus a propósito. Una sala de Multi es un loop agéntico: cada
+// turno reenvía el historial completo, y con Opus una sesión de dos horas se come
+// el saldo de una semana (pasó, 17 dólares en una tarde). Sonnet hace igual de
+// bien lo que se pide aquí (scaffoldear, editar, rediseñar) por menos de la mitad.
+// Quien quiera Opus lo pone en MULTI_MODEL o desde la Sala.
+const DEFAULT_MODEL = "claude-sonnet-5";
 const DEFAULT_MAX_TOKENS = 8192;
 
 // Retry: 429 (rate limit) y 529 (overloaded). Config estilo CCX.
@@ -310,6 +315,17 @@ function buildRequestBody(params: StreamParams, defaultModel: string): Record<st
     max_tokens: params.maxTokens ?? DEFAULT_MAX_TOKENS,
     stream: true,
     messages: params.messages.map(toApiMessage),
+    // Cachea el ÚLTIMO bloque cacheable del request, que en un loop agéntico es
+    // el final del historial. Sin esto solo se cacheaba el system: cada vuelta
+    // reenviaba a precio completo todo lo que el agente ya había leído y escrito,
+    // y un turno largo son quince o veinte vueltas sobre el mismo historial que
+    // solo crece. Lo que se relee sale a una décima parte.
+    //
+    // La forma automática y no marcar bloque por bloque: el caché es un prefix
+    // match, así que un breakpoint mal puesto no da error, simplemente deja de
+    // acertar y nadie se entera. Aquí el prefijo estable (tools, system, y el
+    // historial hasta la vuelta anterior) queda antes por construcción.
+    cache_control: { type: "ephemeral" },
   };
 
   // system como array con cache_control → activa prompt caching en el prompt de sistema.

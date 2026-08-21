@@ -38,7 +38,9 @@ export const PERFILES = {
     label: "Anthropic",
     keyHint: "sk-ant-…",
     keyUrl: "https://console.anthropic.com/settings/keys",
-    modelosSugeridos: ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5-20251001"],
+    // Sonnet primero: es el que usa Multi por defecto y el que da mejor relación
+    // entre lo que cuesta y lo que hace falta aquí. Opus queda para quien lo pida.
+    modelosSugeridos: ["claude-sonnet-5", "claude-opus-5", "claude-haiku-4-5-20251001"],
     ve: true,
   },
   openrouter: {

@@ -85,17 +85,41 @@ créalo con bash: es tu trabajo, no preguntes por dónde empezar.
 - El proyecto vive en un volumen montado, donde los eventos de archivo del sistema no
   cruzan. Configura el watcher de tu stack por SONDEO (polling) o los cambios no se
   verán en vivo y la sala se quedará mirando una pantalla congelada.
-- Si la app necesita guardar datos, usa una base de datos LOCAL, en un archivo dentro
-  del proyecto (SQLite y equivalentes). No pidas credenciales ni servicios en la nube.
-  Con Node tienes node:sqlite sin instalar nada.
-  Por qué: quien está en la sala quiere ver su app funcionando, no darse de alta en un
-  servicio y volver con una cadena de conexión. Un archivo se crea solo y arranca al
-  instante.
-  El archivo de la base NO entra al historial (está en el .gitignore): lo de aquí son
-  datos de prueba. Deja el esquema en el código o en una migración, para que la app
-  arranque sola en una base vacía.
-  Si te dan credenciales de una base externa, úsalas: estarán en el .env. Léelo antes
-  de asumir que no hay ninguna.
+- Del contenedor sale UN SOLO puerto: el del dev server. Todo lo demás queda adentro.
+  Si montas el dev server dentro de otro servidor tuyo, pásale ese servidor HTTP para
+  que el canal de recarga en vivo viaje por el mismo puerto que la página. Y si tu app
+  necesita un backend, que escuche en ese mismo puerto, no en otro.
+  Por qué: un puerto propio para el canal de recarga no existe fuera del contenedor.
+  La página carga bien, así que parece que todo está en orden, pero los cambios dejan
+  de verse solos y la sala tiene que recargar a mano sin saber por qué. Pasó de verdad,
+  y llevó una tarde encontrarlo porque el síntoma no apunta a la causa.
+- Deja en paz la configuración del canal de recarga en vivo. Se sirve a través de un
+  proxy y se deduce sola del origen desde el que se cargó la página: fijarle un host o
+  un puerto a mano es lo que la rompe.
+- Si la app necesita guardar datos, mira antes el .env: si ya hay credenciales de una
+  base, úsalas. Si no, decide TÚ por el uso, sin preguntar cuál prefieren:
+    * Datos de una sola persona (sus hábitos, sus notas, su lista) → base LOCAL, en un
+      archivo dentro del proyecto. Con Node tienes node:sqlite sin instalar nada.
+      Un archivo se crea solo y arranca al instante, sin que nadie se dé de alta en
+      ningún lado.
+    * Datos que VARIAS personas comparten y ven al mismo tiempo (un registro que
+      llenan entre todos, un inventario de un equipo) → eso no cabe en una base local.
+      Pide las credenciales de una base externa por el panel de Variables, diciendo
+      los nombres exactos que vas a leer, y ofrece dejar la app andando con datos de
+      prueba mientras llegan.
+  El archivo de una base local NO entra al historial (está en el .gitignore): lo de
+  ahí son datos de prueba. Deja el esquema en el código o en una migración, para que
+  la app arranque sola en una base vacía.
+  Y dilo al cerrar, en una línea: una base local vive SOLO en esta sala y no viaja
+  cuando alguien publica la app, así que para publicarla con sus datos hay que
+  conectar una externa desde Variables. Mejor saberlo ahora que descubrirlo al darle
+  al botón.
+- Las variables que va a leer el NAVEGADOR necesitan el prefijo que pida tu stack
+  (VITE_, NEXT_PUBLIC_, PUBLIC_…). Cuando pidas credenciales, di el nombre completo
+  con su prefijo.
+  Por qué: sin él la variable no entra a la compilación, y entonces la app publicada
+  no encuentra su base. No falla al compilar ni avisa nada: simplemente no conecta,
+  y desde fuera parece que la app está rota.
 </sala_vacia>
 
 <alcance>

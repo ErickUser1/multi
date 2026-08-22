@@ -79,7 +79,7 @@ const TEXTOS = {
     envBoton: "Variables",
     envTitulo: "Variables del proyecto",
     envNota:
-      "Van al .env de esta sala: la app y el agente las leen. Son de la sala, así que las ve quien entre.",
+      "Van al .env de esta sala: la app y el agente las leen. Son de la sala, así que las ve quien entre. Las que la app lee desde el navegador necesitan el prefijo de su framework (VITE_, NEXT_PUBLIC_); sin él no llegan a la app publicada.",
     envVacio: "Todavía no hay ninguna.",
     envNombre: "NOMBRE",
     envValor: "valor",
@@ -264,7 +264,7 @@ const TEXTOS = {
     envBoton: "Variables",
     envTitulo: "Project variables",
     envNota:
-      "They go in this room's .env: the app and the agent read them. They belong to the room, so anyone who joins can see them.",
+      "They go in this room's .env: the app and the agent read them. They belong to the room, so anyone who joins can see them. The ones the app reads from the browser need its framework's prefix (VITE_, NEXT_PUBLIC_); without it they never reach the published app.",
     envVacio: "None yet.",
     envNombre: "NAME",
     envValor: "value",

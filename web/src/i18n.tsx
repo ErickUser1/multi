@@ -77,6 +77,9 @@ const TEXTOS = {
 
     // Cuenta (opcional: se entra a las salas sin ella)
     entrarConGoogle: "Entrar con Google",
+    miPerfil: "Mi perfil",
+    cambiarFoto: "Cambiar foto",
+    fotoFormato: "Solo PNG, JPEG, WebP o GIF.",
     cuentaNota:
       "Con cuenta tus salas te siguen a cualquier dispositivo, y tu nombre y tu foto son los mismos en todas. Sin cuenta se entra igual, como siempre.",
     miCuenta: "Mi cuenta",
@@ -270,6 +273,9 @@ const TEXTOS = {
 
     // Cuenta (opcional: se entra a las salas sin ella)
     entrarConGoogle: "Sign in with Google",
+    miPerfil: "My profile",
+    cambiarFoto: "Change picture",
+    fotoFormato: "PNG, JPEG, WebP or GIF only.",
     cuentaNota:
       "With an account your rooms follow you to any device, and your name and picture are the same everywhere. Without one you still get in, same as always.",
     miCuenta: "My account",

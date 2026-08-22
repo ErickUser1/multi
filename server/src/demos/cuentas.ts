@@ -10,6 +10,13 @@ import {
   urlDeAutorizacion,
 } from "../cuentas.js";
 import { addMember, colorDe, type Room } from "../rooms.js";
+import {
+  guardarAvatar,
+  rutaAvatar,
+  mediaTypeDeAvatar,
+  borrarAvatar,
+  esAvatarPropio,
+} from "../engine/avatares.js";
 
 /**
  * Demo: las cuentas, que son OPCIONALES.
@@ -46,7 +53,11 @@ function salaVacia(): Room {
   return { members: new Map() } as unknown as Room;
 }
 
-function main(): void {
+/** Un PNG de un pixel, para no traer un archivo de prueba al repo. */
+const pngDeUnPixel =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
+async function main(): Promise<void> {
   console.log("\n=== cuentas (opcionales) ===\n");
 
   console.log("1. Sin credenciales configuradas no se ofrece entrar");
@@ -195,8 +206,47 @@ function main(): void {
     check("con su foto", conCuenta.foto === "https://x/f.jpg");
   }
 
+  console.log("\n11. Las fotos que sube la gente");
+  {
+    // El id cambia en cada subida, incluso de la misma persona. Eso es lo que
+    // hace honesto el `immutable` con el que se sirven: si se reusara el id, la
+    // foto vieja se quedaría pegada un año en el navegador de todos.
+    const uno = await guardarAvatar({ mediaType: "image/png", data: pngDeUnPixel });
+    const dos = await guardarAvatar({ mediaType: "image/png", data: pngDeUnPixel });
+    check("dos subidas, dos ids", uno !== dos, `${uno} vs ${dos}`);
+    check("y el tipo sale del id", mediaTypeDeAvatar(uno) === "image/png");
+
+    await borrarAvatar(uno);
+    await borrarAvatar(dos);
+    check("borrar deja de encontrarla", (await rutaAvatar(uno)) === null);
+    // Borrar algo que ya no está no puede reventar: pasa cada vez que alguien
+    // cambia dos veces de foto seguidas.
+    await borrarAvatar(uno);
+    check("y borrar dos veces no truena", true);
+
+    const grande = Buffer.alloc(600 * 1024).toString("base64");
+    await guardarAvatar({ mediaType: "image/png", data: grande }).then(
+      () => check("una foto enorme se rechaza", false, "la aceptó"),
+      (err: Error) => check("una foto enorme se rechaza", err.message.includes("512KB"), err.message),
+    );
+
+    await guardarAvatar({ mediaType: "application/pdf", data: pngDeUnPixel }).then(
+      () => check("un PDF no es una foto", false, "lo aceptó"),
+      (err: Error) => check("un PDF no es una foto", err.message.includes("no soportado")),
+    );
+  }
+
+  console.log("\n12. De quién es cada foto");
+  {
+    // Al cambiar de foto se borra la anterior, pero solo si era nuestra: las de
+    // Google son una URL suya y no hay nada que borrar en nuestro disco.
+    check("la de Google no se toca", !esAvatarPropio("https://lh3.googleusercontent.com/x"));
+    check("la subida sí es nuestra", esAvatarPropio("/auth/foto/abc.png"));
+    check("y sin foto no hay nada que borrar", !esAvatarPropio(null));
+  }
+
   console.log(`\n${pass} pasaron, ${fail} fallaron\n`);
   process.exit(fail > 0 ? 1 : 0);
 }
 
-main();
+void main();

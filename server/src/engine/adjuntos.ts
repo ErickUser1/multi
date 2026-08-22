@@ -34,7 +34,7 @@ export interface Adjunto {
  * Los formatos que los modelos con visión aceptan. Las dos documentaciones
  * oficiales coinciden en la lista (agosto de 2026).
  */
-const TIPOS: Record<string, string> = {
+export const TIPOS: Record<string, string> = {
   "image/png": ".png",
   "image/jpeg": ".jpg",
   "image/webp": ".webp",

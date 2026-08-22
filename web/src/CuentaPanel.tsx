@@ -146,7 +146,7 @@ export function CuentaPanel(props: {
               }}
             />
             <button
-              className="key-guardar"
+              className="perfil-guardar"
               disabled={guardando || !nombre.trim() || nombre.trim() === props.usuario.nombre}
               onClick={() => void guardarNombre()}
             >

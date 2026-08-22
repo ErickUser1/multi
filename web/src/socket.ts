@@ -21,6 +21,10 @@ export interface Member {
   socketId: string;
   name: string;
   color: string;
+  /** Si trajo su API key y puede invocar agentes. */
+  canInvoke?: boolean;
+  /** Su foto de perfil, si entró con cuenta. Sin ella se pinta la inicial. */
+  foto?: string | null;
 }
 
 /** Una imagen que alguien pegó en el chat, ya guardada en el server. */
@@ -39,6 +43,8 @@ export interface ChatMessage {
   text: string;
   anchoredTo?: string;
   adjuntos?: Adjunto[];
+  /** La foto de quien lo escribió, si tenía cuenta. */
+  foto?: string | null;
 }
 
 /** Un agente de la sala, como jugador visible. */
@@ -130,7 +136,10 @@ export async function borrarSala(id: string): Promise<void> {
 // ── Socket ──────────────────────────────────────────────────────────────────
 
 export function connectSocket(): Socket {
-  return io(SERVER_URL, { transports: ["websocket"] });
+  // `withCredentials` para que la cookie de sesión viaje en el handshake: es de
+  // donde el server saca quién eres, si es que tienes cuenta. Sin cuenta no
+  // cambia nada, simplemente no hay cookie que mandar.
+  return io(SERVER_URL, { transports: ["websocket"], withCredentials: true });
 }
 
 export { SERVER_URL };

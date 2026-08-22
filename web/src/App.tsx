@@ -22,7 +22,14 @@ import { EnvPanel } from "./EnvPanel.js";
 import { PublicarPanel } from "./PublicarPanel.js";
 import { useTextos } from "./i18n.js";
 import { MenuSalas } from "./MenuSalas.js";
-import { recordarSala, olvidarSala, recordarNombre } from "./historial-salas.js";
+import { recordarSala, olvidarSala, recordarNombre, guardarSalas } from "./historial-salas.js";
+import { CuentaPanel } from "./CuentaPanel.js";
+import {
+  quienSoy,
+  sincronizarSalas,
+  volverDondeEstaba,
+  type EstadoDeCuenta,
+} from "./cuenta.js";
 import {
   prepararImagen,
   imagenesDe,
@@ -59,9 +66,53 @@ function readRoomFromHash(): string | null {
   return m ? m[1] : null;
 }
 
+/**
+ * Cómo te llamas, de este navegador.
+ *
+ * La clave vieja usaba guion (`multi-name`) mientras el resto del proyecto usa
+ * punto. Se lee una última vez y se reescribe con la nueva: sin esto, todo el
+ * que ya venía usando Multi volvería a ver la pantalla del nombre de golpe.
+ */
+function nombreGuardado(): string {
+  try {
+    const actual = localStorage.getItem("multi.nombre");
+    if (actual) return actual;
+    const viejo = localStorage.getItem("multi-name");
+    if (viejo) {
+      localStorage.setItem("multi.nombre", viejo);
+      localStorage.removeItem("multi-name");
+      return viejo;
+    }
+  } catch {
+    // Sin localStorage se pregunta el nombre otra vez. No es motivo para no entrar.
+  }
+  return "";
+}
+
 export function App() {
   const [roomId, setRoomId] = useState<string | null>(readRoomFromHash());
-  const [name, setName] = useState<string>(localStorage.getItem("multi-name") ?? "");
+  const [name, setName] = useState<string>(nombreGuardado());
+  /**
+   * La cuenta, si es que hay una. `null` es el caso normal y mayoritario.
+   *
+   * Ojo con lo que NO se hace aquí: no se espera a esta respuesta para pintar
+   * la app. Mientras llega, se entra como siempre. Si se pusiera una pantalla
+   * de carga esperándola, el login se habría vuelto un peaje para todos, aunque
+   * nadie tenga cuenta.
+   */
+  const [cuenta, setCuenta] = useState<EstadoDeCuenta>({ configurado: false, usuario: null });
+
+  useEffect(() => {
+    void quienSoy().then((estado) => {
+      setCuenta(estado);
+      if (!estado.usuario) return;
+      // Con cuenta, el perfil manda sobre el nombre local.
+      setName(estado.usuario.nombre);
+      volverDondeEstaba();
+      // Las salas de este navegador suben a la cuenta, y las de la cuenta bajan.
+      void sincronizarSalas().then(guardarSalas);
+    });
+  }, []);
   /**
    * Si ya diste tu nombre alguna vez, no se te vuelve a preguntar.
    *
@@ -74,7 +125,7 @@ export function App() {
    * El nombre guardado es justo la señal de que esa pantalla ya cumplió su
    * función. Sin nombre sí se pregunta: es la primera vez.
    */
-  const [entered, setEntered] = useState(() => !!localStorage.getItem("multi-name"));
+  const [entered, setEntered] = useState(() => !!nombreGuardado());
 
   useEffect(() => {
     const onHash = () => setRoomId(readRoomFromHash());
@@ -108,18 +159,19 @@ export function App() {
    *
    * Ahora se cae dentro con el menú a mano, y crear es un botón más.
    */
-  if (!roomId) return <Sala key="sin-sala" roomId={null} name={name || "anónimo"} />;
+  if (!roomId) return <Sala key="sin-sala" roomId={null} name={name || "anónimo"} cuenta={cuenta} />;
 
   // Hay sala pero falta decir cómo te llamas. Sigue haciendo falta para quien
   // llega por un link que le pasaron: la sala necesita saber quién entró.
-  if (!entered) {
+  // Con cuenta no se pregunta el nombre: ya lo sabemos, y con foto.
+  if (!entered && !cuenta.usuario) {
     return (
       <NamePrompt
         roomId={roomId}
         name={name}
         setName={setName}
         onEnter={() => {
-          localStorage.setItem("multi-name", name || "anónimo");
+          localStorage.setItem("multi.nombre", name || "anónimo");
           // La sala se anota en el efecto de arriba, en cuanto `entered` es
           // cierto. Aquí solo se guarda el nombre y se entra.
           setEntered(true);
@@ -139,7 +191,7 @@ export function App() {
    * porque llega vacío y nada sobrescribe. Aparecías en una sala recién creada
    * leyendo la conversación de otra.
    */
-  return <Sala key={roomId} roomId={roomId} name={name || "anónimo"} />;
+  return <Sala key={roomId} roomId={roomId} name={name || "anónimo"} cuenta={cuenta} />;
 }
 
 
@@ -178,7 +230,15 @@ function NamePrompt(props: {
  * al entrar a Multi sin haber elegido sala, con el menú y el botón de crear a
  * la mano.
  */
-function Sala({ roomId, name }: { roomId: string | null; name: string }) {
+function Sala({
+  roomId,
+  name,
+  cuenta,
+}: {
+  roomId: string | null;
+  name: string;
+  cuenta: EstadoDeCuenta;
+}) {
   const { t } = useTextos();
   const [members, setMembers] = useState<Member[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -953,10 +1013,15 @@ function Sala({ roomId, name }: { roomId: string | null; name: string }) {
           </button>
           <div className="presencia">
             {members.map((m) => (
-              <div key={m.socketId} className="av" style={{ background: m.color }} title={m.name}>
-                {m.name.slice(0, 1).toUpperCase()}
-              </div>
+              <Avatar
+                key={m.socketId}
+                foto={m.foto}
+                color={m.color}
+                inicial={m.name.slice(0, 1).toUpperCase()}
+                titulo={m.name}
+              />
             ))}
+            <CuentaPanel usuario={cuenta.usuario} configurado={cuenta.configurado} />
             {/* La `key` cambia cuando el server pide la API key: remonta el
                 panel para que se abra solo en ese momento. */}
             <KeyPanel
@@ -1174,6 +1239,47 @@ function esSeguido(msgs: ChatMessage[], i: number): boolean {
   return prev.from === m.from && prev.role === m.role;
 }
 
+/**
+ * La carita de alguien: su foto si tiene cuenta, y si no la inicial de siempre.
+ *
+ * Está extraído porque el mismo círculo se pinta en la presencia de arriba y en
+ * cada mensaje, y hasta ahora el markup estaba copiado en los dos sitios.
+ *
+ * El `onError` es el único fallback callado de por aquí, y se justifica: si la
+ * foto de Google no carga (sin red, cuenta borrada), la inicial es exactamente
+ * lo que se veía antes. Gritarlo en el chat no le serviría a nadie.
+ */
+function Avatar(props: {
+  foto?: string | null;
+  color: string;
+  inicial: string;
+  titulo?: string;
+  textoOscuro?: boolean;
+}) {
+  const [fallo, setFallo] = useState(false);
+  if (props.foto && !fallo) {
+    return (
+      <img
+        className="av"
+        src={props.foto}
+        alt=""
+        title={props.titulo}
+        referrerPolicy="no-referrer"
+        onError={() => setFallo(true)}
+      />
+    );
+  }
+  return (
+    <div
+      className="av"
+      style={{ background: props.color, color: props.textoOscuro ? "#3d2a12" : "#fff" }}
+      title={props.titulo}
+    >
+      {props.inicial}
+    </div>
+  );
+}
+
 function ChatRow({
   msg,
   seguido,
@@ -1218,9 +1324,13 @@ function ChatRow({
   return (
     <div className={`msg ${msg.role === "system" ? "msg-system" : ""}`}>
       {msg.role !== "system" && (
-        <div className="av" style={{ background: msg.color, color: msg.role === "agent" ? "#3d2a12" : "#fff" }}>
-          {msg.role === "agent" ? "AI" : initial}
-        </div>
+        <Avatar
+          foto={msg.role === "agent" ? null : msg.foto}
+          color={msg.color}
+          inicial={msg.role === "agent" ? "AI" : initial}
+          titulo={msg.from}
+          textoOscuro={msg.role === "agent"}
+        />
       )}
       <div className="msg-cuerpo">
         {msg.role !== "system" && (

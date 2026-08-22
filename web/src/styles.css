@@ -2225,9 +2225,9 @@ img.av {
 }
 
 /* El input se lleva el espacio y el botón solo lo que ocupa su texto.
-   Sin el `width: auto` gana el `width: 100%` que `.name-input` trae de la
-   pantalla de entrada, y el flex acaba repartiendo al revés: el botón enorme y
-   el input de 40px. */
+   Dos cosas peleaban aquí: `.name-input` trae `width: 100%` de la pantalla de
+   entrada, y `.key-panel .key-guardar` pone el botón al 100% porque ahí es el
+   único de su fila. Por eso el botón NO usa esa clase: tiene la suya. */
 .perfil-nombre .name-input {
   flex: 1;
   min-width: 0;
@@ -2236,8 +2236,21 @@ img.av {
   padding: 8px 10px;
 }
 
-.perfil-nombre .key-guardar {
+.perfil-guardar {
   flex-shrink: 0;
+  border: 0;
+  border-radius: 4px;
+  background: var(--ambar);
+  color: #3d2a12;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 9px 14px;
+  cursor: pointer;
+}
+.perfil-guardar:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .key-error {

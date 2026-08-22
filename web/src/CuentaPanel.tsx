@@ -28,10 +28,18 @@ export function CuentaPanel(props: {
 }) {
   const { t } = useTextos();
   const [abierto, setAbierto] = useState(false);
-  const [nombre, setNombre] = useState(props.usuario?.nombre ?? "");
+  /**
+   * Lo escrito en el input, o `null` si nadie lo ha tocado y vale el del perfil.
+   *
+   * No se arranca con `useState(props.usuario?.nombre)`: eso se evalúa al montar
+   * el panel, y para entonces la cuenta todavía no ha llegado del server. El
+   * campo se quedaba vacío para siempre aunque el perfil sí tuviera nombre.
+   */
+  const [escrito, setEscrito] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const archivoRef = useRef<HTMLInputElement | null>(null);
+  const nombre = escrito ?? props.usuario?.nombre ?? "";
 
   if (!props.configurado) return null;
 
@@ -43,7 +51,11 @@ export function CuentaPanel(props: {
     setGuardando(true);
     const actualizado = await cambiarNombre(limpio);
     setGuardando(false);
-    if (actualizado) props.onCambio(actualizado);
+    if (actualizado) {
+      props.onCambio(actualizado);
+      // Se suelta lo escrito para que el input vuelva a reflejar el perfil.
+      setEscrito(null);
+    }
   };
 
   const elegirFoto = async (archivo: File | undefined) => {
@@ -128,7 +140,7 @@ export function CuentaPanel(props: {
               value={nombre}
               maxLength={40}
               disabled={guardando}
-              onChange={(e) => setNombre(e.target.value)}
+              onChange={(e) => setEscrito(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") void guardarNombre();
               }}
@@ -146,7 +158,7 @@ export function CuentaPanel(props: {
           <p className="key-nota">{props.usuario.correo}</p>
 
           <button
-            className="key-olvidar"
+            className="key-olvidar perfil-salir"
             onClick={() => {
               // Recargar y no solo limpiar el estado: la sesión vive en una
               // cookie que este código no puede tocar, así que quien manda sobre

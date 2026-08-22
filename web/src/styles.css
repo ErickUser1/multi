@@ -2224,11 +2224,27 @@ img.av {
   margin-bottom: 8px;
 }
 
+/* El input se lleva el espacio y el botón solo lo que ocupa su texto.
+   Sin el `width: auto` gana el `width: 100%` que `.name-input` trae de la
+   pantalla de entrada, y el flex acaba repartiendo al revés: el botón enorme y
+   el input de 40px. */
 .perfil-nombre .name-input {
   flex: 1;
   min-width: 0;
+  width: auto;
+  margin-top: 0;
+  padding: 8px 10px;
+}
+
+.perfil-nombre .key-guardar {
+  flex-shrink: 0;
 }
 
 .key-error {
   color: #d95d63;
+}
+
+/* Salir va separado del resto: es la acción que no se aprieta por error. */
+.key-panel .perfil-salir {
+  margin-top: 12px;
 }

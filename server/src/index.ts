@@ -25,6 +25,22 @@ import {
 } from "./rooms.js";
 import { getStorage } from "./storage/index.js";
 import { setCredential, getCredential, clearCredential } from "./keys.js";
+import {
+  aUsuarioPublico,
+  consumirState,
+  cookieBorrada,
+  cookieDeSesion,
+  credencialDeGoogle,
+  cuandoExpira,
+  datosDelToken,
+  intercambiarCodigo,
+  nuevoIdDeUsuario,
+  nuevoState,
+  nuevoTokenDeSesion,
+  tokenDeCookie,
+  urlDeAutorizacion,
+} from "./cuentas.js";
+import type { StoredUsuario } from "./storage/types.js";
 import { makeProvider, esProviderId, PERFILES, proveedorVe } from "./agent/providers/profiles.js";
 import {
   guardarAdjunto,
@@ -159,6 +175,154 @@ if (SIRVE_WEB) {
 }
 
 fastify.get("/health", async () => ({ status: "ok", service: "multi-server" }));
+
+// ── Cuentas ─────────────────────────────────────────────────────────────────
+//
+// Todo lo de aquí es opcional. La comprobación de sesión se hace DENTRO de cada
+// handler que la necesita, con `usuarioDe(req)`, y no con un hook global a
+// propósito: un hook es el mecanismo que hace fácil que alguien, más adelante,
+// "proteja todo por defecto" y convierta el login en un peaje. Aquí entrar a una
+// sala no pide cuenta y no la va a pedir.
+
+/** Si el server se sirve por https, la cookie tiene que ir marcada como segura. */
+function esSeguro(req: { headers: Record<string, unknown>; protocol?: string }): boolean {
+  const reenviado = req.headers["x-forwarded-proto"];
+  if (typeof reenviado === "string") return reenviado.split(",")[0].trim() === "https";
+  return req.protocol === "https";
+}
+
+/** Quién manda esta petición, o null. Que no haya nadie es un caso normal. */
+async function usuarioDe(req: { headers: Record<string, unknown> }): Promise<StoredUsuario | null> {
+  const token = tokenDeCookie(req.headers.cookie as string | undefined);
+  if (!token) return null;
+  return (await getStorage()).usuarioPorSesion(token);
+}
+
+/** A dónde vuelve Google. Tiene que coincidir con lo registrado en su consola. */
+function urlDeVuelta(req: { headers: Record<string, unknown>; protocol: string }): string {
+  const host = req.headers.host as string;
+  const proto = esSeguro(req) ? "https" : req.protocol;
+  return `${proto}://${host}/auth/google/callback`;
+}
+
+fastify.get("/auth/google", async (req, reply) => {
+  const cred = credencialDeGoogle();
+  // Sin credenciales configuradas no hay login, y se dice. Es una capacidad que
+  // solo puede habilitar quien hospeda este Multi.
+  if (!cred) {
+    return reply.code(503).send({ error: "este Multi no tiene configurado el inicio de sesión" });
+  }
+  const state = nuevoState();
+  return reply.redirect(urlDeAutorizacion(cred, state, urlDeVuelta(req)));
+});
+
+fastify.get<{ Querystring: { code?: string; state?: string; error?: string } }>(
+  "/auth/google/callback",
+  async (req, reply) => {
+    const cred = credencialDeGoogle();
+    if (!cred) return reply.code(503).send({ error: "el inicio de sesión no está configurado" });
+
+    // Que la persona le diera a "cancelar" en Google no es un error: se vuelve a
+    // la app como si nada, sin cuenta, que es un estado perfectamente válido.
+    if (req.query.error || !req.query.code) return reply.redirect("/");
+
+    // El state ata esta vuelta a una ida que salió de aquí.
+    if (!consumirState(req.query.state)) {
+      return reply.code(400).send({ error: "el inicio de sesión caducó, vuelve a intentar" });
+    }
+
+    const idToken = await intercambiarCodigo(cred, req.query.code, urlDeVuelta(req));
+    const datos = idToken ? datosDelToken(idToken) : null;
+    if (!datos) return reply.code(502).send({ error: "Google no confirmó quién eres" });
+
+    const storage = await getStorage();
+    let usuario = await storage.usuarioPorGoogleSub(datos.sub);
+    if (usuario) {
+      // Se refresca en cada entrada: si cambió su nombre o su foto en Google,
+      // aquí se ve, sin que nadie tenga que apretar nada.
+      await storage.actualizarUsuario(usuario.id, {
+        nombre: datos.nombre,
+        correo: datos.correo,
+        foto: datos.foto,
+      });
+      usuario = { ...usuario, nombre: datos.nombre, correo: datos.correo, foto: datos.foto };
+    } else {
+      usuario = {
+        id: nuevoIdDeUsuario(),
+        googleSub: datos.sub,
+        nombre: datos.nombre,
+        correo: datos.correo,
+        foto: datos.foto,
+        creadoEn: Date.now(),
+      };
+      await storage.crearUsuario(usuario);
+    }
+
+    const token = nuevoTokenDeSesion();
+    await storage.crearSesion(token, usuario.id, cuandoExpira());
+    reply.header("set-cookie", cookieDeSesion(token, esSeguro(req)));
+    // De vuelta a donde estaba: el front guardó la sala antes de mandarla aquí.
+    return reply.redirect("/");
+  },
+);
+
+/**
+ * Quién soy.
+ *
+ * Devuelve 200 con `usuario: null` cuando no hay sesión, nunca 401: no tener
+ * cuenta no es un error y no tiene por qué salir en rojo en la consola de nadie.
+ * `configurado` le dice al front si mostrar el botón de entrar.
+ */
+fastify.get("/auth/yo", async (req) => {
+  const usuario = await usuarioDe(req);
+  return {
+    configurado: credencialDeGoogle() != null,
+    usuario: usuario ? aUsuarioPublico(usuario) : null,
+  };
+});
+
+fastify.post("/auth/salir", async (req, reply) => {
+  const token = tokenDeCookie(req.headers.cookie as string | undefined);
+  if (token) await (await getStorage()).borrarSesion(token);
+  reply.header("set-cookie", cookieBorrada(esSeguro(req)));
+  return { ok: true };
+});
+
+/** Las salas de quien tiene cuenta. Sin sesión, lista vacía y a otra cosa. */
+fastify.get("/auth/salas", async (req) => {
+  const usuario = await usuarioDe(req);
+  if (!usuario) return { salas: [] };
+  return { salas: await (await getStorage()).salasDeUsuario(usuario.id) };
+});
+
+/**
+ * Sube de golpe las salas que ya vivían en el navegador.
+ *
+ * Se llama al entrar, no solo al registrarse: si te haces cuenta en la laptop y
+ * luego entras en otra máquina donde tenías otras salas guardadas, esas también
+ * suben. Sin esto, tener cuenta se sentiría como empezar de cero.
+ */
+fastify.post<{ Body: { salas?: { id?: unknown }[] } }>("/auth/salas", async (req, reply) => {
+  const usuario = await usuarioDe(req);
+  if (!usuario) return reply.code(401).send({ error: "sin sesión" });
+
+  const storage = await getStorage();
+  const entrantes = Array.isArray(req.body?.salas) ? req.body.salas : [];
+  for (const sala of entrantes.slice(0, 50)) {
+    if (typeof sala?.id !== "string" || !sala.id) continue;
+    // Las que ya no existen se caen solas: `recordarSalaDeUsuario` tiene FK
+    // contra rooms, así que insertar una borrada falla y se ignora.
+    await storage.recordarSalaDeUsuario(usuario.id, sala.id).catch(() => {});
+  }
+  return { salas: await storage.salasDeUsuario(usuario.id) };
+});
+
+fastify.delete<{ Params: { roomId: string } }>("/auth/salas/:roomId", async (req, reply) => {
+  const usuario = await usuarioDe(req);
+  if (!usuario) return reply.code(401).send({ error: "sin sesión" });
+  await (await getStorage()).olvidarSalaDeUsuario(usuario.id, req.params.roomId);
+  return { ok: true };
+});
 
 // Crear sala → devuelve su id. El cliente navega a /sala/:id.
 fastify.post("/rooms", async () => {
@@ -523,10 +687,26 @@ io.on("connection", (socket) => {
     }
     joinedRoom = room;
     socket.join(roomId);
-    const member = addMember(room, socket.id, name || "anónimo");
+
+    // La sesión viaja en la cookie del handshake, no en el payload: el cliente
+    // no la puede leer (es HttpOnly) y por lo tanto tampoco inventarla.
+    //
+    // Sin cuenta se entra igual, con el nombre que mandó y su color derivado de
+    // ese nombre. Con cuenta, el perfil pisa al nombre local, que es lo que
+    // espera quien se tomó la molestia de tener uno.
+    const usuario = await usuarioDe({ headers: socket.handshake.headers });
+    const member = addMember(
+      room,
+      socket.id,
+      usuario?.nombre || name || "anónimo",
+      usuario ? { id: usuario.id, foto: usuario.foto ?? null } : undefined,
+    );
 
     // Estado inicial para el que entra, con el chat que ya existía.
     const storage = await getStorage();
+    // Con `void`: que la BD tarde no debe retrasar el `joined`. Mismo criterio
+    // que `say`, que emite antes de persistir.
+    if (usuario) void storage.recordarSalaDeUsuario(usuario.id, roomId).catch(() => {});
     const history = await storage.getMessages(roomId);
     socket.emit("joined", {
       roomId,
@@ -553,6 +733,9 @@ io.on("connection", (socket) => {
         text: m.text,
         anchoredTo: m.anchoredTo,
         adjuntos: m.adjuntos,
+        // Null en todo lo anterior a las cuentas y en lo de quien entra sin
+        // una: ahí se pinta la inicial, como se ha visto siempre.
+        foto: m.foto ?? null,
       })),
     });
     // Avisar a los demás de la nueva presencia.
@@ -616,6 +799,8 @@ io.on("connection", (socket) => {
       text,
       anchoredTo: anchor ? anchor.path : undefined,
       adjuntos: adjuntos.length ? adjuntos : undefined,
+      usuarioId: member.usuarioId,
+      foto: member.foto,
     });
 
     // 2) ¿Es plática o una orden? El agente solo despierta si lo llaman.
@@ -907,6 +1092,10 @@ async function say(
     text: string;
     anchoredTo?: string;
     adjuntos?: Adjunto[];
+    /** Su cuenta, si la tiene. Es lo que deja pintar su foto en el historial. */
+    usuarioId?: string;
+    /** La foto, que viaja con el mensaje para no consultarla al pintar. */
+    foto?: string | null;
   },
 ): Promise<void> {
   io.to(room.id).emit("chat:message", msg);
@@ -926,6 +1115,9 @@ async function say(
         mediaType: a.mediaType,
       })),
       createdAt: Date.now(),
+      // La foto NO se guarda en la fila: se resuelve al leer, para que cambiar
+      // de foto actualice también lo que dijiste antes.
+      usuarioId: msg.usuarioId ?? null,
     });
     await storage.touchRoom(room.id);
   } catch (err) {
@@ -1273,6 +1465,10 @@ try {
   // Las salas no se despiertan al arrancar: sería carísimo levantar N dev
   // servers. Cada una despierta cuando alguien entra (wakeRoom).
   const salas = await loadRoomIndex();
+  // Las sesiones caducadas se barren aquí y no con un timer: un temporizador
+  // vivo para siempre es un recurso más que cuidar, y esto puede esperar al
+  // siguiente arranque sin que nadie lo note.
+  void getStorage().then((s) => s.borrarSesionesVencidas().catch(() => {}));
   const modoKeys = TEST_MOCK
     ? "agente simulado"
     : FALLBACK
@@ -1281,6 +1477,9 @@ try {
   console.log(
     `Multi server en http://localhost:${PORT}  (${modoKeys}, ${salas} sala(s) guardada(s))`,
   );
+  if (!credencialDeGoogle()) {
+    console.log("  (sin GOOGLE_CLIENT_ID: se entra sin cuenta, que es el modo de siempre)");
+  }
 } catch (err) {
   fastify.log.error(err);
   process.exit(1);

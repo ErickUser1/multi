@@ -75,6 +75,14 @@ const TEXTOS = {
     zipFallo: "no se pudo preparar el .zip",
     ponerMiKey: "poner mi key",
 
+    // Cuenta (opcional: se entra a las salas sin ella)
+    entrarConGoogle: "Entrar con Google",
+    cuentaNota:
+      "Con cuenta tus salas te siguen a cualquier dispositivo, y tu nombre y tu foto son los mismos en todas. Sin cuenta se entra igual, como siempre.",
+    miCuenta: "Mi cuenta",
+    cerrarSesion: "Salir",
+    salasGuardadas: "Tus salas se guardan en tu cuenta.",
+
     // Variables del proyecto (.env)
     envBoton: "Variables",
     envTitulo: "Variables del proyecto",
@@ -259,6 +267,14 @@ const TEXTOS = {
     zipTrabajoSinGuardar: "there's unsaved work, the .zip has the last saved point",
     zipFallo: "couldn't prepare the .zip",
     ponerMiKey: "add my key",
+
+    // Cuenta (opcional: se entra a las salas sin ella)
+    entrarConGoogle: "Sign in with Google",
+    cuentaNota:
+      "With an account your rooms follow you to any device, and your name and picture are the same everywhere. Without one you still get in, same as always.",
+    miCuenta: "My account",
+    cerrarSesion: "Sign out",
+    salasGuardadas: "Your rooms are saved to your account.",
 
     // Variables del proyecto (.env)
     envBoton: "Variables",

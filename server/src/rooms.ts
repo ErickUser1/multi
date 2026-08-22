@@ -29,6 +29,13 @@ export interface Member {
    * Es un booleano a propósito: la key jamás sale del server.
    */
   canInvoke?: boolean;
+  /**
+   * Su cuenta, si tiene. Para la enorme mayoría esto va a estar vacío SIEMPRE,
+   * y no es un pendiente: entrar a una sala nunca pide cuenta.
+   */
+  usuarioId?: string;
+  /** Su foto de perfil. Sin ella se pinta la inicial sobre el color, como toda la vida. */
+  foto?: string | null;
 }
 
 /** Un elemento del preview seleccionado (capturado por el inspector). */
@@ -102,6 +109,32 @@ function genId(): string {
 
 export function colorFor(index: number): string {
   return COLORS[index % COLORS.length];
+}
+
+/**
+ * El color de alguien, derivado de una clave estable.
+ *
+ * Antes se repartía por orden de llegada (`colorFor(members.size)`), y eso hacía
+ * que tu color cambiara al reconectarte o cuando alguien que llegó antes se iba.
+ * Con cinco personas en una sala eso es justo lo que vuelve el chat ilegible:
+ * sigues un color y de pronto es de otra persona.
+ *
+ * Ahora sale de un hash de la clave: el id de la cuenta si la hay, y si no el
+ * nombre. Así también es estable para quien entra sin cuenta, que es la mayoría.
+ *
+ * A cambio, dos personas en la misma sala pueden tocarles el mismo color, cosa
+ * que el reparto por posición evitaba para los primeros seis. Se acepta: el
+ * nombre va siempre al lado, y que TU color no cambie importa más que ser
+ * distinto del de al lado.
+ */
+export function colorDe(clave: string): string {
+  // FNV-1a: corto, sin dependencias y bien repartido para lo que hace falta.
+  let hash = 2166136261;
+  for (let i = 0; i < clave.length; i++) {
+    hash ^= clave.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return COLORS[Math.abs(hash) % COLORS.length];
 }
 
 /**
@@ -477,11 +510,26 @@ export async function renameRoom(room: Room, crudo: unknown): Promise<string | n
   return nombre;
 }
 
-export function addMember(room: Room, socketId: string, name: string): Member {
+/**
+ * Mete a alguien a la sala.
+ *
+ * `usuario` es opcional y lo va a seguir siendo: sin cuenta se entra igual, con
+ * el nombre que traiga y su color derivado de ese nombre.
+ */
+export function addMember(
+  room: Room,
+  socketId: string,
+  name: string,
+  usuario?: { id: string; foto: string | null },
+): Member {
   const member: Member = {
     socketId,
     name,
-    color: colorFor(room.members.size),
+    // Con cuenta el color se ata al id, que no cambia nunca. Sin cuenta, al
+    // nombre, que al menos es el mismo mientras te sigas llamando igual.
+    color: colorDe(usuario?.id ?? name),
+    usuarioId: usuario?.id,
+    foto: usuario?.foto ?? null,
   };
   room.members.set(socketId, member);
   return member;

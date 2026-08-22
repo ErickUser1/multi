@@ -44,6 +44,7 @@ const RUTAS_DE_LA_SALA = [
   "/providers",
   "/preview",
   "/socket.io",
+  "/auth",
   "/index.html",
   "/vite.svg",
 ];

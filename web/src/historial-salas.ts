@@ -5,10 +5,12 @@
  * la sala se perdió. Los nombres son legibles a propósito (compa-zona-49, no un
  * UUID) justo para poder dictarlos por teléfono, pero nadie se los aprende.
  *
- * Sin cuenta y sin servidor: vive en localStorage, atado a este navegador. No
- * sincroniza entre dispositivos, y eso está bien — un login contra el server de
- * quien levantó Multi guardaría una identidad que solo existe mientras esa
- * máquina esté prendida.
+ * Sin cuenta vive en localStorage, atado a este navegador, y funciona bien así:
+ * entrar a una sala nunca ha pedido cuenta y no la va a pedir.
+ *
+ * Con cuenta la lista vive ADEMÁS en el server, y de ahí sale cuando hay sesión.
+ * Pero el localStorage no se abandona nunca: si el server se cae, o si cierras
+ * sesión, tus salas siguen aquí. Cerrar sesión no debe sentirse como perderlas.
  *
  * NO se separa "mis salas" de "compartidas conmigo". La distinción se borra
  * sola: entras a una que te pasaron, invitas a alguien, y ya es tuya también.
@@ -107,5 +109,20 @@ export function olvidarSala(id: string): void {
     localStorage.setItem(CLAVE, JSON.stringify(lista));
   } catch {
     // Igual que arriba: no vale la pena romper la interfaz por esto.
+  }
+}
+
+/**
+ * Pisa la lista con la que vino del server.
+ *
+ * Se escribe también en local a propósito: así, si mañana entras sin sesión o
+ * el server no responde, tus salas siguen ahí. La cuenta añade que te sigan
+ * entre dispositivos, no reemplaza lo que ya funcionaba.
+ */
+export function guardarSalas(salas: SalaVisitada[]): void {
+  try {
+    localStorage.setItem(CLAVE, JSON.stringify(salas.slice(0, MAXIMO)));
+  } catch {
+    // Igual que arriba: el historial no vale romper nada.
   }
 }

@@ -9,6 +9,7 @@ import { existsSync } from "node:fs";
 import {
   createRoom,
   getRoom,
+  allRooms,
   addMember,
   removeMember,
   membersList,
@@ -24,6 +25,7 @@ import {
   type SelectedElement,
 } from "./rooms.js";
 import { getStorage } from "./storage/index.js";
+import { KeyedMutex } from "./engine/keyed-mutex.js";
 import { setCredential, getCredential, clearCredential } from "./keys.js";
 import {
   aUsuarioPublico,
@@ -41,6 +43,14 @@ import {
   urlDeAutorizacion,
 } from "./cuentas.js";
 import type { StoredUsuario } from "./storage/types.js";
+import {
+  guardarAvatar,
+  rutaAvatar,
+  mediaTypeDeAvatar,
+  borrarAvatar,
+  esAvatarPropio,
+  AvatarInvalido,
+} from "./engine/avatares.js";
 import { makeProvider, esProviderId, PERFILES, proveedorVe } from "./agent/providers/profiles.js";
 import {
   guardarAdjunto,
@@ -323,6 +333,105 @@ fastify.delete<{ Params: { roomId: string } }>("/auth/salas/:roomId", async (req
   await (await getStorage()).olvidarSalaDeUsuario(usuario.id, req.params.roomId);
   return { ok: true };
 });
+
+/**
+ * Cambiar la foto es un recurso compartido más: se escribe la nueva, se apunta
+ * en la base y se borra la vieja. Dos peticiones a la vez de la misma persona
+ * pueden dejar el archivo nuevo borrado y la columna apuntando a nada.
+ */
+const cambiosDePerfil = new KeyedMutex();
+
+/** Cambiar tu nombre. El que pongas aquí pisa al que dijo Google. */
+fastify.patch<{ Body: { nombre?: unknown } }>("/auth/perfil", async (req, reply) => {
+  const usuario = await usuarioDe(req);
+  if (!usuario) return reply.code(401).send({ error: "sin sesión" });
+
+  const crudo = typeof req.body?.nombre === "string" ? req.body.nombre : "";
+  const nombre = crudo.replace(/\s+/g, " ").trim().slice(0, 40);
+  if (!nombre) return reply.code(400).send({ error: "el nombre no puede quedar vacío" });
+
+  await (await getStorage()).actualizarUsuario(usuario.id, {
+    nombre,
+    correo: usuario.correo,
+    foto: usuario.foto ?? null,
+  });
+  refrescarEnSalas(usuario.id, { nombre });
+  return { usuario: aUsuarioPublico({ ...usuario, nombre }) };
+});
+
+/** Subir tu propia foto, en lugar de la que trajo Google. */
+fastify.post<{ Body: { mediaType?: unknown; data?: unknown } }>(
+  "/auth/perfil/foto",
+  async (req, reply) => {
+    const usuario = await usuarioDe(req);
+    if (!usuario) return reply.code(401).send({ error: "sin sesión" });
+
+    return cambiosDePerfil.run(usuario.id, async () => {
+      let id: string;
+      try {
+        id = await guardarAvatar(req.body ?? {});
+      } catch (err) {
+        return reply
+          .code(400)
+          .send({ error: err instanceof AvatarInvalido ? err.message : "no se pudo guardar" });
+      }
+
+      const anterior = usuario.foto;
+      const foto = `/auth/foto/${id}`;
+      await (await getStorage()).actualizarUsuario(usuario.id, {
+        nombre: usuario.nombre,
+        correo: usuario.correo,
+        foto,
+      });
+      // La anterior solo si era nuestra: las de Google son una URL suya.
+      if (esAvatarPropio(anterior)) {
+        void borrarAvatar(anterior!.replace("/auth/foto/", ""));
+      }
+      refrescarEnSalas(usuario.id, { foto });
+      return { usuario: aUsuarioPublico({ ...usuario, foto }) };
+    });
+  },
+);
+
+/**
+ * Las fotos de perfil, sin pedir sesión.
+ *
+ * Públicas a propósito: se ven en el chat de una sala donde puede haber gente
+ * sin cuenta, y esconderlas de ellos no protegería nada.
+ *
+ * `immutable` se puede porque el id cambia cada vez que alguien cambia su foto.
+ */
+fastify.get<{ Params: { avatarId: string } }>("/auth/foto/:avatarId", async (req, reply) => {
+  const ruta = await rutaAvatar(req.params.avatarId);
+  if (!ruta) return reply.code(404).send({ error: "no está" });
+  const tipo = mediaTypeDeAvatar(req.params.avatarId);
+  if (!tipo) return reply.code(404).send({ error: "no está" });
+  return reply
+    .header("content-type", tipo)
+    .header("cache-control", "public, max-age=31536000, immutable")
+    .send(await readFile(ruta));
+});
+
+/**
+ * Refresca lo que las salas saben de alguien que acaba de cambiar su perfil.
+ *
+ * Sin esto, el `Member` en memoria se queda con el nombre y la foto viejos hasta
+ * que la persona recargue, y los demás de la sala la seguirían viendo como antes.
+ * Se toca el miembro y se rebroadcastea la presencia, que es el mismo camino que
+ * usa `auth:key` cuando alguien trae su credencial.
+ */
+function refrescarEnSalas(usuarioId: string, cambios: { nombre?: string; foto?: string }): void {
+  for (const room of allRooms()) {
+    let tocada = false;
+    for (const member of room.members.values()) {
+      if (member.usuarioId !== usuarioId) continue;
+      if (cambios.nombre) member.name = cambios.nombre;
+      if (cambios.foto) member.foto = cambios.foto;
+      tocada = true;
+    }
+    if (tocada) io.to(room.id).emit("presence", { members: membersList(room) });
+  }
+}
 
 // Crear sala → devuelve su id. El cliente navega a /sala/:id.
 fastify.post("/rooms", async () => {

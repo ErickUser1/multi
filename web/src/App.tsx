@@ -28,7 +28,9 @@ import {
   quienSoy,
   sincronizarSalas,
   volverDondeEstaba,
+  urlDeFoto,
   type EstadoDeCuenta,
+  type Usuario,
 } from "./cuenta.js";
 import {
   prepararImagen,
@@ -113,6 +115,18 @@ export function App() {
       void sincronizarSalas().then(guardarSalas);
     });
   }, []);
+
+  /**
+   * Alguien cambió su nombre o su foto desde el panel.
+   *
+   * El nombre local se mueve con él para que el chat y la presencia lo usen sin
+   * esperar a recargar. El server ya avisó a los demás de la sala por su cuenta.
+   */
+  const onCuentaCambio = useCallback((u: Usuario) => {
+    setCuenta((antes) => ({ ...antes, usuario: u }));
+    setName(u.nombre);
+  }, []);
+
   /**
    * Si ya diste tu nombre alguna vez, no se te vuelve a preguntar.
    *
@@ -159,7 +173,7 @@ export function App() {
    *
    * Ahora se cae dentro con el menú a mano, y crear es un botón más.
    */
-  if (!roomId) return <Sala key="sin-sala" roomId={null} name={name || "anónimo"} cuenta={cuenta} />;
+  if (!roomId) return <Sala key="sin-sala" roomId={null} name={name || "anónimo"} cuenta={cuenta} onCuentaCambio={onCuentaCambio} />;
 
   // Hay sala pero falta decir cómo te llamas. Sigue haciendo falta para quien
   // llega por un link que le pasaron: la sala necesita saber quién entró.
@@ -191,7 +205,7 @@ export function App() {
    * porque llega vacío y nada sobrescribe. Aparecías en una sala recién creada
    * leyendo la conversación de otra.
    */
-  return <Sala key={roomId} roomId={roomId} name={name || "anónimo"} cuenta={cuenta} />;
+  return <Sala key={roomId} roomId={roomId} name={name || "anónimo"} cuenta={cuenta} onCuentaCambio={onCuentaCambio} />;
 }
 
 
@@ -234,10 +248,12 @@ function Sala({
   roomId,
   name,
   cuenta,
+  onCuentaCambio,
 }: {
   roomId: string | null;
   name: string;
   cuenta: EstadoDeCuenta;
+  onCuentaCambio: (u: Usuario) => void;
 }) {
   const { t } = useTextos();
   const [members, setMembers] = useState<Member[]>([]);
@@ -580,7 +596,9 @@ function Sala({
       return;
     }
     try {
-      const listas = await Promise.all(files.slice(0, sitio).map(prepararImagen));
+      // Con lambda y no `.map(prepararImagen)`: map pasa el índice como segundo
+      // argumento, que ahora son las opciones, y la segunda imagen saldría de 1px.
+      const listas = await Promise.all(files.slice(0, sitio).map((f) => prepararImagen(f)));
       setPendientes((prev) => [...prev, ...listas]);
       if (files.length > sitio) setErrorAdjunto(t.maxImagenes(MAX_ADJUNTOS));
     } catch (err) {
@@ -1021,7 +1039,11 @@ function Sala({
                 titulo={m.name}
               />
             ))}
-            <CuentaPanel usuario={cuenta.usuario} configurado={cuenta.configurado} />
+            <CuentaPanel
+              usuario={cuenta.usuario}
+              configurado={cuenta.configurado}
+              onCambio={onCuentaCambio}
+            />
             {/* La `key` cambia cuando el server pide la API key: remonta el
                 panel para que se abra solo en ese momento. */}
             <KeyPanel
@@ -1257,11 +1279,14 @@ function Avatar(props: {
   textoOscuro?: boolean;
 }) {
   const [fallo, setFallo] = useState(false);
-  if (props.foto && !fallo) {
+  // La foto puede ser una URL de Google o una que subió la persona a este
+  // server; `urlDeFoto` resuelve las dos.
+  const src = urlDeFoto(props.foto);
+  if (src && !fallo) {
     return (
       <img
         className="av"
-        src={props.foto}
+        src={src}
         alt=""
         title={props.titulo}
         referrerPolicy="no-referrer"

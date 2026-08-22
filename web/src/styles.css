@@ -2193,3 +2193,42 @@ img.av {
     max-width: 100% !important;
   }
 }
+
+/* Panel de perfil: la foto y el botón de cambiarla, en una fila. */
+.perfil-foto-fila {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.perfil-foto-fila .cuenta-foto-grande {
+  margin-bottom: 0;
+}
+
+/* Cuando alguien no tiene foto: la inicial sobre el fondo de siempre. */
+.cuenta-sin-foto {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #2a2b3d;
+  color: #d8d9e8;
+  font-weight: 800;
+  font-size: 16px;
+}
+
+.perfil-nombre {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.perfil-nombre .name-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.key-error {
+  color: #d95d63;
+}

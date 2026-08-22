@@ -43,7 +43,15 @@ export function esImagenAceptada(file: File): boolean {
  * Los GIF se dejan tal cual. Redibujarlos en un canvas se quedaría con el primer
  * fotograma, y quien manda un GIF lo manda por el movimiento.
  */
-export async function prepararImagen(file: File): Promise<AdjuntoPendiente> {
+export async function prepararImagen(
+  file: File,
+  /**
+   * A cuánto reducir el lado más largo. El default sirve para el chat, donde
+   * el modelo va a mirar la imagen. Una foto de perfil se pinta a 34 píxeles,
+   * así que ahí se pide mucho menos y baja de megas a kilobytes.
+   */
+  opts: { lado?: number } = {},
+): Promise<AdjuntoPendiente> {
   if (!esImagenAceptada(file)) {
     throw new Error(`no puedo con archivos ${file.type || "de ese tipo"}`);
   }
@@ -59,7 +67,8 @@ export async function prepararImagen(file: File): Promise<AdjuntoPendiente> {
   }
 
   const bitmap = await createImageBitmap(file);
-  const escala = Math.min(1, LADO_MAXIMO / Math.max(bitmap.width, bitmap.height));
+  const lado = opts.lado ?? LADO_MAXIMO;
+  const escala = Math.min(1, lado / Math.max(bitmap.width, bitmap.height));
   const ancho = Math.round(bitmap.width * escala);
   const alto = Math.round(bitmap.height * escala);
 

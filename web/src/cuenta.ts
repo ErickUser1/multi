@@ -103,3 +103,59 @@ export async function sincronizarSalas(): Promise<SalaVisitada[]> {
     return locales;
   }
 }
+
+/** Cambia tu nombre. El que pongas aquí pisa al que trajo Google. */
+export async function cambiarNombre(nombre: string): Promise<Usuario | null> {
+  try {
+    const res = await fetch(`${SERVER_URL}/auth/perfil`, {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ nombre }),
+    });
+    if (!res.ok) return null;
+    const { usuario } = (await res.json()) as { usuario: Usuario };
+    return usuario;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Sube tu propia foto.
+ *
+ * Devuelve el usuario ya con la foto nueva, o el mensaje de por qué no se pudo.
+ * El error se enseña: alguien que eligió una imagen y no ve nada pasar merece
+ * saber si fue el tamaño o el formato.
+ */
+export async function cambiarFoto(
+  mediaType: string,
+  data: string,
+): Promise<{ usuario: Usuario } | { error: string }> {
+  try {
+    const res = await fetch(`${SERVER_URL}/auth/perfil/foto`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ mediaType, data }),
+    });
+    const cuerpo = (await res.json()) as { usuario?: Usuario; error?: string };
+    if (!res.ok || !cuerpo.usuario) {
+      return { error: cuerpo.error ?? "no se pudo guardar la foto" };
+    }
+    return { usuario: cuerpo.usuario };
+  } catch {
+    return { error: "no se pudo hablar con el server" };
+  }
+}
+
+/**
+ * La URL para pintar una foto de perfil.
+ *
+ * Las de Google vienen como URL completa; las que subió alguien vienen como una
+ * ruta de este server. Se distinguen por el protocolo.
+ */
+export function urlDeFoto(foto: string | null | undefined): string | null {
+  if (!foto) return null;
+  return foto.startsWith("http") ? foto : `${SERVER_URL}${foto}`;
+}

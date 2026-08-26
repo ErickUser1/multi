@@ -77,6 +77,8 @@ export interface StoredUsuario {
 export interface SalaDeUsuario {
   roomId: string;
   visitadaEn: number;
+  /** Cómo le dice la gente. Null si nadie la ha nombrado: ahí se ve el id. */
+  nombre?: string | null;
 }
 
 export interface Storage {

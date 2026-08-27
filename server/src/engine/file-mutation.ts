@@ -21,18 +21,36 @@ export class StaleContentError extends Error {
     readonly path: string,
     /** Quién lo tocó y hace cuánto, si se sabe (registro efímero). */
     readonly lastWriter?: { agentId: string; agoMs: number },
+    /** Quién está intentando escribir ahora, para no atribuirle a otro lo suyo. */
+    quienEscribe?: string,
   ) {
-    super(StaleContentError.buildMessage(path, lastWriter));
+    super(StaleContentError.buildMessage(path, lastWriter, quienEscribe));
     this.name = "StaleContentError";
   }
 
   /**
    * El mensaje va AL MODELO, no al humano: tiene que decirle qué hacer.
    * Con atribución fresca es más útil; sin ella degrada pero sigue siendo accionable.
+   *
+   * Y si el último escritor fue ÉL MISMO, se le dice así de claro. Antes leía
+   * "lo modificó agente-1 hace 3s" sin saber que agente-1 era él, concluía que
+   * había alguien más trabajando, y se ponía a esperar y a releer el archivo una
+   * y otra vez por un compañero que no existía. Visto en una sesión real: cuatro
+   * relecturas y un `sleep 5` para nada.
    */
-  private static buildMessage(path: string, w?: { agentId: string; agoMs: number }): string {
-    const quien = w ? ` Lo modificó ${w.agentId} hace ${Math.round(w.agoMs / 1000)}s.` : "";
-    return `El archivo ${path} cambió desde que lo leíste.${quien} Léelo otra vez (read_file) antes de editarlo, y vuelve a aplicar tu cambio sobre el contenido nuevo.`;
+  private static buildMessage(
+    path: string,
+    w?: { agentId: string; agoMs: number },
+    quienEscribe?: string,
+  ): string {
+    if (!w) {
+      return `El archivo ${path} cambió desde que lo leíste. Léelo otra vez (read_file) antes de editarlo, y vuelve a aplicar tu cambio sobre el contenido nuevo.`;
+    }
+    const hace = Math.round(w.agoMs / 1000);
+    if (quienEscribe && w.agentId === quienEscribe) {
+      return `El archivo ${path} cambió desde que lo leíste: lo escribiste TÚ hace ${hace}s y te quedaste con la versión de antes. No hay nadie más trabajando en él. Léelo otra vez (read_file) y aplica tu cambio sobre lo que ahora hay.`;
+    }
+    return `El archivo ${path} cambió desde que lo leíste. Lo modificó ${w.agentId} hace ${hace}s. Léelo otra vez (read_file) antes de editarlo, y vuelve a aplicar tu cambio sobre el contenido nuevo.`;
   }
 }
 
@@ -78,7 +96,7 @@ export class FileMutation {
         if (opts.expected !== undefined) {
           const actual = existsSync(key) ? await readFile(key, "utf8") : null;
           if (actual !== opts.expected) {
-            throw new StaleContentError(opts.path, this.writerInfo(key));
+            throw new StaleContentError(opts.path, this.writerInfo(key), opts.agentId);
           }
         }
 

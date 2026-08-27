@@ -57,6 +57,30 @@ async function testCAS() {
   );
   check("el mensaje instruye al modelo qué hacer", !!stale?.message.includes("read_file"));
   check("el archivo NO se pisó", (await readFile(f, "utf8")) === "cambio-1");
+
+  // Y si el que chocó consigo mismo es el MISMO agente, se le dice así.
+  //
+  // El bug que cubre: el mensaje decía "lo modificó agente-1" sin aclarar que
+  // agente-1 era él. El agente concluía que había otro trabajando, se ponía a
+  // esperar y releía el archivo una y otra vez por un compañero inexistente.
+  // Visto en una sesión real: cuatro relecturas y un `sleep 5` para nada.
+  let propio: StaleContentError | null = null;
+  try {
+    await fileMutation.writeIfUnchanged({
+      path: f,
+      content: "cambio-3",
+      expected: "original", // viejo otra vez, pero ahora lo escribió él mismo
+      agentId: "agente-1",
+    });
+  } catch (e) {
+    propio = e instanceof StaleContentError ? e : null;
+  }
+  check("rechaza igual si chocó consigo mismo", propio !== null);
+  check(
+    "y le dice que fue ÉL, no otro agente",
+    !!propio?.message.includes("TÚ") && !!propio?.message.includes("nadie más"),
+    propio?.message ?? "",
+  );
 }
 
 async function testParallelDistinctFiles() {

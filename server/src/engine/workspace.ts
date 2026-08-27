@@ -16,6 +16,25 @@ export interface Workspace {
 }
 
 /**
+ * El HOME del contenedor de una sala, hermano de su workspace.
+ *
+ * Ahí van la caché de npm y la config de las herramientas que corren adentro
+ * (wrangler, por ejemplo). Fuera del workspace por dos razones:
+ *
+ * - El workspace tiene que estar VACÍO cuando el agente llega, o los generadores
+ *   de proyecto se plantan a preguntar si continúan sobre un directorio con
+ *   archivos, nadie les contesta y se cancelan. Le costaba al agente hasta doce
+ *   comandos rodearlo, distinto cada vez.
+ * - Y una caché de npm no es parte del proyecto de nadie. Ahí dentro viajaba en
+ *   lo que la gente se descarga.
+ *
+ * Mismo patrón que `<workspace>.adjuntos` y `<workspace>.turns.json`.
+ */
+export function homeDir(workspaceDir: string): string {
+  return `${workspaceDir}.home`;
+}
+
+/**
  * Crea el workspace de una sala: una carpeta vacía con git.
  *
  * La sala NACE VACÍA — cero molde, cero stack asumido. El proyecto lo scaffoldea
@@ -100,11 +119,6 @@ async function ensureGitignore(dir: string): Promise<void> {
     "# proceso muere entre los dos pasos, queda uno tirado; sin esto entraría al",
     "# commit del turno.",
     "*.tmp-*",
-    "",
-    "# El HOME del contenedor de la sala (container.ts). Es cache de npm, no",
-    "# proyecto: sin esto entra a los commits y viaja en el .zip que la gente",
-    "# se descarga.",
-    ".multi-home/",
     "",
     "# La base de datos del proyecto. Los datos de aquí son de prueba: quien se",
     "# lleva la app la quiere publicar con su base vacía, no con lo que se tecleó",

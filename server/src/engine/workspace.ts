@@ -1,6 +1,6 @@
-import { mkdir, writeFile, rm } from "node:fs/promises";
+import { mkdir, writeFile, readFile, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
@@ -24,8 +24,10 @@ export interface Workspace {
  * proyecto de arranque sería meter una plantilla por la puerta de atrás y dejar
  * de ser agnósticos (era andamio de la Fase 0 para probar el motor; ya no).
  *
- * Lo único que se siembra es `.gitignore`, y eso SÍ es del motor: sin él,
- * `git add -A` indexa node_modules y los turnos nunca commitean.
+ * Vacía de verdad, ni un archivo. Lo que el motor necesita ignorar vive dentro
+ * de `.git`, fuera de la vista: si estuviera en la raíz, los generadores de
+ * proyecto se plantarían a preguntar si continúan sobre un directorio con
+ * archivos, y el primero en correr lo pisaría con el suyo.
  */
 export async function createWorkspace(
   roomId: string,
@@ -57,17 +59,33 @@ export async function createWorkspace(
 }
 
 /**
- * Siembra el `.gitignore` del motor si no existe.
+ * Las reglas de ignorar del motor, en `.git/info/exclude`.
  *
- * No es plantilla de proyecto: es la condición para que el historial funcione.
- * Si el agente después lo edita para su stack, se respeta (por eso no se pisa).
+ * NO en un `.gitignore` de la raíz, y esa es la decisión que importa: git lee
+ * los dos igual, pero este vive dentro de `.git` y por lo tanto la carpeta de
+ * trabajo queda VACÍA.
+ *
+ * Con un archivo en la raíz, un generador (`npm create`, `create-next-app`…) se
+ * planta a preguntar si continúa sobre un directorio que no está vacío, nadie le
+ * contesta y se cancela; y el que sí corre escribe su propio `.gitignore`
+ * encima, borrando lo del motor sin que nadie se entere. Las dos cosas pasaron
+ * de verdad, y le costaban al agente media docena de comandos por sala.
+ *
+ * Nada de esto es plantilla de proyecto: es la condición para que el historial
+ * funcione. Si el proyecto trae su propio `.gitignore`, ese es suyo y se queda.
  */
+const MARCA = "# Lo que nunca entra al historial de la sala. Lo pone Multi.";
+
 async function ensureGitignore(dir: string): Promise<void> {
-  const path = join(dir, ".gitignore");
-  if (existsSync(path)) return;
+  const path = join(dir, ".git", "info", "exclude");
+  // `git init` ya deja aquí un archivo con instrucciones comentadas, así que no
+  // vale preguntar si EXISTE: hay que mirar si son NUESTRAS reglas las que están.
+  // Saltárselo dejaba el .env sin ignorar, y en silencio.
+  const previo = existsSync(path) ? await readFile(path, "utf8") : "";
+  if (previo.includes(MARCA)) return;
   const lineas = [
-    "# Lo que nunca entra al historial de la sala.",
-    "# El agente puede agregar lo que su stack necesite.",
+    MARCA,
+    "# El proyecto puede tener su propio .gitignore para lo suyo.",
     "node_modules/",
     "dist/",
     "build/",
@@ -100,7 +118,11 @@ async function ensureGitignore(dir: string): Promise<void> {
     "*.db-wal",
     "",
   ];
-  await writeFile(path, lineas.join("\n"), "utf8");
+  // Se AÑADE a lo que `git init` dejó, en vez de pisarlo: eso son comentarios de
+  // ayuda de git y borrarlos no aporta nada.
+  const separador = previo && !previo.endsWith("\n") ? "\n" : "";
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, previo + separador + lineas.join("\n"), "utf8");
 }
 
 /**

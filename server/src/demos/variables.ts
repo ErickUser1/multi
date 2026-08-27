@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { createWorkspace } from "../engine/workspace.js";
 import { guardarVariables, leerVariables } from "../engine/env.js";
@@ -71,8 +72,15 @@ async function main() {
   check("las anteriores se fueron", v3.length === 1, v3.map((v) => v.nombre).join(","));
 
   console.log("\n6. Y no entra al historial de la sala");
-  const gitignore = await readFile(join(ws.dir, ".gitignore"), "utf8");
+  // Las reglas del motor viven en `.git/info/exclude`, no en la raíz: así la
+  // sala nace vacía y ningún generador de proyecto las pisa.
+  const gitignore = await readFile(join(ws.dir, ".git", "info", "exclude"), "utf8");
   check("el .env está ignorado", gitignore.includes(".env"));
+
+  // Y la sala nace VACÍA: un .gitignore en la raíz haría que los generadores de
+  // proyecto se planten a preguntar, y que el primero en correr lo pise con el
+  // suyo. Las dos cosas pasaron antes de mover las reglas a .git/info/exclude.
+  check("no hay .gitignore en la raíz", !existsSync(join(ws.dir, ".gitignore")));
 
   console.log(`\n${pass} pasaron, ${fail} fallaron\n`);
   process.exit(fail > 0 ? 1 : 0);

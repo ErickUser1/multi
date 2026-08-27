@@ -228,9 +228,9 @@ export async function hayCommits(dir: string): Promise<boolean> {
  * La diferencia no es teórica: un agente que crea archivos nuevos (el caso
  * normal de un turno a medias) no se detectaba con `diff-index`.
  *
- * Sin ningún commit todavía se responde `false`: la sala recién nacida solo
- * tiene el `.gitignore` del motor sin trackear, y llamar a eso "trabajo sin
- * guardar" sería avisar de algo que nadie escribió.
+ * Sin ningún commit todavía se responde `false`: la sala recién nacida está
+ * vacía, y llamar a eso "trabajo sin guardar" sería avisar de algo que nadie
+ * escribió.
  */
 export async function tieneCambiosSinCommitear(dir: string): Promise<boolean> {
   if (!(await hayCommits(dir))) return false;

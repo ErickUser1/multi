@@ -96,8 +96,10 @@ export async function sincronizarSalas(): Promise<SalaVisitada[]> {
       body: JSON.stringify({ salas: locales }),
     });
     if (!res.ok) return locales;
-    const { salas } = (await res.json()) as { salas: { roomId: string; visitadaEn: number }[] };
-    return salas.map((s) => ({ id: s.roomId, visitadaEn: s.visitadaEn }));
+    const { salas } = (await res.json()) as {
+      salas: { roomId: string; visitadaEn: number; nombre?: string | null }[];
+    };
+    return salas.map((s) => ({ id: s.roomId, visitadaEn: s.visitadaEn, nombre: s.nombre ?? null }));
   } catch {
     // Sin server, lo de este navegador sigue sirviendo.
     return locales;

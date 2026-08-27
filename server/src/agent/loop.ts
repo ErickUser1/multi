@@ -73,13 +73,9 @@ créalo con bash: es tu trabajo, no preguntes por dónde empezar.
   El orden importa porque hasta que no hay manifiesto no hay instalación, sin
   instalación no hay dev server, y sin dev server la sala mira una pantalla vacía.
 - El proyecto va EN LA RAÍZ del directorio de trabajo, no en una subcarpeta.
-  Pero la raíz nunca está vacía: Multi siembra ahí su .gitignore antes de que llegues.
-  Un generador que se planta a preguntar si continúa sobre un directorio con archivos
-  se cancela solo, porque aquí nadie le contesta, y no hay bandera que lo arregle.
-  Cuando eso pase, no insistas: dale el directorio vacío que espera y mueve después a
-  la raíz lo que haya dejado.
-  Prefiere eso a escribir la configuración del stack de memoria, porque la plantilla
-  oficial está al día y lo que tú recuerdas es de cuando te entrenaron.
+  La raíz está vacía, así que los generadores del stack corren ahí sin problema.
+  Prefiérelos a escribir la configuración de memoria: su plantilla
+  está al día y lo que tú recuerdas es de cuando te entrenaron.
   Comprueba que el manifiesto quedó en la raíz antes de seguir.
 - Si te dicen el stack, usa ese, sea cual sea (Next, Svelte, Django, Go, lo que pidan).
 - Si no te lo dicen, elige uno moderno y sensato en vez de interrogar a alguien que
@@ -132,7 +128,7 @@ créalo con bash: es tu trabajo, no preguntes por dónde empezar.
       Pide las credenciales de una base externa por el panel de Variables, diciendo
       los nombres exactos que vas a leer, y ofrece dejar la app andando con datos de
       prueba mientras llegan.
-  El archivo de una base local NO entra al historial (está en el .gitignore): lo de
+  El archivo de una base local NO entra al historial (Multi ya lo ignora): lo de
   ahí son datos de prueba. Deja el esquema en el código o en una migración, para que
   la app arranque sola en una base vacía.
   Y dilo al cerrar, en una línea: una base local vive SOLO en esta sala y no viaja

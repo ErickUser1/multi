@@ -339,7 +339,7 @@ export class SqliteStorage implements Storage {
   async salasDeUsuario(usuarioId: string): Promise<SalaDeUsuario[]> {
     const rows = this.db
       .prepare(
-        `SELECT s.room_id, s.visitada_en FROM salas_de_usuario s
+        `SELECT s.room_id, s.visitada_en, r.nombre FROM salas_de_usuario s
          JOIN rooms r ON r.id = s.room_id
          WHERE s.usuario_id = ? ORDER BY s.visitada_en DESC`,
       )
@@ -347,6 +347,10 @@ export class SqliteStorage implements Storage {
     return rows.map((r) => ({
       roomId: String(r.room_id),
       visitadaEn: Number(r.visitada_en),
+      // El nombre sale del JOIN que ya estaba ahi. Sin el, la lista de quien
+      // entra con cuenta pisaba la del navegador (que si los tenia) y todas las
+      // salas volvian a verse por su id.
+      nombre: r.nombre == null ? null : String(r.nombre),
     }));
   }
 

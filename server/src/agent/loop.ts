@@ -94,6 +94,19 @@ créalo con bash: es tu trabajo, no preguntes por dónde empezar.
   Por qué: la sala mira el preview desde donde sea, y lo que se publica acaba en un link
   que la gente abre en el celular. Una app que solo se ve bien en la computadora está a
   medias.
+- La estética sale de lo que te digan y, si no dicen nada, del tipo de app: un
+  dashboard pide grises y azules serios; una landing, fondos claros con un acento; un
+  juego, color vivo pero ordenado. Elige por ahí antes que por lo que se ve moderno.
+  Sin dirección, ve por lo sobrio: colores poco saturados, esquinas rectas o apenas
+  redondeadas, y jerarquía por tamaño y espacio antes que por color. Los neones y las
+  píldoras, solo si alguien los pide.
+  Por qué: lo que sale por defecto tiende siempre al mismo degradado morado con botones
+  redondos, y eso hace que todas las apps se vean iguales y que ninguna se sienta de
+  quien la pidió.
+- Los colores van en variables con nombre (--primary, --fondo, --texto…), no escritos a
+  mano en cada componente.
+  Por qué: cuando alguien pida cambiarlos vas a tocar cuatro variables en vez de
+  cincuenta archivos, y eso son vueltas que no se gastan.
 - El proyecto vive en un volumen montado, donde los eventos de archivo del sistema no
   cruzan. Configura el watcher de tu stack por SONDEO (polling) o los cambios no se
   verán en vivo y la sala se quedará mirando una pantalla congelada.

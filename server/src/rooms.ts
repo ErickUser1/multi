@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { readFile, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { createWorkspace, type Workspace } from "./engine/workspace.js";
+import { createWorkspace, homeDir, type Workspace } from "./engine/workspace.js";
 import { startPreview, detectLaunch, type Preview } from "./engine/preview.js";
 import {
   isDockerAvailable,
@@ -476,6 +476,10 @@ export async function deleteRoom(id: string): Promise<boolean> {
   await rm(dir, { recursive: true, force: true }).catch(() => {});
   await rm(`${dir}.adjuntos`, { recursive: true, force: true }).catch(() => {});
   await rm(`${dir}.turns.json`, { force: true }).catch(() => {});
+  // El HOME del contenedor, con la caché de npm dentro. Antes vivía dentro del
+  // workspace y se iba con él; ahora hay que borrarlo a mano o cada sala que
+  // alguien borre deja cientos de megas en disco para siempre.
+  await rm(homeDir(dir), { recursive: true, force: true }).catch(() => {});
   await rm(`${dir}.bookmarks.json`, { force: true }).catch(() => {});
 
   await (await getStorage()).deleteRoom(id);

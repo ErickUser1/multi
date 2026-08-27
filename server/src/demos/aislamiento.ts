@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, writeFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { createWorkspace } from "../engine/workspace.js";
@@ -106,7 +106,30 @@ async function main() {
   const git = await dentro.exec("git --version", OPTS);
   check("tiene git", git.stdout.includes("git version"), git.stdout.trim());
 
-  console.log("\n6. Al cerrar la sala, el contenedor desaparece");
+  console.log("\n6. El HOME de la sala vive FUERA del proyecto, y se puede escribir");
+  {
+    // El check que importa: si `<workspace>.home` no existiera antes del
+    // `docker run`, Docker lo habría creado como root y esto fallaría con
+    // EACCES. Y ese fallo no se ve como error: el agente lo esquiva y entrega
+    // trabajo a medias (pasó, ver el comentario de container.ts).
+    const escribe = await dentro.exec("touch \"$HOME/prueba\" && echo ok", OPTS);
+    check("se puede escribir en el HOME", escribe.stdout.trim() === "ok", escribe.stderr.trim());
+
+    const donde = await dentro.exec("echo $HOME", OPTS);
+    check("y NO está dentro del proyecto", !donde.stdout.includes("/work"), donde.stdout.trim());
+
+    // Y por lo tanto el workspace queda vacío para el agente: solo `.git`, que
+    // los generadores de proyecto ignoran. Con cualquier otra cosa ahí dentro se
+    // niegan a correr y el agente pierde media docena de comandos rodeándolo.
+    const enLaRaiz = await readdir(ws.dir);
+    check(
+      "el proyecto arranca vacío",
+      enLaRaiz.filter((f) => f !== ".git" && f !== "saludo.txt").length === 0,
+      enLaRaiz.join(" "),
+    );
+  }
+
+  console.log("\n7. Al cerrar la sala, el contenedor desaparece");
   await stopContainer(roomId);
   const muerto = await dentro.exec("echo sigue vivo", OPTS).catch(() => null);
   check(

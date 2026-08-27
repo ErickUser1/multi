@@ -1,7 +1,9 @@
 import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { join } from "node:path";
+import { mkdir } from "node:fs/promises";
 import { KeyedMutex } from "./keyed-mutex.js";
+import { homeDir } from "./workspace.js";
 
 const execFileP = promisify(execFile);
 
@@ -24,6 +26,9 @@ const execFileP = promisify(execFile);
 
 export const IMAGE_TAG = "multi-room:latest";
 const CONTAINER_PREFIX = "multi-room-";
+
+/** Dónde se ve el HOME de la sala desde dentro del contenedor. */
+const HOME_INTERNO = "/home/multi";
 
 /**
  * Un arranque a la vez por sala. Crear un contenedor no es atómico (se consulta
@@ -105,6 +110,12 @@ export async function startContainer(
     // Un contenedor parado con la config vieja no sirve: se rehace.
     if (existing !== null) await removeContainer(name);
 
+    // El HOME, antes del `docker run` y desde Node: así queda con el dueño del
+    // proceso de Multi, que es el mismo usuario con el que corre el contenedor.
+    // Si se dejara para que lo cree Docker, saldría de root y npm no podría
+    // escribir en él.
+    await mkdir(homeDir(workspaceDir), { recursive: true });
+
     // Los argumentos van en UNA sola lista porque abajo hay un reintento: con
     // dos copias, cualquier arreglo que se hiciera aquí y no allá revivía en el
     // segundo intento. Ya pasó con `--user`.
@@ -114,6 +125,8 @@ export async function startContainer(
       "--name", name,
       // El proyecto vive en el host; adentro se ve como /work.
       "-v", `${workspaceDir}:/work`,
+      // Y su HOME al lado, montado aparte. Ver `homeDir` para el porqué.
+      "-v", `${homeDir(workspaceDir)}:${HOME_INTERNO}`,
       "--workdir", "/work",
       /**
        * El contenedor corre como el MISMO usuario que el server de Multi.
@@ -138,13 +151,18 @@ export async function startContainer(
        * instalar nada: sin esto, arreglar el dueño del workspace no alcanzaba y
        * `npm install` seguía muriendo, ahora por el caché.
        *
-       * Va dentro del propio workspace porque es lo único que con certeza le
-       * pertenece a quien corre Multi. Queda en `.multi-home`, con punto: los
-       * `.gitignore` que escriben los agentes suelen ignorar los ocultos, y de
-       * todos modos el del motor ya excluye lo pesado.
+       * Vive FUERA del workspace, en un hermano que Multi crea antes de arrancar
+       * esto (ver arriba). Estuvo dentro y había que sacarlo: mientras hubiera
+       * algo ahí, los generadores de proyecto se negaban a correr sobre una
+       * carpeta con archivos.
+       *
+       * Que Multi lo cree ANTES es lo que hace que funcione: un destino de
+       * montaje que no existe lo crea el demonio de Docker, y como root. El
+       * usuario del contenedor no podría escribir ahí y volveríamos al EACCES de
+       * arriba, que no se ve como error sino como trabajo a medias.
        */
-      "--env", "HOME=/work/.multi-home",
-      "--env", "npm_config_cache=/work/.multi-home/.npm",
+      "--env", `HOME=${HOME_INTERNO}`,
+      "--env", `npm_config_cache=${HOME_INTERNO}/.npm`,
       // Puerto 0 = que Docker elija uno libre del host. Evita colisiones entre salas.
       "-p", `0:${devPort}`,
       "--memory", MEMORY_LIMIT,

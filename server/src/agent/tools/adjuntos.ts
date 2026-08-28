@@ -21,7 +21,7 @@ export const usarAdjuntoTool: Tool = {
   spec: {
     name: "usar_adjunto",
     description:
-      "Copia al proyecto una imagen que alguien adjuntó en el chat, para poder usarla en la app. " +
+      "Copia al proyecto un archivo que alguien adjuntó en el chat, para poder usarla en la app. " +
       "El adjunto se identifica por el nombre con el que aparece en el mensaje. " +
       "Elige tú el destino según tu stack (public/ en Vite y Next, src/assets/ en Astro).",
     input_schema: {

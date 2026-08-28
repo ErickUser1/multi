@@ -1,8 +1,10 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import fastifyStatic from "@fastify/static";
+import multipart from "@fastify/multipart";
 import { Server as SocketServer } from "socket.io";
 import { readFile } from "node:fs/promises";
+import { pipeline } from "node:stream/promises";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 
@@ -57,8 +59,10 @@ import {
   leerAdjunto,
   rutaAdjunto,
   mediaTypeDe,
+  nombreDe,
   AdjuntoInvalido,
   MAX_POR_MENSAJE,
+  MAX_BYTES_ADJUNTO,
   type Adjunto,
 } from "./engine/adjuntos.js";
 import { MAX_AGENTS_PER_ROOM, resumenDeOtros } from "./engine/agents.js";
@@ -97,6 +101,24 @@ await loadEnv();
 
 const fastify = Fastify({ logger: { level: "warn" } });
 await fastify.register(cors, { origin: WEB_ORIGIN, credentials: true });
+
+/**
+ * Los archivos que la gente adjunta al chat, por HTTP y no por el socket.
+ *
+ * Multipart y no base64 dentro de un JSON: base64 crece un tercio, y un parser
+ * de JSON tiene que meter la cadena ENTERA en memoria antes de poder decodificar
+ * nada. Un PDF de 30MB serían 40MB de texto en la RAM del server antes de
+ * empezar a escribir en disco, y eso por cada persona subiendo a la vez.
+ *
+ * Con multipart llegan bytes crudos y se escriben según llegan.
+ *
+ * El límite corta el stream y marca `truncated`, así que un archivo enorme da un
+ * error claro. Por el socket se descartaba el mensaje entero sin avisar, que es
+ * el peor final posible: desde la sala parece que le diste a enviar y no pasó.
+ */
+await fastify.register(multipart, {
+  limits: { fileSize: MAX_BYTES_ADJUNTO, files: 1, fields: 4 },
+});
 
 const io = new SocketServer(fastify.server, {
   cors: { origin: WEB_ORIGIN, methods: ["GET", "POST"], credentials: true },
@@ -520,6 +542,56 @@ fastify.get<{ Params: { id: string; hash: string } }>(
   },
 );
 
+/**
+ * Subir un archivo para adjuntarlo al chat.
+ *
+ * Va aparte del mensaje y ANTES que él: el mensaje solo lleva el id. Así el
+ * socket no carga archivos y quien sube ve el progreso, que con un PDF de varios
+ * megas no es un lujo.
+ *
+ * Comprobar que la sala existe es toda la autorización que se puede pedir aquí,
+ * y es la misma que hacen exportar, las variables y publicar: en Multi se entra
+ * a una sala con el link y sin cuenta. Eso es la apuesta del producto, no un
+ * descuido.
+ */
+fastify.post<{ Params: { id: string } }>("/rooms/:id/adjuntos", async (req, reply) => {
+  const room = getRoom(req.params.id) ?? (await wakeRoom(req.params.id));
+  if (!room) return reply.code(404).send({ error: "sala no encontrada" });
+
+  const parte = await req.file();
+  if (!parte) return reply.code(400).send({ error: "no llegó ningún archivo" });
+
+  // A memoria y no a disco directo: hay que mirar la firma y el tamaño ANTES de
+  // dejar nada escrito, y el tope ya lo corta el plugin, así que lo que llega
+  // aquí cabe de sobra.
+  let bytes: Buffer;
+  try {
+    bytes = await parte.toBuffer();
+  } catch {
+    // `toBuffer` lanza cuando se pasó del límite. Es el caso que por el socket
+    // se descartaba en silencio.
+    const mb = Math.round(MAX_BYTES_ADJUNTO / 1024 / 1024);
+    return reply.code(413).send({ error: `el archivo pasa de ${mb}MB` });
+  }
+  if (parte.file.truncated) {
+    const mb = Math.round(MAX_BYTES_ADJUNTO / 1024 / 1024);
+    return reply.code(413).send({ error: `el archivo pasa de ${mb}MB` });
+  }
+
+  try {
+    const adjunto = await guardarAdjunto(room.workspace.dir, {
+      nombre: parte.filename,
+      mediaType: parte.mimetype,
+      bytes,
+    });
+    return adjunto;
+  } catch (err) {
+    return reply.code(400).send({
+      error: err instanceof AdjuntoInvalido ? err.message : "no se pudo guardar el archivo",
+    });
+  }
+});
+
 // Las imágenes que la gente pegó en el chat. El front las pinta con esta URL en
 // vez de meter el base64 en el DOM: así el navegador las cachea y el historial
 // de la sala no carga megas de data URIs al entrar.
@@ -776,6 +848,11 @@ function providerFor(socketId: string): ModelProvider | null {
  * etiqueta que se enseña ("OpenAI", "Ollama (local)"), y todos los de formato
  * OpenAI comparten cliente. El id de verdad solo lo tiene la credencial.
  */
+/** Un PDF va al modelo como documento; lo demás, como imagen. */
+function esPdf(a: { mediaType: string }): boolean {
+  return a.mediaType === "application/pdf";
+}
+
 function vePorSocket(socketId: string): boolean {
   if (TEST_MOCK) return true; // el mock acepta lo que le manden
   const cred = getCredential(socketId) ?? FALLBACK;
@@ -865,36 +942,48 @@ io.on("connection", (socket) => {
     }: {
       text: string;
       anchor?: SelectedElement | null;
-      adjuntos?: { nombre?: unknown; mediaType?: unknown; data?: unknown }[];
+      /**
+       * Los archivos YA SUBIDOS, solo con su identidad.
+       *
+       * El contenido viaja aparte, por `POST /rooms/:id/adjuntos`. Aquí llega el
+       * id y nada más: el socket no tiene por qué cargar megabytes, y si un
+       * mensaje se pasa de su tope socket.io lo descarta sin avisar a nadie.
+       */
+      adjuntos?: { id?: unknown; nombre?: unknown; mediaType?: unknown }[];
     }) => {
     const room = joinedRoom;
     const hayAdjuntos = Array.isArray(crudos) && crudos.length > 0;
-    // Mandar solo una imagen, sin escribir nada, es un mensaje legítimo.
+    // Mandar solo un archivo, sin escribir nada, es un mensaje legítimo.
     if (!room || (!text?.trim() && !hayAdjuntos)) return;
     const member = room.members.get(socket.id);
     if (!member) return;
 
-    // 0) Guardar las imágenes antes de nada: tienen que existir en disco para
-    //    poder verse en el chat y sobrevivir a un reinicio del server.
+    // 0) Comprobar que los archivos que dice traer existen de verdad en esta
+    //    sala. Se subieron antes por HTTP; aquí solo se confirma que el id es
+    //    real, para que nadie meta en el chat el adjunto de otra sala.
     let adjuntos: Adjunto[] = [];
     if (hayAdjuntos) {
       if (crudos!.length > MAX_POR_MENSAJE) {
         socket.emit("error:adjunto", {
-          message: `máximo ${MAX_POR_MENSAJE} imágenes por mensaje`,
+          message: `máximo ${MAX_POR_MENSAJE} archivos por mensaje`,
         });
         return;
       }
-      try {
-        adjuntos = await Promise.all(
-          crudos!.map((a) => guardarAdjunto(room.workspace.dir, a)),
-        );
-      } catch (err) {
-        // Solo a quien la mandó: que su imagen no sirva no es asunto de la sala.
-        socket.emit("error:adjunto", {
-          message:
-            err instanceof AdjuntoInvalido ? err.message : "no se pudo guardar la imagen",
+      for (const crudo of crudos!) {
+        const id = typeof crudo?.id === "string" ? crudo.id : "";
+        const mediaType = id ? mediaTypeDe(id) : null;
+        if (!id || !mediaType || !(await rutaAdjunto(room.workspace.dir, id))) {
+          socket.emit("error:adjunto", { message: "ese archivo ya no está" });
+          return;
+        }
+        adjuntos.push({
+          id,
+          nombre: typeof crudo.nombre === "string" ? crudo.nombre : nombreDe(id),
+          mediaType,
+          // El peso real no hace falta aquí: lo que se guarda del mensaje son
+          // el id, el nombre y el tipo.
+          bytes: 0,
         });
-        return;
       }
     }
 
@@ -932,28 +1021,41 @@ io.on("connection", (socket) => {
 
     // Los adjuntos se anuncian como texto SIEMPRE, vea o no vea el modelo. Con
     // el nombre le basta para pedir `usar_adjunto` y meterlo en la app; verlo
-    // solo hace falta para hablar de lo que hay dentro de la imagen.
+    // solo hace falta para hablar de lo que hay dentro.
     // El id va junto al nombre porque es lo que `usar_adjunto` resuelve sin
     // ambigüedad. Con solo el nombre, dos capturas llamadas "imagen.png" serían
     // indistinguibles y el agente copiaría la que no era.
     const withAdjuntos = (t: string) =>
       adjuntos.length
         ? `${adjuntos
-            .map((a) => `[imagen adjunta: ${a.nombre} — usar_adjunto("${a.id}", …)]`)
+            .map((a) => `[${esPdf(a) ? "documento" : "imagen"} adjunto: ${a.nombre} — usar_adjunto("${a.id}", …)]`)
             .join("\n")}\n\n${t}`
         : t;
 
-    // La imagen en sí solo viaja si el proveedor puede verla. Al que no ve
-    // mandársela es un 400 seguro, y el turno moriría por algo que no hacía
+    // El contenido solo viaja si el proveedor puede con él. Al que no ve
+    // mandárselo es un 400 seguro, y el turno moriría por algo que no hacía
     // falta para la tarea.
-    let imagenes: Extract<ContentBlock, { type: "image" }>[] = [];
+    //
+    // Los PDFs se agrupan con las imágenes porque comparten la misma condición
+    // (`ve`) y el mismo camino: van en el mensaje del turno que los trajo, no en
+    // el historial, que se reenvía completo y los cobraría cada vuelta.
+    let imagenes: Extract<ContentBlock, { type: "image" | "documento" }>[] = [];
     if (adjuntos.length && vePorSocket(socket.id)) {
       const leidas = await Promise.all(
-        adjuntos.map((a) => leerAdjunto(room.workspace.dir, a.id)),
+        adjuntos.map(async (a) => ({
+          leido: await leerAdjunto(room.workspace.dir, a.id),
+          esPdf: esPdf(a),
+        })),
       );
       imagenes = leidas
-        .filter((x): x is { data: string; mediaType: string } => x !== null)
-        .map((x) => ({ type: "image" as const, mediaType: x.mediaType, data: x.data }));
+        .filter((x): x is { leido: { data: string; mediaType: string }; esPdf: boolean } =>
+          x.leido !== null,
+        )
+        .map((x) => ({
+          type: x.esPdf ? ("documento" as const) : ("image" as const),
+          mediaType: x.leido.mediaType,
+          data: x.leido.data,
+        }));
     }
 
     const prepara = (t: string) => withAdjuntos(withAnchor(t));
@@ -1249,7 +1351,7 @@ const pendingByAgent = new Map<string, string[]>();
  * el agente termine, el turno resultante las lleva todas, que es lo que espera
  * quien las mandó.
  */
-const pendingImagenes = new Map<string, Extract<ContentBlock, { type: "image" }>[]>();
+const pendingImagenes = new Map<string, Extract<ContentBlock, { type: "image" | "documento" }>[]>();
 
 /**
  * Despacha trabajo a UN agente. El coordinador garantiza un solo drain activo
@@ -1262,7 +1364,7 @@ async function dispatchAgent(
   agentId: string,
   userText: string,
   provider: ModelProvider,
-  imagenes: Extract<ContentBlock, { type: "image" }>[] = [],
+  imagenes: Extract<ContentBlock, { type: "image" | "documento" }>[] = [],
 ): Promise<void> {
   const key = `${room.id}:${agentId}`;
   const queue = pendingByAgent.get(key) ?? [];
@@ -1314,7 +1416,7 @@ async function runAgentTurn(
   task: string,
   signal: AbortSignal,
   provider: ModelProvider,
-  imagenes: Extract<ContentBlock, { type: "image" }>[] = [],
+  imagenes: Extract<ContentBlock, { type: "image" | "documento" }>[] = [],
 ): Promise<void> {
   const agent = room.agents.get(agentId);
   if (!agent) return;

@@ -367,6 +367,12 @@ function toApiMessage(m: Message): Record<string, unknown> {
             type: "image",
             source: { type: "base64", media_type: block.mediaType, data: block.data },
           };
+        case "documento":
+          // La API lee el PDF entero: no hay que extraerle el texto aquí.
+          return {
+            type: "document",
+            source: { type: "base64", media_type: block.mediaType, data: block.data },
+          };
       }
     }),
   };

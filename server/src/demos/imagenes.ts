@@ -53,6 +53,14 @@ const PNG_1X1 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC";
 
 /**
+ * El PDF más chico que es un PDF de verdad: empieza con "%PDF-", que es lo que
+ * mira la validación de firma. Solo para esta demo, como el PNG de arriba.
+ */
+const PDF_MINIMO = Buffer.from(
+  "%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n",
+).toString("base64");
+
+/**
  * Servidor que acepta cualquier cosa y guarda el cuerpo que le mandaron.
  * Responde el SSE mínimo de cada formato para que el proveedor no truene.
  */
@@ -272,26 +280,100 @@ async function main(): Promise<void> {
       }
     };
 
-    await rechaza("un PDF disfrazado de imagen", {
+    // El caso que motivó validar el contenido: el mediaType lo declara el
+    // navegador y se puede cambiar. Sin mirar los primeros bytes, un ejecutable
+    // renombrado a .pdf se guarda, se le sirve al resto de la sala, y alguien lo
+    // abre confiando en la extensión.
+    await rechaza("algo que dice ser PDF pero no lo es", {
       nombre: "x.pdf",
       mediaType: "application/pdf",
       data: PNG_1X1,
+    });
+    await rechaza("una imagen que no es lo que dice", {
+      nombre: "x.png",
+      mediaType: "image/png",
+      data: PDF_MINIMO,
     });
     await rechaza("un SVG (puede traer scripts)", {
       nombre: "x.svg",
       mediaType: "image/svg+xml",
       data: PNG_1X1,
     });
-    await rechaza("una imagen sin datos", {
+    await rechaza("un archivo sin datos", {
       nombre: "x.png",
       mediaType: "image/png",
       data: "",
     });
-    await rechaza("algo que pesa más de 2MB", {
+    await rechaza("una imagen de más de 2MB", {
       nombre: "grande.png",
       mediaType: "image/png",
-      data: Buffer.alloc(3 * 1024 * 1024).toString("base64"),
+      // Con la firma correcta al principio: lo que tiene que rechazar es el
+      // tamaño, no el contenido.
+      data: Buffer.concat([
+        Buffer.from(PNG_1X1, "base64"),
+        Buffer.alloc(3 * 1024 * 1024),
+      ]).toString("base64"),
     });
+  }
+
+  console.log("\nY los PDF, que el modelo lee solos:");
+  {
+    const pdf = await guardarAdjunto(ws, {
+      nombre: "apuntes.pdf",
+      mediaType: "application/pdf",
+      data: PDF_MINIMO,
+    });
+    check("se acepta un PDF", pdf.mediaType === "application/pdf", pdf.mediaType);
+    check("con su extensión en el id", pdf.id.endsWith(".pdf"), pdf.id);
+    check("y se puede leer de vuelta", (await leerAdjunto(ws, pdf.id))?.data === PDF_MINIMO);
+
+    // Un PDF cabe hasta 32MB, mucho más que una imagen: no se puede encoger
+    // antes de mandarlo, y la API de Anthropic acepta ese tope.
+    const grande = Buffer.concat([
+      Buffer.from(PDF_MINIMO, "base64"),
+      Buffer.alloc(5 * 1024 * 1024),
+    ]).toString("base64");
+    const cabe = await guardarAdjunto(ws, {
+      nombre: "tesis.pdf",
+      mediaType: "application/pdf",
+      data: grande,
+    }).then(
+      () => true,
+      () => false,
+    );
+    check("uno de 5MB cabe (una imagen de ese tamaño no)", cabe);
+  }
+
+  console.log("\nCómo llega un PDF al modelo:");
+  {
+    // La diferencia que importa: Anthropic quiere `document`, no `image`. Con un
+    // bloque de imagen el PDF da 400 y el turno muere por algo evitable.
+    const espia = await servidorEspia("anthropic");
+    const provider = new AnthropicProvider("sk-ant-falsa");
+    const original = globalThis.fetch;
+    globalThis.fetch = ((url: any, init: any) => original(espia.url, init)) as typeof fetch;
+
+    await provider.stream({
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "documento", mediaType: "application/pdf", data: PDF_MINIMO },
+            { type: "text", text: "resume esto" },
+          ],
+        },
+      ],
+      maxTokens: 64,
+    });
+    globalThis.fetch = original;
+
+    const bloques = espia.ultimoCuerpo()?.messages?.[0]?.content ?? [];
+    const doc = bloques.find((b: any) => b.type === "document");
+    check("manda un bloque type:document, no image", !!doc, JSON.stringify(bloques[0]?.type));
+    check("con el tipo declarado", doc?.source?.media_type === "application/pdf");
+    check("en base64", doc?.source?.type === "base64");
+    check("y el texto va después", bloques[1]?.type === "text");
+    espia.cerrar();
   }
 
   // ── 6. La tool que la mete al proyecto ────────────────────────────────────

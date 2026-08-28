@@ -1,7 +1,7 @@
 import { mkdir, writeFile, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { TIPOS } from "./adjuntos.js";
+import { TIPOS_DE_IMAGEN } from "./adjuntos.js";
 import { WORKSPACES_ROOT } from "./workspace.js";
 
 /**
@@ -43,7 +43,7 @@ export async function guardarAvatar(entrada: {
   data?: unknown;
 }): Promise<string> {
   const mediaType = typeof entrada.mediaType === "string" ? entrada.mediaType : "";
-  const ext = TIPOS[mediaType];
+  const ext = TIPOS_DE_IMAGEN[mediaType];
   if (!ext) {
     throw new AvatarInvalido(
       `formato no soportado: ${mediaType || "(ninguno)"}. Solo PNG, JPEG, WebP y GIF.`,
@@ -86,7 +86,7 @@ export async function rutaAvatar(id: string): Promise<string | null> {
 
 /** El tipo de una foto, deducido de su extensión. */
 export function mediaTypeDeAvatar(id: string): string | null {
-  for (const [tipo, ext] of Object.entries(TIPOS)) {
+  for (const [tipo, ext] of Object.entries(TIPOS_DE_IMAGEN)) {
     if (id.endsWith(ext)) return tipo;
   }
   return null;

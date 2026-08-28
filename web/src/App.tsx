@@ -33,7 +33,9 @@ import {
   type Usuario,
 } from "./cuenta.js";
 import {
-  prepararImagen,
+  prepararParaSubir,
+  subirAdjunto,
+  esPdf,
   imagenesDe,
   esImagenAceptada,
   ACEPTADOS,
@@ -588,34 +590,70 @@ function Sala({
    * factura aparezca después.
    */
   const agregarImagenes = async (files: File[]) => {
-    if (files.length === 0) return;
+    if (files.length === 0 || !roomId) return;
     setErrorAdjunto(null);
     const sitio = MAX_ADJUNTOS - pendientes.length;
     if (sitio <= 0) {
       setErrorAdjunto(t.maxImagenes(MAX_ADJUNTOS));
       return;
     }
-    try {
-      // Con lambda y no `.map(prepararImagen)`: map pasa el índice como segundo
-      // argumento, que ahora son las opciones, y la segunda imagen saldría de 1px.
-      const listas = await Promise.all(files.slice(0, sitio).map((f) => prepararImagen(f)));
-      setPendientes((prev) => [...prev, ...listas]);
-      if (files.length > sitio) setErrorAdjunto(t.maxImagenes(MAX_ADJUNTOS));
-    } catch (err) {
-      setErrorAdjunto(err instanceof Error ? err.message : t.imagenNoSePudo);
+    if (files.length > sitio) setErrorAdjunto(t.maxImagenes(MAX_ADJUNTOS));
+
+    // Cada archivo entra a la lista ANTES de subir, con su progreso, y se sube
+    // en paralelo. Lo que impide mandar un id que todavía no existe es que
+    // `send` mira si queda alguno con `subiendo`.
+    for (const file of files.slice(0, sitio)) {
+      const clave = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const esImagen = file.type.startsWith("image/");
+      setPendientes((prev) => [
+        ...prev,
+        {
+          clave,
+          nombre: file.name || (esImagen ? "imagen" : "archivo"),
+          mediaType: file.type,
+          id: null,
+          subiendo: 0,
+          previewUrl: esImagen ? URL.createObjectURL(file) : undefined,
+        },
+      ]);
+
+      void (async () => {
+        try {
+          const listo = await prepararParaSubir(file);
+          const subido = await subirAdjunto(SERVER_URL, roomId, listo, (pct) => {
+            setPendientes((prev) =>
+              prev.map((p) => (p.clave === clave ? { ...p, subiendo: pct } : p)),
+            );
+          });
+          setPendientes((prev) =>
+            prev.map((p) =>
+              p.clave === clave ? { ...p, id: subido.id, subiendo: null } : p,
+            ),
+          );
+        } catch (err) {
+          // Fuera de la lista: un adjunto que no subió no puede salir en el
+          // mensaje, y dejarlo ahí bloquearía el botón de enviar para siempre.
+          setPendientes((prev) => prev.filter((p) => p.clave !== clave));
+          setErrorAdjunto(err instanceof Error ? err.message : t.imagenNoSePudo);
+        }
+      })();
     }
   };
 
+  /** Alguno sigue subiendo: mandar ahora dejaría el mensaje sin su archivo. */
+  const subiendoAlgo = pendientes.some((p) => p.subiendo !== null);
+
   const send = () => {
     const text = draft.trim();
-    // Mandar solo una imagen, sin escribir nada, es un mensaje legítimo.
+    // Mandar solo un archivo, sin escribir nada, es un mensaje legítimo.
     if (!text && pendientes.length === 0) return;
+    if (subiendoAlgo) return;
     // Anclar MI selección local al mensaje (cuidado 2/3/4).
     socketRef.current?.emit("chat", {
       text,
       anchor: mySelection,
       adjuntos: pendientes.length
-        ? pendientes.map((p) => ({ nombre: p.nombre, mediaType: p.mediaType, data: p.data }))
+        ? pendientes.map((p) => ({ id: p.id, nombre: p.nombre, mediaType: p.mediaType }))
         : undefined,
     });
     setDraft("");
@@ -924,12 +962,26 @@ function Sala({
           )}
           {pendientes.length > 0 && (
             <div className="adjuntos-pendientes">
-              {pendientes.map((p, i) => (
-                <div className="adjunto-chip" key={i} title={p.nombre}>
-                  <img src={p.previewUrl} alt={p.nombre} />
+              {pendientes.map((p) => (
+                <div
+                  className={`adjunto-chip ${p.subiendo !== null ? "subiendo" : ""}`}
+                  key={p.clave}
+                  title={p.nombre}
+                >
+                  {p.previewUrl ? (
+                    <img src={p.previewUrl} alt={p.nombre} />
+                  ) : (
+                    // Un PDF no tiene miniatura: se enseña su nombre.
+                    <span className="adjunto-doc">{p.nombre}</span>
+                  )}
+                  {p.subiendo !== null && (
+                    <span className="adjunto-progreso" style={{ width: `${p.subiendo}%` }} />
+                  )}
                   <span
                     className="adjunto-x"
-                    onClick={() => setPendientes((prev) => prev.filter((_, j) => j !== i))}
+                    onClick={() =>
+                      setPendientes((prev) => prev.filter((q) => q.clave !== p.clave))
+                    }
                     title={t.quitarImagen}
                   >
                     ×
@@ -989,7 +1041,9 @@ function Sala({
               // Sin sala no hay a dónde mandar nada: se apaga en vez de dejar
               // escribir un mensaje que se perdería al darle enter.
               disabled={!roomId}
-              placeholder={roomId ? t.hablaConLaSala : t.eligeOCrea}
+              placeholder={
+                subiendoAlgo ? t.subiendoArchivo : roomId ? t.hablaConLaSala : t.eligeOCrea
+              }
               value={draft}
               onChange={(e) => onDraftChange(e.target.value)}
               onPaste={(e) => {
@@ -1329,8 +1383,15 @@ function ChatRow({
           href={`${SERVER_URL}/rooms/${roomId}/adjuntos/${a.id}`}
           target="_blank"
           rel="noreferrer"
+          className={esPdf(a) ? "adjunto-doc-link" : undefined}
         >
-          <img src={`${SERVER_URL}/rooms/${roomId}/adjuntos/${a.id}`} alt={a.nombre} />
+          {/* Un PDF no se puede mirar en miniatura: se enseña su nombre y se
+              abre en el visor del navegador al darle click. */}
+          {esPdf(a) ? (
+            a.nombre
+          ) : (
+            <img src={`${SERVER_URL}/rooms/${roomId}/adjuntos/${a.id}`} alt={a.nombre} />
+          )}
         </a>
       ))}
     </div>

@@ -2261,3 +2261,47 @@ img.av {
 .key-panel .perfil-salir {
   margin-top: 12px;
 }
+
+/* Un PDF no tiene miniatura: en su lugar va el nombre, recortado. */
+.adjunto-doc {
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  max-width: 120px;
+  font-size: 11px;
+  line-height: 1.2;
+  color: var(--dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* La barra de progreso mientras sube, pegada abajo del chip. */
+.adjunto-chip {
+  position: relative;
+}
+.adjunto-chip.subiendo {
+  opacity: 0.6;
+}
+.adjunto-progreso {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  background: var(--ambar);
+  transition: width 0.15s linear;
+}
+
+/* El PDF ya mandado, en el mensaje del chat. */
+.adjunto-doc-link {
+  display: inline-block;
+  padding: 6px 10px;
+  border: 1px solid var(--linea);
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--lavanda);
+  text-decoration: none;
+}
+.adjunto-doc-link:hover {
+  border-color: var(--lavanda);
+}

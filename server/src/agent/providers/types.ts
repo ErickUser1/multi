@@ -26,7 +26,19 @@ export type ContentBlock =
    * oficiales dicen lo mismo: el modelo responde mejor viendo la imagen primero
    * y la pregunta después.
    */
-  | { type: "image"; mediaType: string; data: string };
+  | { type: "image"; mediaType: string; data: string }
+  /**
+   * Un documento (hoy PDF) que alguien adjuntó al chat.
+   *
+   * Va aparte de `image` porque la API lo recibe distinto: Anthropic quiere un
+   * bloque `document`, no uno de imagen, y lo lee entero del lado suyo — no hay
+   * que extraerle el texto aquí.
+   *
+   * Los proveedores de formato OpenAI no lo aceptan igual, así que ahí se
+   * descarta. El agente igual ve el nombre en el texto del mensaje y puede
+   * meterlo al proyecto con `usar_adjunto`.
+   */
+  | { type: "documento"; mediaType: string; data: string };
 
 export interface Message {
   role: Role;

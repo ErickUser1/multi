@@ -31,25 +31,83 @@ export interface Adjunto {
 }
 
 /**
- * Los formatos que los modelos con visión aceptan. Las dos documentaciones
- * oficiales coinciden en la lista (agosto de 2026).
+ * Lo que se puede adjuntar, con su extensión y su firma.
+ *
+ * La FIRMA son los primeros bytes del archivo, y se comprueba en vez de creerle
+ * al tipo que declara quien sube: eso lo pone el navegador y se puede cambiar.
+ * Sin esto, un ejecutable renombrado a .pdf se guarda, se le sirve al resto de
+ * la sala, y alguien lo abre confiando en la extensión.
+ *
+ * Los formatos de imagen son los que los modelos con visión aceptan (las dos
+ * documentaciones oficiales coinciden). El PDF lo lee el modelo directo, sin
+ * que nadie tenga que extraerle el texto.
  */
-export const TIPOS: Record<string, string> = {
-  "image/png": ".png",
-  "image/jpeg": ".jpg",
-  "image/webp": ".webp",
-  "image/gif": ".gif",
-};
+interface Formato {
+  ext: string;
+  /** Los primeros bytes que tiene que traer. En hex para poder leerlos. */
+  firma: string;
+  /** Techo por archivo, ya decodificado. */
+  maxBytes: number;
+}
 
 /**
- * Techo por imagen, ya decodificada.
+ * Techo de las imágenes.
  *
  * Anthropic acepta hasta 10MB, pero eso no es la restricción que importa: una
  * imagen grande cuesta más tokens y aquí paga cada quien con su propia key. El
  * navegador ya las reduce a 1568px antes de mandarlas (ver web/src/imagenes.ts),
  * así que 2MB es techo de seguridad, no el caso normal.
  */
-const MAX_BYTES = 2 * 1024 * 1024;
+const MAX_IMAGEN = 2 * 1024 * 1024;
+
+/**
+ * Techo de los PDFs: el mismo que acepta la API de Anthropic.
+ *
+ * Más alto que el de las imágenes porque un PDF no se puede reducir antes de
+ * mandarlo. Pero ojo con lo que de verdad cuesta: el precio lo pone el CONTEXTO,
+ * no el peso. Un PDF de texto denso de 5MB gasta más tokens que uno de 20MB
+ * lleno de páginas escaneadas.
+ */
+const MAX_PDF = 32 * 1024 * 1024;
+
+const FORMATOS: Record<string, Formato> = {
+  "image/png": { ext: ".png", firma: "89504e47", maxBytes: MAX_IMAGEN },
+  "image/jpeg": { ext: ".jpg", firma: "ffd8ff", maxBytes: MAX_IMAGEN },
+  "image/webp": { ext: ".webp", firma: "52494646", maxBytes: MAX_IMAGEN },
+  "image/gif": { ext: ".gif", firma: "47494638", maxBytes: MAX_IMAGEN },
+  "application/pdf": { ext: ".pdf", firma: "25504446", maxBytes: MAX_PDF },
+};
+
+/** El tope más alto de todos: lo que el transporte tiene que dejar pasar. */
+export const MAX_BYTES_ADJUNTO = MAX_PDF;
+
+/** Solo las extensiones, que es lo que el resto del módulo necesita. */
+export const TIPOS: Record<string, string> = Object.fromEntries(
+  Object.entries(FORMATOS).map(([tipo, f]) => [tipo, f.ext]),
+);
+
+/**
+ * Las imágenes nada más, sin el PDF.
+ *
+ * Para donde una imagen es una imagen y punto: una foto de perfil se pinta en un
+ * círculo de 34 píxeles, y un PDF ahí no significa nada.
+ */
+export const TIPOS_DE_IMAGEN: Record<string, string> = Object.fromEntries(
+  Object.entries(FORMATOS)
+    .filter(([tipo]) => tipo.startsWith("image/"))
+    .map(([tipo, f]) => [tipo, f.ext]),
+);
+
+/**
+ * ¿El archivo es de verdad lo que dice ser?
+ *
+ * Se mira el principio del contenido, no el nombre ni lo que declaró el
+ * navegador. Un WebP empieza con "RIFF" y trae "WEBP" en el byte 8, pero con los
+ * cuatro primeros basta para lo que hace falta aquí.
+ */
+function firmaCuadra(buf: Buffer, formato: Formato): boolean {
+  return buf.subarray(0, formato.firma.length / 2).toString("hex") === formato.firma;
+}
 
 /** Cuántas caben en un mensaje. Más que esto y el turno se vuelve caro sin avisar. */
 export const MAX_POR_MENSAJE = 4;
@@ -72,14 +130,14 @@ function basenameOf(p: string): string {
  * y este nombre es solo para enseñarlo en el chat.
  */
 function nombreVisible(nombre: unknown): string {
-  if (typeof nombre !== "string" || !nombre.trim()) return "imagen";
+  if (typeof nombre !== "string" || !nombre.trim()) return "archivo";
   return nombre.replace(/[/\\]/g, "_").slice(0, 80);
 }
 
 export class AdjuntoInvalido extends Error {}
 
 /**
- * Guarda una imagen del chat y devuelve con qué referirse a ella.
+ * Guarda un archivo del chat y devuelve con qué referirse a él.
  *
  * El id NO deriva del nombre que mandó la persona. Se genera aquí, y lleva solo
  * la extensión que corresponde al mediaType declarado. Así ningún nombre de
@@ -88,34 +146,51 @@ export class AdjuntoInvalido extends Error {}
  */
 export async function guardarAdjunto(
   workspaceDir: string,
-  entrada: { nombre?: unknown; mediaType?: unknown; data?: unknown },
+  entrada: { nombre?: unknown; mediaType?: unknown; data?: unknown; bytes?: Buffer },
 ): Promise<Adjunto> {
   const mediaType = typeof entrada.mediaType === "string" ? entrada.mediaType : "";
-  const ext = TIPOS[mediaType];
-  if (!ext) {
+  const formato = FORMATOS[mediaType];
+  if (!formato) {
     throw new AdjuntoInvalido(
-      `formato no soportado: ${mediaType || "(ninguno)"}. Solo PNG, JPEG, WebP y GIF.`,
+      `formato no soportado: ${mediaType || "(ninguno)"}. Solo PNG, JPEG, WebP, GIF y PDF.`,
     );
   }
 
-  if (typeof entrada.data !== "string" || !entrada.data) {
-    throw new AdjuntoInvalido("la imagen llegó vacía");
+  // Los bytes pueden venir ya leídos (subida por HTTP, que es el camino normal)
+  // o en base64 (lo que queda del camino viejo y lo que usan las demos).
+  let buf: Buffer;
+  if (entrada.bytes) {
+    buf = entrada.bytes;
+  } else {
+    if (typeof entrada.data !== "string" || !entrada.data) {
+      throw new AdjuntoInvalido("el archivo llegó vacío");
+    }
+    buf = Buffer.from(entrada.data, "base64");
   }
 
-  const buf = Buffer.from(entrada.data, "base64");
   if (buf.length === 0) {
-    throw new AdjuntoInvalido("la imagen no es base64 válido");
+    throw new AdjuntoInvalido("el archivo llegó vacío");
   }
-  if (buf.length > MAX_BYTES) {
+  if (buf.length > formato.maxBytes) {
     const mb = (buf.length / 1024 / 1024).toFixed(1);
-    throw new AdjuntoInvalido(`la imagen pesa ${mb}MB y el tope son 2MB`);
+    const tope = Math.round(formato.maxBytes / 1024 / 1024);
+    throw new AdjuntoInvalido(`el archivo pesa ${mb}MB y el tope son ${tope}MB`);
+  }
+
+  // Que el contenido sea lo que dice ser. El mediaType lo pone el navegador y se
+  // puede cambiar: sin esta comprobación, un ejecutable renombrado a .pdf se
+  // guarda, se le sirve al resto de la sala, y alguien lo abre confiado.
+  if (!firmaCuadra(buf, formato)) {
+    throw new AdjuntoInvalido(
+      `el archivo dice ser ${mediaType} pero su contenido no lo es`,
+    );
   }
 
   // El nombre visible va DENTRO del id, después del uuid, para poder buscar por
   // él sin llevar un índice aparte. El uuid delante es lo que garantiza que dos
   // capturas llamadas igual no se pisen, y que el nombre de fuera no decida nada.
   const nombre = nombreVisible(entrada.nombre);
-  const id = `${randomUUID()}__${sanearParaDisco(nombre, ext)}`;
+  const id = `${randomUUID()}__${sanearParaDisco(nombre, formato.ext)}`;
   const dir = adjuntosDir(workspaceDir);
   await mkdir(dir, { recursive: true });
   await writeFile(join(dir, id), buf);
@@ -134,7 +209,7 @@ function sanearParaDisco(nombre: string, ext: string): string {
     .replace(/[^a-zA-Z0-9._-]/g, "-")
     .slice(0, 40)
     .replace(/^[-.]+/, "");
-  return `${base || "imagen"}${ext}`;
+  return `${base || "archivo"}${ext}`;
 }
 
 /** El nombre con el que se subió, sacado del id. Para buscar por él. */

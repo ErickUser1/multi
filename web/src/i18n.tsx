@@ -41,7 +41,7 @@ const TEXTOS = {
     salaVacia: "La sala está vacía.",
     pideAlgo: "@agente crea un Next con Tailwind",
     hablaConLaSala: "habla con la sala — o escribe @agente para pedir algo",
-    adjuntarImagen: "Adjuntar una imagen",
+    adjuntarImagen: "Adjuntar un archivo",
     agentesInactivos: (n: number) => `${n} agente${n === 1 ? "" : "s"} inactivo${n === 1 ? "" : "s"}`,
     seInterrumpio: (n: number) =>
       n === 1 ? "Un agente se interrumpió" : `${n} agentes se interrumpieron`,
@@ -110,8 +110,9 @@ const TEXTOS = {
 
     // Imágenes
     quitarImagen: "quitar",
-    maxImagenes: (n: number) => `caben ${n} imágenes por mensaje`,
-    imagenNoSePudo: "no se pudo preparar la imagen",
+    subiendoArchivo: "subiendo…",
+    maxImagenes: (n: number) => `caben ${n} archivos por mensaje`,
+    imagenNoSePudo: "no se pudo preparar el archivo",
 
     // Pestañas
     /** Pestaña del chat: solo se ve en pantallas chicas. */
@@ -238,7 +239,7 @@ const TEXTOS = {
     salaVacia: "The room is empty.",
     pideAlgo: "@agente build a Next app with Tailwind",
     hablaConLaSala: "talk to the room — or type @agente to ask for something",
-    adjuntarImagen: "Attach an image",
+    adjuntarImagen: "Attach a file",
     agentesInactivos: (n: number) => `${n} idle agent${n === 1 ? "" : "s"}`,
     seInterrumpio: (n: number) =>
       n === 1 ? "An agent was interrupted" : `${n} agents were interrupted`,
@@ -306,8 +307,9 @@ const TEXTOS = {
 
     // Imágenes
     quitarImagen: "remove",
-    maxImagenes: (n: number) => `${n} images per message max`,
-    imagenNoSePudo: "couldn't prepare the image",
+    subiendoArchivo: "uploading…",
+    maxImagenes: (n: number) => `${n} files per message max`,
+    imagenNoSePudo: "couldn’t prepare the file",
 
     // Pestañas
     elChat: "Chat",

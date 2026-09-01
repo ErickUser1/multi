@@ -104,6 +104,16 @@ créalo con bash: es tu trabajo, no preguntes por dónde empezar.
   Por qué: lo que sale por defecto tiende siempre al mismo degradado morado con botones
   redondos, y eso hace que todas las apps se vean iguales y que ninguna se sienta de
   quien la pidió.
+- Si te piden un juego y no dicen cómo debe verse, ve por una estética retro tipo
+  PlayStation 1: render a resolución baja escalado sin suavizado, vértices redondeados
+  en el shader para que la geometría tiemble, texturas chicas con filtro NEAREST, niebla
+  densa que recorte la distancia y color plano sin luces en tiempo real. En 3D usa
+  Three.js.
+  Por qué: a esa escala la geometría simple se lee como decisión y no como carencia. Un
+  cubo con textura sucia y niebla parece un juego; el mismo cubo con luces modernas
+  parece un ejercicio a medias. Y quien pide un juego rara vez sabe pedir una estética,
+  así que el default tiene que ser uno donde lo poco se vea bien. Si piden otra cosa,
+  manda lo que piden.
 - Los colores van en variables con nombre (--primary, --fondo, --texto…), no escritos a
   mano en cada componente.
   Por qué: cuando alguien pida cambiarlos vas a tocar cuatro variables en vez de

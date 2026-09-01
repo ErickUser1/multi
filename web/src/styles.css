@@ -721,7 +721,13 @@ body {
   background: var(--fondo2);
   border: 1px solid var(--linea);
   border-radius: 6px;
-  overflow: hidden;
+  /* Tope y scroll porque la lista crece con la sala: son los agentes MÁS la
+     gente conectada, y el menú sale hacia ARRIBA desde la caja de escribir. Sin
+     tope se salía por encima de la pantalla y las primeras opciones quedaban
+     fuera de alcance; con `overflow: hidden` ni siquiera se podía bajar a
+     ellas. */
+  max-height: 40vh;
+  overflow-y: auto;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
   z-index: 30;
 }

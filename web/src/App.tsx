@@ -640,8 +640,13 @@ function Sala({
     }
   };
 
-  /** Alguno sigue subiendo: mandar ahora dejaría el mensaje sin su archivo. */
-  const subiendoAlgo = pendientes.some((p) => p.subiendo !== null);
+  /**
+   * Alguno todavía no tiene id: mandar ahora dejaría el mensaje sin su archivo.
+   *
+   * Se mira el ID y no el progreso porque el id es la condición de verdad: es lo
+   * único que el server puede resolver. El progreso es para enseñarlo.
+   */
+  const subiendoAlgo = pendientes.some((p) => !p.id);
 
   const send = () => {
     const text = draft.trim();
@@ -652,8 +657,12 @@ function Sala({
     socketRef.current?.emit("chat", {
       text,
       anchor: mySelection,
+      // Solo los que ya subieron. `send` no llega aquí si falta alguno, pero
+      // filtrar es más barato que confiar en que dos estados van a la par.
       adjuntos: pendientes.length
-        ? pendientes.map((p) => ({ id: p.id, nombre: p.nombre, mediaType: p.mediaType }))
+        ? pendientes
+            .filter((p) => p.id)
+            .map((p) => ({ id: p.id, nombre: p.nombre, mediaType: p.mediaType }))
         : undefined,
     });
     setDraft("");

@@ -30,7 +30,10 @@ export interface Agent {
 }
 
 /** Colores distintos a los de los humanos (ámbar/naranjas = agentes). */
-const AGENT_COLORS = ["#ffc37a", "#e8a05f", "#d9b878", "#f0b27a"];
+// Los cuatro de antes eran naranjas casi identicos y uno repetia el color de
+// una persona: con dos agentes en la sala no se sabia cual hablaba. Ahora son
+// una familia calida propia, distinta de la de la gente.
+const AGENT_COLORS = ["#ff4d1c", "#ff8c42", "#e0574f", "#ffb347"];
 
 export const MAX_AGENTS_PER_ROOM = 3;
 

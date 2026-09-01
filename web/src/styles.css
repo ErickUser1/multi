@@ -1,15 +1,26 @@
 /* Multi — la sala. Paleta crepúsculo (Gengar), chat estilo Discord.
    Traducido de app/sala.html. */
 :root {
-  --fondo: #33365a;
-  --fondo2: #2b2e4c;
-  --panel: #3b3e66;
-  --texto: #eef0fb;
-  --dim: #a9abd0;
-  --linea: #4a4d78;
-  --lavanda: #b9a8e3;
-  --ambar: #ffc37a;
-  --rosa: #c393c9;
+  /* Un solo negro para toda la sala. Tres tonos de gris oscuro compitiendo se
+     leen como suciedad, no como jerarquia: sobre negro las diferencias de
+     luminosidad chicas no se perciben como planos sino como manchas. La
+     separacion entre zonas la hacen las lineas y el espacio, no el fondo. */
+  --fondo: #000000;
+  --fondo2: #000000;
+  --panel: #000000;
+  --texto: #f5f5f5;
+  --dim: #8a8a8a;
+  --linea: #333333;
+
+  /* Un solo acento, y caro: entre mas aparece, menos dice. Se reserva para lo
+     que exige atencion (menciones, publicar, errores). */
+  --acento: #ff4d1c;
+
+  /* Los tres de antes siguen nombrados porque medio CSS los usa. Ahora apuntan
+     a la escala de grises y al acento, asi el cambio no deja huecos. */
+  --lavanda: #f5f5f5;
+  --ambar: var(--acento);
+  --rosa: #8a8a8a;
 }
 
 * {
@@ -21,7 +32,7 @@
 body {
   font-family: "Segoe UI", system-ui, sans-serif;
   color: var(--texto);
-  background: linear-gradient(180deg, var(--fondo) 0%, var(--fondo2) 100%);
+  background: var(--fondo);
   /* Las dos alturas a propósito, y en este orden: `dvh` descuenta la barra del
      navegador del celular, que `vh` ignora. Sin ella la página queda más alta
      que la pantalla y lo de abajo se corta, que en la Sala es justo donde está
@@ -29,19 +40,6 @@ body {
   height: 100vh;
   height: 100dvh;
   overflow: hidden;
-}
-
-/* El grano del hero — el mismo de la landing, más sutil para no cansar la vista
-   en una pantalla donde se pasan horas. Va sobre todo pero no intercepta clicks
-   (el preview y los cursores tienen que seguir respondiendo). */
-body::after {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  opacity: 0.035;
-  z-index: 90;
-  background-image: repeating-conic-gradient(#fff 0 0.0001%, transparent 0 0.0002%);
 }
 
 #root {
@@ -62,7 +60,7 @@ body::after {
 .card {
   text-align: center;
   padding: 48px 56px;
-  background: rgba(43, 46, 76, 0.5);
+  background: #000000;
   border: 1px solid var(--linea);
   border-radius: 10px;
   max-width: 420px;
@@ -145,7 +143,7 @@ body::after {
   display: flex;
   flex-direction: column;
   border-right: 1px solid var(--linea);
-  background: rgba(43, 46, 76, 0.5);
+  background: #000000;
   transition: width 0.22s ease, opacity 0.16s ease;
 }
 
@@ -497,10 +495,10 @@ body::after {
 }
 /* Atorado: esto SÍ pide atención. */
 .agent-stuck .agent-dot {
-  background: #d95d63 !important;
+  background: var(--acento) !important;
 }
 .agent-stuck .agent-status {
-  color: #d95d63;
+  color: var(--acento);
 }
 .agent-idle {
   opacity: 0.5;
@@ -609,7 +607,7 @@ body::after {
 }
 .hist-file:hover {
   color: var(--texto);
-  background: rgba(185, 168, 227, 0.15);
+  background: rgba(255, 255, 255, 0.08);
 }
 .hist-acciones {
   display: flex;
@@ -633,7 +631,7 @@ body::after {
 .hist-btn.primario {
   background: var(--ambar);
   border-color: var(--ambar);
-  color: #3d2a12;
+  color: #0a0a0a;
   font-weight: 700;
 }
 
@@ -650,17 +648,17 @@ body::after {
   color: var(--dim);
 }
 .hist-diff .add {
-  color: #8fb573;
+  color: var(--texto);
 }
 .hist-diff .del {
-  color: #d95d63;
+  color: var(--acento);
 }
 
 .hist-confirm {
   margin-top: 10px;
   padding: 10px 12px;
-  background: rgba(255, 195, 122, 0.08);
-  border: 1px solid rgba(255, 195, 122, 0.3);
+  background: rgba(255, 77, 28, 0.08);
+  border: 1px solid rgba(255, 77, 28, 0.35);
   border-radius: 6px;
 }
 .hist-confirm-text {
@@ -753,8 +751,8 @@ body::after {
 .orphan-card {
   margin: 8px 14px;
   padding: 10px 12px;
-  background: rgba(255, 195, 122, 0.08);
-  border: 1px solid rgba(255, 195, 122, 0.3);
+  background: rgba(255, 77, 28, 0.08);
+  border: 1px solid rgba(255, 77, 28, 0.35);
   border-radius: 6px;
 }
 .orphan-text {
@@ -784,7 +782,7 @@ body::after {
 .orphan-btn.keep {
   background: var(--ambar);
   border-color: var(--ambar);
-  color: #3d2a12;
+  color: #0a0a0a;
   font-weight: 700;
 }
 
@@ -1008,10 +1006,12 @@ img.av {
   opacity: 0.4;
   cursor: not-allowed;
 }
+/* Activo se marca con el borde y el texto, no invirtiendo el boton: sobre negro
+   un bloque blanco pesa mas que el de publicar y se roba la mirada. */
 .inspect-btn.on {
-  color: var(--fondo2);
-  background: var(--lavanda);
-  border-color: var(--lavanda);
+  color: var(--texto);
+  background: transparent;
+  border-color: var(--texto);
 }
 
 /* Cursores de otros sobre el escenario (estilo Figma, del boceto).
@@ -1038,7 +1038,7 @@ img.av {
   font-weight: 700;
   letter-spacing: 1.5px;
   text-transform: uppercase;
-  color: #2b2e4c;
+  color: #0a0a0a;
   background: currentColor;
   padding: 3px 8px;
   border-radius: 2px;
@@ -1048,7 +1048,7 @@ img.av {
 /* El texto va oscuro sobre el color de la persona: los colores de la paleta son
    claros, así que negro encima se lee mejor que blanco. */
 .cursor-name span {
-  color: #2b2e4c;
+  color: #0a0a0a;
 }
 
 /* badges de selección de otros */
@@ -1068,7 +1068,7 @@ img.av {
   padding: 3px 8px;
   border: 1px solid;
   border-radius: 3px;
-  background: rgba(43, 46, 76, 0.85);
+  background: rgba(0, 0, 0, 0.9);
 }
 
 /* chip de anclaje en el input del chat */
@@ -1078,8 +1078,8 @@ img.av {
   gap: 6px;
   font-size: 10px;
   color: var(--lavanda);
-  background: rgba(185, 168, 227, 0.12);
-  border: 1px solid rgba(185, 168, 227, 0.3);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 4px;
   padding: 5px 8px;
   margin-bottom: 6px;
@@ -1109,7 +1109,7 @@ img.av {
   height: 56px;
   border-radius: 6px;
   overflow: hidden;
-  border: 1px solid rgba(185, 168, 227, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.2);
 }
 .adjunto-chip img {
   width: 100%;
@@ -1140,9 +1140,9 @@ img.av {
 /* Cuando algo salió mal con una imagen. Se va al hacer click. */
 .adjunto-error {
   font-size: 10px;
-  color: #e8a0a0;
-  background: rgba(232, 160, 160, 0.1);
-  border: 1px solid rgba(232, 160, 160, 0.25);
+  color: var(--acento);
+  background: rgba(255, 77, 28, 0.1);
+  border: 1px solid rgba(255, 77, 28, 0.3);
   border-radius: 4px;
   padding: 5px 8px;
   margin-bottom: 6px;
@@ -1269,7 +1269,7 @@ img.av {
   background: transparent;
 }
 .ep-card.conectado {
-  border-color: #4f7d63;
+  border-color: var(--linea);
 }
 .ep-card.huerfano {
   opacity: 0.72;
@@ -1299,10 +1299,10 @@ img.av {
   color: var(--texto);
   flex-shrink: 0;
 }
-.ep-metodo.m-post { background: #4a6b52; }
+.ep-metodo.m-post { background: #1c1c1c; }
 .ep-metodo.m-put,
-.ep-metodo.m-patch { background: #6b5a3a; }
-.ep-metodo.m-delete { background: #6e4247; }
+.ep-metodo.m-patch { background: #1c1c1c; }
+.ep-metodo.m-delete { background: #1c1c1c; }
 
 .ep-path {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -1319,7 +1319,7 @@ img.av {
   border-radius: 50%;
   flex-shrink: 0;
 }
-.ep-semaforo.conectado { background: #6fbf8e; }
+.ep-semaforo.conectado { background: var(--texto); }
 .ep-semaforo.faltante {
   background: transparent;
   border: 1.5px dashed var(--ambar);
@@ -1377,7 +1377,7 @@ img.av {
 }
 .ep-anclar:hover {
   background: var(--lavanda);
-  color: #2b2e4c;
+  color: #0a0a0a;
 }
 
 .preview-loading-sub {
@@ -1428,8 +1428,8 @@ img.av {
   color: var(--texto);
 }
 .key-chip.listo {
-  border-color: #4f7d63;
-  color: #8fbfa0;
+  border-color: var(--linea);
+  color: var(--texto);
 }
 .key-chip.falta {
   border-color: var(--ambar);
@@ -1499,7 +1499,7 @@ img.av {
   border: 0;
   border-radius: 4px;
   background: var(--ambar);
-  color: #3d2a12;
+  color: #0a0a0a;
   font-family: inherit;
   font-size: 11px;
   font-weight: 700;
@@ -1514,13 +1514,13 @@ img.av {
 .key-error {
   margin-top: 9px;
   font-size: 11px;
-  color: #d95d63;
+  color: var(--acento);
   line-height: 1.5;
 }
 .key-ok {
   margin-top: 9px;
   font-size: 11px;
-  color: #8fbfa0;
+  color: var(--texto);
 }
 .key-link {
   display: inline-block;
@@ -1542,7 +1542,7 @@ img.av {
 .key-puesta code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 11.5px;
-  color: #8fbfa0;
+  color: var(--texto);
 }
 .key-olvidar {
   border: 1px solid var(--linea);
@@ -1555,8 +1555,8 @@ img.av {
   cursor: pointer;
 }
 .key-olvidar:hover {
-  color: #d95d63;
-  border-color: #d95d63;
+  color: var(--acento);
+  border-color: var(--acento);
 }
 
 /* Mensajes seguidos del mismo autor (patrón Discord): sin avatar ni nombre.
@@ -1585,7 +1585,7 @@ img.av {
   font-weight: 700;
   letter-spacing: 1px;
   background: var(--ambar);
-  color: #3d2a12;
+  color: #0a0a0a;
   padding: 2px 5px;
   border-radius: 2px;
   text-transform: uppercase;
@@ -1634,7 +1634,7 @@ img.av {
 }
 .entrar-error {
   font-size: 11px;
-  color: #d95d63;
+  color: var(--acento);
 }
 
 /* "@agente" (crear otro) va al final y separado: lo normal es seguirle hablando
@@ -2211,8 +2211,8 @@ img.av {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #2a2b3d;
-  color: #d8d9e8;
+  background: #141414;
+  color: var(--texto);
   font-weight: 800;
   font-size: 16px;
 }
@@ -2241,7 +2241,7 @@ img.av {
   border: 0;
   border-radius: 4px;
   background: var(--ambar);
-  color: #3d2a12;
+  color: #0a0a0a;
   font-family: inherit;
   font-size: 11px;
   font-weight: 700;
@@ -2254,7 +2254,7 @@ img.av {
 }
 
 .key-error {
-  color: #d95d63;
+  color: var(--acento);
 }
 
 /* Salir va separado del resto: es la acción que no se aprieta por error. */

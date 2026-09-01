@@ -67,16 +67,35 @@ async function commitSinLock(
 ): Promise<string | null> {
   await execFileP("git", ["add", "-A"], { cwd: dir });
 
-  // ¿Hay algo que commitear? (diff-index falla con código 1 si hay cambios)
-  const hasChanges = await execFileP("git", ["diff-index", "--quiet", "HEAD", "--"], { cwd: dir })
-    .then(() => false)
-    .catch(() => true);
-  // Caso especial: repo sin ningún commit todavía.
+  // ¿Hay algo que commitear?
+  //
+  // Se pregunta distinto según haya o no un commit previo, porque `diff-index`
+  // necesita HEAD para comparar: sin él sale con error y no se puede distinguir
+  // "no hay cambios" de "no se pudo comparar".
   const hasHead = await execFileP("git", ["rev-parse", "--verify", "HEAD"], { cwd: dir })
     .then(() => true)
     .catch(() => false);
 
-  if (hasHead && !hasChanges) return null;
+  const hasChanges = hasHead
+    ? // Con HEAD: diff-index sale con código 1 si hay algo distinto.
+      await execFileP("git", ["diff-index", "--quiet", "HEAD", "--"], { cwd: dir })
+        .then(() => false)
+        .catch(() => true)
+    : // Sin HEAD (sala recién creada): basta con mirar si el índice tiene algo.
+      await execFileP("git", ["diff", "--cached", "--name-only"], { cwd: dir }).then(
+        ({ stdout }) => stdout.trim().length > 0,
+      );
+
+  // Sin cambios no hay commit, haya HEAD o no. Antes la condición era
+  // `hasHead && !hasChanges`, así que en una sala recién creada un turno que no
+  // escribiera archivos llegaba al `git commit`, git salía con código 1 por
+  // "nothing to commit", y como ese error no lo cachaba nadie se llevaba el
+  // proceso ENTERO: todas las salas y toda la gente adentro.
+  //
+  // Un turno sin escrituras no es raro ni un error: alguien le pregunta al
+  // agente qué puede hacer y el agente contesta. Es lo primero que pasa cuando
+  // una sala se comparte por enlace.
+  if (!hasChanges) return null;
 
   await execFileP(
     "git",

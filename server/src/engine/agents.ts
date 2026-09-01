@@ -33,9 +33,33 @@ export interface Agent {
 // Los cuatro de antes eran naranjas casi identicos y uno repetia el color de
 // una persona: con dos agentes en la sala no se sabia cual hablaba. Ahora son
 // una familia calida propia, distinta de la de la gente.
-const AGENT_COLORS = ["#ff4d1c", "#ff8c42", "#e0574f", "#ffb347"];
+//
+// Ocho y no cuatro porque el tope de agentes subio: con menos colores que
+// agentes, dos comparten tono y hay que leer el nombre para saber cual habla.
+const AGENT_COLORS = [
+  "#ff4d1c",
+  "#ff8c42",
+  "#e0574f",
+  "#ffb347",
+  "#d4622a",
+  "#ffa07a",
+  "#c94f3d",
+  "#e89b5a",
+];
 
-export const MAX_AGENTS_PER_ROOM = 3;
+/**
+ * Tope de agentes TRABAJANDO a la vez en una sala (los `idle` no cuentan).
+ *
+ * Eran 3, y no era un numero pensado sino el que quedo. El problema aparece con
+ * gente: una sala se comparte por enlace, y si entran diez personas y solo caben
+ * tres agentes, siete no pueden pedir nada. El tope dejaba de ser un limite
+ * tecnico para volverse lo que cortaba la dinamica del producto.
+ *
+ * Quince no es lo que se espera ver, es margen para que el limite no estorbe. Lo
+ * que de verdad acota es el saldo de quien puso la key: cada agente activo es una
+ * conversacion completa contra el modelo.
+ */
+export const MAX_AGENTS_PER_ROOM = 15;
 
 export class AgentRegistry {
   private agents = new Map<string, Agent>();

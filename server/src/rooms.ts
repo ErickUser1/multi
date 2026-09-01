@@ -96,7 +96,10 @@ export interface Room {
 
 const rooms = new Map<string, Room>();
 
-const COLORS = ["#b9a8e3", "#c393c9", "#7fa3d8", "#8fb573", "#ffc37a", "#d95d63"];
+// Separados en tono a proposito: sobre negro, dos colores parecidos se
+// confunden en un nombre de 12px. Y ninguno se acerca a los de los agentes,
+// para que de un vistazo se sepa si habla una persona o un agente.
+const COLORS = ["#f5f5f5", "#5eb3ff", "#7dd8a0", "#ffd166", "#c792ea", "#ff8fa3"];
 const ADJ = ["taco", "chido", "vibe", "noche", "lofi", "pixel", "nube", "compa"];
 const NOUN = ["fiesta", "sala", "jam", "build", "crew", "party", "lab", "zona"];
 

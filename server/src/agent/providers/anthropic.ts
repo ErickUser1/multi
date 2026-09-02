@@ -17,7 +17,25 @@ const ANTHROPIC_VERSION = "2023-06-01";
 // bien lo que se pide aquí (scaffoldear, editar, rediseñar) por menos de la mitad.
 // Quien quiera Opus lo pone en MULTI_MODEL o desde la Sala.
 const DEFAULT_MODEL = "claude-sonnet-5";
-const DEFAULT_MAX_TOKENS = 8192;
+/**
+ * Tope de tokens que el modelo puede DEVOLVER en una respuesta.
+ *
+ * Estaba en 8192, que con Sonnet 5 (128k de salida) es un dieciseisavo de lo que
+ * el modelo puede dar. Con ese tope un archivo grande no cabe: el agente empieza
+ * a escribirlo, se queda sin espacio a media escritura, la tool queda trunca y
+ * REINTENTA IGUAL. Se vio en vivo, cinco vueltas seguidas con `salida 8192` y el
+ * contexto congelado en el mismo numero: el turno gira en falso hasta el tope de
+ * vueltas, quemando saldo en cada una, y la sala se queda con el andamiaje del
+ * proyecto y nada mas.
+ *
+ * Pasaba con juegos y no con paginas simples porque lo que no cabia era el
+ * ARCHIVO, no la tarea.
+ *
+ * 32k y no los 128k que soporta el modelo: con esto un archivo grande entra de
+ * sobra, y un tope sigue siendo util para que una respuesta desbocada no se lleve
+ * el saldo de una sala entera.
+ */
+const DEFAULT_MAX_TOKENS = 32_000;
 
 // Retry: 429 (rate limit) y 529 (overloaded). Config estilo CCX.
 const RETRY = { maxRetries: 5, baseMs: 1000, capMs: 60_000 };

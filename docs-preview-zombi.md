@@ -98,3 +98,48 @@ docker exec multi-room-<sala> sh -c "cat /work/package.json; cat /work/vite.conf
 ```
 
 Con dos ocurrencias y sus datos ya se puede ver que tienen en comun.
+
+
+---
+
+# RESUELTO — 5 de septiembre de 2026
+
+La causa era otra y salió sola al implementar el sueño de salas.
+
+## Qué era
+
+`preview.stop()` (`engine/preview.ts:200`) mata `child`, que es el **cliente de
+`docker exec` del host**. Esa señal no llega fiablemente al `npm run dev` de
+adentro del contenedor: `docker exec` sin `-t` no propaga, y no existe
+`--sig-proxy` para exec.
+
+El dev server sobrevive ocupando el puerto interno. El siguiente Vite lo
+encuentra tomado y **salta al 5174**. Como Docker solo publica el 5173, se acaba
+viendo el dev server VIEJO mientras el agente escribe en el nuevo.
+
+`killDevServersIn` no lo cubría: mata por UN puerto, y los zombis quedan cada uno
+en uno distinto.
+
+## Por qué se veía intermitente
+
+Porque el contenedor se llevaba a los zombis cuando el server se apagaba. Solo
+salía a la luz cuando algo detenía un preview **sin** apagar el contenedor — y
+eso pasaba raras veces, hasta que dormir salas lo volvió el caso normal.
+
+Medido: **tres Vite tras tres ciclos** de dormir y despertar, 435 MB de procesos
+que nadie usa. Dormir salas, sin este arreglo, empeoraba lo que venía a resolver.
+
+Y explica el `strictPort` de la sala del juego: no era la causa, era lo que hizo
+visible el zombi. Sin esa opción Vite salta de puerto y el fallo se disimula.
+
+## El arreglo
+
+`stop()` ahora mata **dentro** del contenedor antes de cerrar el canal, por
+nombre de proceso y no por puerto (los zombis están en puertos distintos),
+acotado a los binarios de dev servers conocidos para no llevarse los scripts que
+el agente esté corriendo.
+
+## Verificado
+
+Tres ciclos de dormir y despertar sobre la misma sala: **un solo Vite vivo**, y el
+puerto vuelve al 5173 en vez de escalar a 5174 y 5175.

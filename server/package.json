@@ -29,7 +29,8 @@
     "uso": "tsx --no-warnings src/demos/uso.ts",
     "demo:variables": "tsx src/demos/variables.ts",
     "demo:publicar": "tsx src/demos/publicar.ts",
-    "demo:cuentas": "tsx src/demos/cuentas.ts"
+    "demo:cuentas": "tsx src/demos/cuentas.ts",
+    "demo:carga": "tsx src/demos/carga.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.3.0",

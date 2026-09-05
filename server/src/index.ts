@@ -25,6 +25,7 @@ import {
   renameRoom,
   type Room,
   type SelectedElement,
+  dormirSalasOciosas,
 } from "./rooms.js";
 import { getStorage } from "./storage/index.js";
 import { KeyedMutex } from "./engine/keyed-mutex.js";
@@ -873,6 +874,9 @@ io.on("connection", (socket) => {
     }
     joinedRoom = room;
     socket.join(roomId);
+    // Ya no está vacía: se para el reloj que la llevaría a dormir. Si estaba
+    // dormida, el `notifyPreviewWhenReady` de más abajo la revive.
+    room.vaciaDesde = undefined;
 
     // La sesión viaja en la cookie del handshake, no en el payload: el cliente
     // no la puede leer (es HttpOnly) y por lo tanto tampoco inventarla.
@@ -1680,6 +1684,28 @@ try {
   // vivo para siempre es un recurso más que cuidar, y esto puede esperar al
   // siguiente arranque sin que nadie lo note.
   void getStorage().then((s) => s.borrarSesionesVencidas().catch(() => {}));
+
+  /**
+   * El único temporizador del server, y va contra la regla de arriba a propósito.
+   *
+   * Las sesiones caducadas pueden esperar al siguiente arranque porque no cuestan
+   * nada mientras esperan. Un dev server sí: son ~150 MB por sala, y lo que se
+   * desperdicia CRECE con el uso. Una sala que alguien abrió una vez se queda
+   * viva para siempre, así que sin esto la capacidad se mide en salas creadas en
+   * vez de salas en uso.
+   *
+   * Cada minuto y no más seguido: dormir no es urgente, y el barrido recorre
+   * todas las salas en memoria.
+   */
+  const barrido = setInterval(() => {
+    void dormirSalasOciosas().catch((err) => {
+      console.error("[dormir] falló el barrido:", err);
+    });
+  }, 60_000);
+  // Sin `unref` el proceso no saldría solo al terminar: un intervalo vivo cuenta
+  // como trabajo pendiente para Node.
+  barrido.unref();
+
   const modoKeys = TEST_MOCK
     ? "agente simulado"
     : FALLBACK

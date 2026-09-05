@@ -178,8 +178,30 @@ export function handlePreviewRequest(
   const port = roomPreviewPort(parsed.roomId);
   if (D) console.log(`[proxy] sala=${parsed.roomId} puerto=${port}`);
   if (!port) {
-    res.writeHead(503, { "content-type": "text/plain; charset=utf-8" });
-    res.end("preview de la sala aún no está listo");
+    /**
+     * Sin dev server: o la sala está arrancando, o se durmió por inactividad.
+     *
+     * Desde aquí no se puede despertar: `handlePreviewRequest` es síncrono por
+     * construcción (devuelve boolean y va enganchado al http.Server crudo, antes
+     * de Fastify). Quien sí despierta es el `join` del socket, que ya dispara
+     * `notifyPreviewWhenReady` — así que esta página solo tiene que aguantar
+     * mientras eso pasa, recargándose sola.
+     *
+     * Antes era un 503 con texto plano y sin reintento: en el iframe de la sala
+     * se veía como una pantalla rota y parecía que Multi se había caído.
+     */
+    res.writeHead(503, {
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "no-store",
+    });
+    res.end(
+      `<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="3">` +
+        `<title>despertando</title>` +
+        `<style>html{color-scheme:dark}body{margin:0;height:100vh;display:grid;` +
+        `place-items:center;background:#000;color:#8a8a8a;` +
+        `font:14px/1.6 system-ui,sans-serif}</style>` +
+        `<p>despertando el preview…</p>`,
+    );
     return true;
   }
 

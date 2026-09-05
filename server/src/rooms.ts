@@ -92,9 +92,28 @@ export interface Room {
   coordinator: RunCoordinator;
   /** Turnos que quedaron a medias por un crash; el humano decide qué hacer. */
   orphanTurns?: Turn[];
+  /**
+   * Desde cuándo no hay nadie dentro, o undefined si hay gente.
+   *
+   * Es lo que permite dormir la sala: sin esto no había forma de saber que una
+   * sala quedó vacía — `removeMember` solo borraba de la lista y nadie miraba
+   * el tamaño.
+   */
+  vaciaDesde?: number;
 }
 
 const rooms = new Map<string, Room>();
+
+/**
+ * El mismo Map, expuesto SOLO para `demo:dormir`.
+ *
+ * Se hace así y no relajando `rooms` para que quede claro dónde está la costura:
+ * el nombre grita que es de pruebas, y quien lo use tiene que buscarlo a
+ * propósito. La alternativa era que la demo creara salas de verdad, con sus
+ * workspaces y contenedores, para probar una decisión que solo mira campos en
+ * memoria.
+ */
+export const __roomsParaPruebas = rooms;
 
 // Separados en tono a proposito: sobre negro, dos colores parecidos se
 // confunden en un nombre de 12px. Y ninguno se acerca a los de los agentes,
@@ -450,6 +469,74 @@ export async function stopAllPreviews(): Promise<void> {
 }
 
 /**
+ * Cuántos minutos vacía antes de dormirse. 0 lo desactiva.
+ *
+ * Treinta a propósito, aunque Replit duerma a los 5 y Cloudflare a los 10: la
+ * mayoría de las salas de Multi se abandonan de verdad, así que un umbral largo
+ * libera casi lo mismo y no le apaga el preview a quien se fue por un café.
+ * Configurable para poder bajarlo con datos en vez de por corazonada.
+ */
+const MINUTOS_PARA_DORMIR = Number(process.env.MULTI_SLEEP_MIN ?? 30);
+
+/**
+ * Apaga el dev server de una sala, dejándola lista para revivir.
+ *
+ * NO apaga el contenedor. Lo que pesa es el dev server (~150 MB contra ~50 del
+ * contenedor parado), y dejar el contenedor vivo evita el problema serio:
+ * `execInContainer` no RECHAZA cuando el contenedor no existe — resuelve con
+ * código ≠ 0, y el agente lo lee como un error del proyecto y sigue trabajando
+ * sobre un diagnóstico falso. Mientras el contenedor viva, ese camino no se toca.
+ *
+ * `preview = null` no es opcional: es lo que le falta a `stopAllPreviews`, que
+ * puede permitírselo porque después viene un `process.exit`. Sin eso, el guard
+ * de `arrancarPreview` devolvería la URL de un proceso muerto y la sala quedaría
+ * inservible hasta reiniciar el server.
+ */
+export async function dormirSala(room: Room): Promise<void> {
+  // Bajo el mismo lock que los arranques: sin esto se puede dormir una sala
+  // justo mientras alguien la está levantando, y el preview recién nacido
+  // quedaría corriendo sin que nadie lo recuerde.
+  await arranquesDePreview.run(room.id, async () => {
+    if (!room.preview) return;
+    await room.preview.stop();
+    room.preview = null;
+    console.log(`[sala ${room.id}] dormida (nadie dentro)`);
+  });
+}
+
+/**
+ * Duerme las salas que llevan rato vacías. Devuelve cuántas durmió.
+ *
+ * Las tres condiciones son necesarias, no solo la de estar vacía:
+ *
+ * - Un `npm install` puede tardar diez minutos y no pasa por el coordinador, así
+ *   que `previewBooting` es la única señal de que hay algo a medias.
+ * - Publicar corre un build completo y tampoco pasa por el coordinador.
+ * - Y dormir con un agente trabajando romperia algo más profundo: `sweepOrphans`
+ *   asume que un turno en "running" es un crash, así que al despertar le pintaría
+ *   al usuario una alerta de trabajo perdido que en realidad fue una decisión del
+ *   sistema.
+ */
+export async function dormirSalasOciosas(): Promise<number> {
+  if (MINUTOS_PARA_DORMIR <= 0) return 0;
+  const limite = Date.now() - MINUTOS_PARA_DORMIR * 60_000;
+
+  const dormibles = allRooms().filter(
+    (r) =>
+      r.preview !== null &&
+      r.members.size === 0 &&
+      r.vaciaDesde !== undefined &&
+      r.vaciaDesde < limite &&
+      r.coordinator.activeKeys().length === 0 &&
+      !r.previewBooting &&
+      !r.publicando,
+  );
+
+  await Promise.all(dormibles.map((r) => dormirSala(r).catch(() => {})));
+  return dormibles.length;
+}
+
+/**
  * Borra una sala del todo: su proyecto, su contenedor y su rastro en la BD.
  *
  * Es irreversible y es PARA TODOS: la sala es de quien tenga el link, no de
@@ -544,6 +631,9 @@ export function addMember(
 
 export function removeMember(room: Room, socketId: string): void {
   room.members.delete(socketId);
+  // Al salir el último, empieza a correr el reloj para dormirla. Se marca aquí y
+  // no en el barrido para que el tiempo cuente desde que de verdad se vació.
+  if (room.members.size === 0) room.vaciaDesde = Date.now();
 }
 
 export function membersList(room: Room): Member[] {

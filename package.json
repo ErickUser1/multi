@@ -38,7 +38,8 @@
     "demo:variables": "npm run demo:variables -w server",
     "demo:publicar": "npm run demo:publicar -w server",
     "demo:cuentas": "npm run demo:cuentas -w server",
-    "demo:carga": "npm run demo:carga -w server --"
+    "demo:carga": "npm run demo:carga -w server --",
+    "demo:dormir": "npm run demo:dormir -w server"
   },
   "engines": {
     "node": ">=22"

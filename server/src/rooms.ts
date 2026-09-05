@@ -98,6 +98,12 @@ export interface Room {
    * Es lo que permite dormir la sala: sin esto no había forma de saber que una
    * sala quedó vacía — `removeMember` solo borraba de la lista y nadie miraba
    * el tamaño.
+   *
+   * Nace puesto, y no solo al salir el último: hay ocho endpoints HTTP que
+   * despiertan una sala sin que nadie entre por socket (bajar el zip, ver el
+   * historial, publicar, las variables…). Si solo se marcara al salir alguien,
+   * esas salas levantarían su contenedor y su dev server y no se dormirían
+   * nunca, que es justo el caso que esto viene a resolver.
    */
   vaciaDesde?: number;
 }
@@ -181,6 +187,8 @@ export async function createRoom(): Promise<Room> {
     selections: new Map(),
     agents: new AgentRegistry(),
     coordinator: new RunCoordinator(),
+    // Nace vacía: el `join` lo despeja en cuanto entra alguien.
+    vaciaDesde: Date.now(),
   };
   rooms.set(id, room);
 
@@ -232,6 +240,8 @@ async function despertarSala(id: string): Promise<Room | null> {
     selections: new Map(),
     agents: new AgentRegistry(),
     coordinator: new RunCoordinator(),
+    // Nace vacía: el `join` lo despeja en cuanto entra alguien.
+    vaciaDesde: Date.now(),
   };
   rooms.set(id, room);
 

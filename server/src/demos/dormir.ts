@@ -134,7 +134,17 @@ async function main(): Promise<void> {
   await probar([reciente]);
   check("sigue despierta", reciente.preview !== null);
 
-  console.log("\n7. Una sala ya dormida no se vuelve a dormir");
+  console.log("\n7. Una sala que nadie visitó por socket también se duerme");
+  // El caso que se escapó al escribir esto: ocho endpoints HTTP despiertan salas
+  // sin que nadie haga `join` (bajar el zip, el historial, publicar…). Si
+  // `vaciaDesde` solo se marcara al salir el último, esas salas levantarían su
+  // dev server y no se dormirían nunca.
+  const soloHttp = salaFalsa("_dormir-solo-http");
+  check("nace marcada como vacía", soloHttp.vaciaDesde !== undefined);
+  await probar([soloHttp]);
+  check("se durmió", soloHttp.preview === null);
+
+  console.log("\n8. Una sala ya dormida no se vuelve a dormir");
   const yaDormida = salaFalsa("_dormir-ya", { preview: null });
   const durmio = await probar([yaDormida]);
   check("no cuenta como dormida otra vez", durmio === 0, `durmió ${durmio}`);

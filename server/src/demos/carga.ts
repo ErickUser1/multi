@@ -48,6 +48,14 @@ interface Resultado {
   etapa: string;
   ms: number;
   error?: string;
+  /**
+   * Cuánto tardó cada etapa por separado.
+   *
+   * El total solo dice "tarda mucho". Esto dice DÓNDE, que es lo que decide qué
+   * atacar: si el grueso es `npm install`, se precalienta la caché en la imagen;
+   * si es el arranque del contenedor o el dev server, eso no ayudaría en nada.
+   */
+  etapas: Record<string, number>;
 }
 
 /** Muestra de recursos de la máquina en un instante. */
@@ -102,16 +110,24 @@ async function levantarSala(i: number): Promise<Resultado> {
   const sala = `${PREFIJO}${String(i).padStart(2, "0")}`;
   const t0 = Date.now();
   let etapa = "workspace";
+  const etapas: Record<string, number> = {};
+  let marca = Date.now();
+  const cerrar = (nombre: string) => {
+    etapas[nombre] = Date.now() - marca;
+    marca = Date.now();
+  };
 
   try {
     const ws = await createWorkspace(sala, { clean: true });
     await sembrarProyecto(ws.dir);
+    cerrar("workspace");
 
     etapa = "contenedor";
     const contenedor = await startContainer(sala, ws.dir, PUERTO_INTERNO);
     if (contenedor.publishedPort === null) {
       throw new Error("Docker no publicó puerto");
     }
+    cerrar("contenedor");
 
     etapa = "dependencias";
     const inst = await execInContainer(sala, "npm install --no-audit --no-fund", {
@@ -119,6 +135,7 @@ async function levantarSala(i: number): Promise<Resultado> {
       maxOutput: 2000,
     });
     if (inst.code !== 0) throw new Error(`npm install salió ${inst.code}`);
+    cerrar("npm install");
 
     etapa = "dev server";
     const launch = await detectLaunch(ws.dir);
@@ -130,8 +147,9 @@ async function levantarSala(i: number): Promise<Resultado> {
       publishedPort: contenedor.publishedPort,
     });
     previews.push(preview);
+    cerrar("dev server");
 
-    return { sala, ok: true, etapa: "listo", ms: Date.now() - t0 };
+    return { sala, ok: true, etapa: "listo", ms: Date.now() - t0, etapas };
   } catch (err) {
     return {
       sala,
@@ -139,6 +157,7 @@ async function levantarSala(i: number): Promise<Resultado> {
       etapa,
       ms: Date.now() - t0,
       error: err instanceof Error ? err.message.split("\n")[0] : String(err),
+      etapas,
     };
   }
 }
@@ -248,6 +267,21 @@ async function main(): Promise<void> {
     );
   }
   console.log(`  Load máximo:       ${loadMax.toFixed(2)}  (${nucleos} núcleos)`);
+
+  // Dónde se fue el tiempo. Es lo que decide qué optimizar.
+  if (ok.length) {
+    const ETAPAS = ["workspace", "contenedor", "npm install", "dev server"];
+    const sumaTotal = ok.reduce((s, r) => s + r.ms, 0);
+    console.log(`\n  Por etapa (promedio, y qué tanto pesa):`);
+    for (const nombre of ETAPAS) {
+      const suma = ok.reduce((s, r) => s + (r.etapas[nombre] ?? 0), 0);
+      if (suma === 0) continue;
+      const prom = suma / ok.length / 1000;
+      const peso = (suma / sumaTotal) * 100;
+      const barra = "#".repeat(Math.round(peso / 3));
+      console.log(`    ${nombre.padEnd(12)} ${prom.toFixed(1).padStart(6)}s  ${peso.toFixed(0).padStart(3)}%  ${barra}`);
+    }
+  }
   console.log(`  Memoria máxima:    ${memMax.toFixed(0)} MB entre todos los contenedores`);
   if (ok.length) {
     console.log(`  Por sala:          ~${(memMax / ok.length).toFixed(0)} MB`);

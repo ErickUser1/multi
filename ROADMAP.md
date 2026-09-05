@@ -381,3 +381,31 @@ guess about a race, and the check takes seconds while turns take minutes.
 
 You can't drag an image into the room for the agent to use. It's an obvious gap as
 soon as someone wants to build something with real content.
+## Un PLAN.md por sala, como el CLAUDE.md de este repo
+
+Idea del 4 de septiembre de 2026, sin construir todavia.
+
+`resumenDeOtros` (`engine/agents.ts:209`) ya le cuenta a cada agente que estan
+haciendo los demas AHORA: que archivos tocan y que dijeron en el chat. Su propio
+comentario reconoce el limite: *"el resumen dice QUE archivo toca el otro, pero
+no las decisiones que tomo"*.
+
+Lo que falta es el nivel de arriba: lo que NO cambia turno a turno. Que se esta
+construyendo, con que stack, donde van las cosas, quien hace que. Hoy eso vive
+en el chat, se pierde entre mensajes, y un agente que entra despues no lo ve.
+
+**La forma mas barata: un `PLAN.md` en la raiz del proyecto**, igual que el
+CLAUDE.md de este repo. Vive en el workspace, entra a git, todos lo ven en la
+sala y cualquiera lo edita. No hace falta feature: lo unico que toca el motor es
+una linea en el prompt del sistema diciendole al agente que lo lea si existe.
+
+**Lo escribe la gente, no un agente.** La coordinacion de la intencion es de la
+capa humana — es el mismo argumento del capitulo, y un plan que escribe un agente
+seria adivinar lo que el equipo todavia no decidio.
+
+Se puede probar sin construir nada: crear un `PLAN.md` en una sala y mencionarselo
+al agente. Si con eso se coordinan mejor, la regla vale la pena.
+
+Ataca el hueco documentado en `docs-write-pisa.md`: el CAS protege archivos de
+escrituras simultaneas, pero no evita que dos agentes trabajen sobre premisas
+incompatibles.

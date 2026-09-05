@@ -1198,6 +1198,24 @@ img.av {
   text-align: center;
 }
 
+/* Barra de carga del iframe.
+   Se anima hacia el 90% y se queda ahí: el navegador no dice qué porcentaje
+   lleva, así que fingir una barra que llega al 100% sola sería mentir. Al
+   terminar la carga el elemento desaparece, y ese corte ES el 100%. */
+.preview-barra {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 2px;
+  background: var(--acento);
+  z-index: 5;
+  animation: preview-barra-avanza 8s cubic-bezier(0.1, 0.8, 0.2, 1) forwards;
+}
+@keyframes preview-barra-avanza {
+  0% { width: 0; }
+  100% { width: 90%; }
+}
+
 /* El arranque del preview tarda (contenedor, dependencias, dev server). El
    spinner dice que algo está pasando; el texto de abajo dice QUÉ, que es lo que
    convierte una espera muerta en una que se entiende. */
@@ -2163,6 +2181,8 @@ img.av {
   width: 100%;
   height: 100%;
   margin: 0 auto;
+  /* Ancla para la barra de carga, que va encima del iframe. */
+  position: relative;
   /* La transición hace evidente que cambió de tamaño, en vez de un salto que
      parece que se recargó. */
   transition: max-width 0.2s ease;

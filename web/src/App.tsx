@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import type { Socket } from "socket.io-client";
 import {
   connectSocket,
@@ -320,6 +320,31 @@ function Sala({
   /** Agentes cuyo detalle de tools está expandido (click en la línea). */
   const [toolsAbiertas, setToolsAbiertas] = useState<Record<string, boolean>>({});
   const [agents, setAgents] = useState<Agent[]>([]);
+  /**
+   * Quiénes están seleccionados en el filtro del chat, por NOMBRE.
+   *
+   * Vacío significa sin filtro, que es distinto de "nadie seleccionado": con
+   * cinco personas hablando, arrancar con el chat en blanco sería peor que el
+   * caos que esto viene a resolver.
+   *
+   * Por nombre y no por id porque es lo único que trae el mensaje: `from` es el
+   * nombre visible del autor, y coincide con `member.name` y con `agent.name`.
+   * El costo es que dos personas con el mismo nombre quedan indistinguibles —
+   * el server no los deduplica.
+   */
+  const [filtro, setFiltro] = useState<Set<string>>(new Set());
+  const mensajesVisibles = useMemo(
+    () => messages.filter((m) => pasaElFiltro(m, filtro)),
+    [messages, filtro],
+  );
+  const ocultos = messages.length - mensajesVisibles.length;
+  const alternarFiltro = useCallback((nombre: string) => {
+    setFiltro((prev) => {
+      const siguiente = new Set(prev);
+      if (!siguiente.delete(nombre)) siguiente.add(nombre);
+      return siguiente;
+    });
+  }, []);
   const [orphans, setOrphans] = useState<OrphanTurn[]>([]);
   /** Query del menú de menciones (null = cerrado). */
   const [mention, setMention] = useState<string | null>(null);
@@ -917,16 +942,36 @@ function Sala({
           </div>
         )}
 
+        {/* Sin esto el chat filtrado se ve igual que un chat vacío, y no hay
+            forma de saber que te estás perdiendo algo. */}
+        {filtro.size > 0 && (
+          <div className="filtro-aviso">
+            <span>{t.mensajesOcultos(ocultos)}</span>
+            <button type="button" onClick={() => setFiltro(new Set())}>
+              {t.verTodo}
+            </button>
+          </div>
+        )}
+
         <div className="chat-scroll">
-          {messages.map((m, i) => (
+          {mensajesVisibles.map((m, i) => (
             // Mensajes seguidos del mismo autor se agrupan sin repetir avatar
             // ni nombre (patrón Discord): el chat respira y se lee como
             // conversación, no como lista de tarjetas.
             // Sin sala no hay mensajes que pintar, así que aquí siempre lo hay.
-            <ChatRow key={i} msg={m} seguido={esSeguido(messages, i)} roomId={roomId!} />
+            //
+            // `esSeguido` recibe el array YA FILTRADO a propósito: con el array
+            // completo, dos mensajes que quedan contiguos tras filtrar se
+            // pintarían como no-seguidos y repetirían avatar y nombre.
+            <ChatRow key={i} msg={m} seguido={esSeguido(mensajesVisibles, i)} roomId={roomId!} />
           ))}
           {/* Un bloque de streaming POR AGENTE: varios pueden hablar a la vez */}
-          {Object.keys({ ...streaming, ...toolLines }).map((agentId) => {
+          {Object.keys({ ...streaming, ...toolLines })
+            // El streaming NO sale de `messages`, así que sin esto un agente
+            // filtrado fuera seguiría apareciendo mientras escribe y el filtro
+            // se vería roto.
+            .filter((agentId) => filtro.size === 0 || filtro.has(agentId))
+            .map((agentId) => {
             const agent = agents.find((a) => a.id === agentId);
             const color = agent?.color ?? "#ffc37a";
             return (
@@ -1105,15 +1150,44 @@ function Sala({
           >
             {inspect ? t.seleccionando : t.seleccionarBtn}
           </button>
+          {/* Los mismos avatares que ya decían quién está, ahora también filtran
+              el chat. Se reutilizan en vez de meter una fila de chips aparte:
+              en una columna de 340px cada control nuevo se paga caro, y aquí el
+              nombre y el color ya están en pantalla. */}
           <div className="presencia">
             {members.map((m) => (
-              <Avatar
+              <button
                 key={m.socketId}
-                foto={m.foto}
-                color={m.color}
-                inicial={m.name.slice(0, 1).toUpperCase()}
-                titulo={m.name}
-              />
+                type="button"
+                className={`filtro-btn ${filtro.has(m.name) ? "on" : ""} ${
+                  filtro.size > 0 && !filtro.has(m.name) ? "off" : ""
+                }`}
+                style={filtro.has(m.name) ? { borderColor: m.color } : undefined}
+                onClick={() => alternarFiltro(m.name)}
+                title={filtro.has(m.name) ? t.quitarDelFiltro(m.name) : t.filtrarPor(m.name)}
+              >
+                <Avatar
+                  foto={m.foto}
+                  color={m.color}
+                  inicial={m.name.slice(0, 1).toUpperCase()}
+                />
+              </button>
+            ))}
+            {/* Los agentes también filtran: en una sala con tres, saber cuál
+                dijo qué es justo lo que se pierde en el ruido. */}
+            {agents.map((a) => (
+              <button
+                key={a.id}
+                type="button"
+                className={`filtro-btn ${filtro.has(a.name) ? "on" : ""} ${
+                  filtro.size > 0 && !filtro.has(a.name) ? "off" : ""
+                }`}
+                style={filtro.has(a.name) ? { borderColor: a.color } : undefined}
+                onClick={() => alternarFiltro(a.name)}
+                title={filtro.has(a.name) ? t.quitarDelFiltro(a.name) : t.filtrarPor(a.name)}
+              >
+                <Avatar color={a.color} inicial="AI" textoOscuro />
+              </button>
             ))}
             <CuentaPanel
               usuario={cuenta.usuario}
@@ -1331,6 +1405,25 @@ function IconoDeVista({ vista }: { vista: Vista }) {
       )}
     </svg>
   );
+}
+
+/**
+ * El color con el que el server marca un mensaje de sistema que ES un fallo.
+ *
+ * Los mensajes de sistema no son todos iguales: "entró agente-1 a la sala" es
+ * ruido, y "agente-2: se acabó el crédito" es algo que si no ves, te quedas
+ * esperando sin saber por qué nada pasa. El server ya los separa por color al
+ * emitirlos, así que el filtro se apoya en eso en vez de leer el texto.
+ */
+const COLOR_FALLO = "#d95d63";
+
+/** ¿Este mensaje se ve con el filtro puesto? */
+function pasaElFiltro(msg: ChatMessage, filtro: Set<string>): boolean {
+  if (filtro.size === 0) return true;
+  // Los fallos se ven siempre: perderse uno deja a alguien esperando a un agente
+  // que ya se murió.
+  if (msg.role === "system") return msg.color === COLOR_FALLO;
+  return filtro.has(msg.from);
 }
 
 function esSeguido(msgs: ChatMessage[], i: number): boolean {

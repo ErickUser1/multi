@@ -200,6 +200,35 @@ export async function startPreview(
   const stop = async (): Promise<void> => {
     // En contenedor el puerto lo administra Docker, no nuestro registro.
     if (!container) usedPorts.delete(port);
+
+    /**
+     * Con contenedor hay que matar ADENTRO, no solo el `docker exec` de fuera.
+     *
+     * `child` es el cliente de `docker exec` que corre en el host. Matarlo cierra
+     * el canal, pero la señal no llega fiablemente al `npm run dev` de adentro
+     * (exec sin -t no propaga, y no hay --sig-proxy para exec). El dev server
+     * sobrevive ocupando el puerto interno, y el siguiente Vite lo encuentra
+     * tomado y SALTA al 5174. Como Docker solo publica el 5173, acabas viendo el
+     * dev server viejo mientras el agente escribe en el nuevo.
+     *
+     * Antes esto se disimulaba: el proceso viejo moría cuando el contenedor se
+     * iba con el server. Al dormir salas sin apagar el contenedor deja de
+     * disimularse y se ACUMULAN — se vieron tres tras tres ciclos de dormir y
+     * despertar, 435 MB de procesos que nadie usa.
+     *
+     * Por nombre y no por puerto como hace `killDevServersIn`: los zombis están
+     * cada uno en un puerto distinto, así que buscar por uno solo no los alcanza.
+     * Y acotado a los binarios de dev servers conocidos, porque un `pkill node`
+     * se llevaría también los scripts que el agente esté corriendo.
+     */
+    if (container) {
+      await execInContainer(
+        container.roomId,
+        "pkill -f 'node .*/(vite|next|nuxt|astro)' 2>/dev/null; true",
+        { timeoutMs: 15_000, maxOutput: 200 },
+      ).catch(() => {});
+    }
+
     if (child.killed) return;
     child.kill("SIGTERM");
     // Gracia breve; si no muere, SIGKILL.

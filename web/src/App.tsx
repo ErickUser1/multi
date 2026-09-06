@@ -263,6 +263,15 @@ function Sala({
   const [previewReady, setPreviewReady] = useState(false);
   /** Por dónde va el arranque del preview. null = no está arrancando. */
   const [arrancando, setArrancando] = useState<"contenedor" | "dependencias" | "servidor" | null>(null);
+  /**
+   * El iframe está cargando el HTML del proyecto.
+   *
+   * Es una espera distinta de la de `arrancando`: ahí el dev server todavía no
+   * existe y hay un spinner con la etapa. Aquí el preview ya está listo y lo que
+   * tarda es el navegador, así que el spinner ya se fue y el iframe se queda en
+   * blanco sin que nada diga que algo está pasando.
+   */
+  const [cargandoFrame, setCargandoFrame] = useState(false);
   const [draft, setDraft] = useState("");
   /**
    * El nombre de la sala, o null si nadie la ha nombrado (ahí se ve el id).
@@ -378,6 +387,10 @@ function Sala({
 
   // El iframe apunta al PROXY del server (que inyecta el inspector), no al dev server directo.
   const previewSrc = `${SERVER_URL}/preview/${roomId}`;
+  // Cada vez que cambia a qué apunta el iframe, vuelve a estar cargando.
+  useEffect(() => {
+    if (previewReady) setCargandoFrame(true);
+  }, [previewSrc, previewReady]);
   // Origen del proxy, para validar postMessage — cuidado 1.
   const proxyOrigin = new URL(SERVER_URL).origin;
 
@@ -1195,11 +1208,16 @@ function Sala({
                   desmonta: recargarlo perdería el estado de la app (formularios
                   a medias, en qué pantalla ibas) y costaría segundos. */}
               <div className="preview-marco" style={{ maxWidth: ANCHO_DE_VISTA[vista] }}>
+                {/* Mientras el navegador trae el HTML del proyecto, el iframe se
+                    ve en blanco. La barra es lo único que distingue "cargando"
+                    de "se rompió". */}
+                {cargandoFrame && <div className="preview-barra" aria-hidden="true" />}
                 <iframe
                   ref={iframeRef}
                   className="preview-frame"
                   src={previewSrc}
                   title={t.tituloPreview}
+                  onLoad={() => setCargandoFrame(false)}
                 />
               </div>
               {/* Selecciones de OTROS (con su color/nombre). Nota: se dibujan

@@ -14,6 +14,7 @@ import {
   type OrphanTurn,
 } from "./socket.js";
 import { AgentList } from "./AgentList.js";
+import { FiltroChat } from "./FiltroChat.js";
 import { MentionMenu } from "./MentionMenu.js";
 import { Historial } from "./Historial.js";
 import { BackCanvas, type Endpoint } from "./BackCanvas.js";
@@ -924,6 +925,18 @@ function Sala({
 
         {/* Los agentes de la sala, como jugadores visibles */}
         <AgentList agents={agents} />
+
+        {/* El botón dice que se puede filtrar; los avatares de arriba son el
+            atajo para quien ya lo sabe. Sin él, nada anuncia que existe. */}
+        {roomId && (
+          <FiltroChat
+            members={members}
+            agents={agents}
+            filtro={filtro}
+            onAlternar={alternarFiltro}
+            onLimpiar={() => setFiltro(new Set())}
+          />
+        )}
 
         {/* Trabajo que quedó a medias por un crash: decide el humano */}
         {orphans.length > 0 && (

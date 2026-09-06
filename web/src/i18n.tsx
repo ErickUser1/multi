@@ -108,6 +108,9 @@ const TEXTOS = {
     ocultarChat: "Ocultar el chat",
 
     // Filtro del chat
+    filtrarChat: "Filtrar",
+    filtrandoA: (n: number) => (n === 1 ? "Filtrando a 1" : `Filtrando a ${n}`),
+    tagAgente: "agente",
     filtrarPor: (quien: string) => `Ver solo lo de ${quien}`,
     quitarDelFiltro: (quien: string) => `Quitar a ${quien} del filtro`,
     mensajesOcultos: (n: number) =>
@@ -312,6 +315,9 @@ const TEXTOS = {
     ocultarChat: "Hide the chat",
 
     // Chat filter
+    filtrarChat: "Filter",
+    filtrandoA: (n: number) => (n === 1 ? "Filtering 1" : `Filtering ${n}`),
+    tagAgente: "agent",
     filtrarPor: (quien: string) => `Show only ${quien}`,
     quitarDelFiltro: (quien: string) => `Remove ${quien} from the filter`,
     mensajesOcultos: (n: number) => (n === 1 ? "1 message hidden" : `${n} messages hidden`),

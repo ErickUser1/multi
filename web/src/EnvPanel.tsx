@@ -31,12 +31,22 @@ export function EnvPanel({ roomId }: { roomId: string }) {
   const [vars, setVars] = useState<Variable[]>([]);
   const [guardando, setGuardando] = useState(false);
   const [guardado, setGuardado] = useState(false);
+  /**
+   * Qué valores están a la vista, por índice de fila.
+   *
+   * Se enmascara lo que se leyó del server, no lo que se está escribiendo: si
+   * ocultara mientras alguien pega una credencial, no habría manera de
+   * comprobar que se pegó completa, que es justo cuando más importa verla.
+   */
+  const [visibles, setVisibles] = useState<Set<number>>(new Set());
   const cajaRef = useRef<HTMLDivElement>(null);
 
   // Se leen al abrir y no al montar: son de la sala, así que pueden haber
   // cambiado por otra persona desde la última vez.
   useEffect(() => {
     if (!abierto) return;
+    // Cada apertura empieza tapada, aunque la vez pasada se hubiera revelado.
+    setVisibles(new Set());
     fetch(`${SERVER_URL}/rooms/${roomId}/env`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d: { variables: Variable[] } | null) => d && setVars(d.variables))
@@ -68,12 +78,34 @@ export function EnvPanel({ roomId }: { roomId: string }) {
 
   const quitar = (i: number) => {
     setVars((prev) => prev.filter((_, j) => j !== i));
+    // Las filas se identifican por posición, así que borrar una corre a las de
+    // abajo: sin esto, tapar la 2 acabaría destapando la 3.
+    setVisibles((prev) => {
+      const s = new Set<number>();
+      for (const j of prev) {
+        if (j < i) s.add(j);
+        else if (j > i) s.add(j - 1);
+      }
+      return s;
+    });
     setGuardado(false);
   };
 
   const agregar = () => {
-    setVars((prev) => [...prev, { nombre: "", valor: "" }]);
+    setVars((prev) => {
+      // La fila nueva nace a la vista: es la que se está por escribir.
+      setVisibles((v) => new Set(v).add(prev.length));
+      return [...prev, { nombre: "", valor: "" }];
+    });
     setGuardado(false);
+  };
+
+  const alternarVisible = (i: number) => {
+    setVisibles((prev) => {
+      const s = new Set(prev);
+      if (!s.delete(i)) s.add(i);
+      return s;
+    });
   };
 
   const guardar = async () => {
@@ -92,6 +124,9 @@ export function EnvPanel({ roomId }: { roomId: string }) {
       // Se pinta lo que el server dejó, no lo que se escribió: si descartó un
       // nombre inválido, hay que verlo aquí y no descubrirlo cuando la app falle.
       setVars(d.variables);
+      // Ya guardadas, se tapan: dejarlas a la vista es lo que acaba en una
+      // pantalla compartida un rato después.
+      setVisibles(new Set());
       setGuardado(true);
     } catch (e) {
       alert(t.envNoSePudo + String(e));
@@ -124,11 +159,21 @@ export function EnvPanel({ roomId }: { roomId: string }) {
               />
               <input
                 className="env-valor"
+                type={visibles.has(i) ? "text" : "password"}
                 placeholder={t.envValor}
                 value={v.valor}
                 onChange={(e) => cambiar(i, "valor", e.target.value)}
                 spellCheck={false}
+                autoComplete="off"
               />
+              <button
+                className="env-ojo"
+                onClick={() => alternarVisible(i)}
+                title={visibles.has(i) ? t.envOcultar : t.envVer}
+                aria-label={`${visibles.has(i) ? t.envOcultar : t.envVer}: ${v.nombre}`}
+              >
+                {visibles.has(i) ? <IconoOjoTachado /> : <IconoOjo />}
+              </button>
               <button
                 className="env-quitar"
                 onClick={() => quitar(i)}
@@ -156,5 +201,25 @@ export function EnvPanel({ roomId }: { roomId: string }) {
         </div>
       )}
     </div>
+  );
+}
+
+/* Dibujados a mano y no traídos de una librería de iconos: son dos, y el panel
+   no usa ninguna. */
+function IconoOjo() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
+function IconoOjoTachado() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+      <line x1="1" y1="1" x2="23" y2="23" />
+    </svg>
   );
 }

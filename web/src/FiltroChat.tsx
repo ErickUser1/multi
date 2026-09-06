@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { useTextos } from "./i18n.js";
-import type { Agent, Member } from "./socket.js";
+
+/** Alguien a quien se le puede filtrar: está en la sala o habló alguna vez. */
+export interface Filtrable {
+  nombre: string;
+  color: string;
+  agente: boolean;
+}
 
 /**
  * El botón que abre el filtro del chat.
@@ -14,8 +20,7 @@ import type { Agent, Member } from "./socket.js";
  * llena, mientras que una lista con nombres se lee igual de bien.
  */
 export function FiltroChat(props: {
-  members: Member[];
-  agents: Agent[];
+  gente: Filtrable[];
   filtro: Set<string>;
   onAlternar: (nombre: string) => void;
   onLimpiar: () => void;
@@ -42,8 +47,8 @@ export function FiltroChat(props: {
     };
   }, [abierto]);
 
-  // Sin nadie en la sala no hay nada que filtrar.
-  if (props.members.length === 0 && props.agents.length === 0) return null;
+  // Sin nadie que haya hablado no hay nada que filtrar.
+  if (props.gente.length === 0) return null;
 
   const activos = props.filtro.size;
 
@@ -60,23 +65,14 @@ export function FiltroChat(props: {
 
       {abierto && (
         <div className="filtro-menu">
-          {props.members.map((m) => (
+          {props.gente.map((g) => (
             <Fila
-              key={m.socketId}
-              nombre={m.name}
-              color={m.color}
-              marcado={props.filtro.has(m.name)}
-              onClick={() => props.onAlternar(m.name)}
-            />
-          ))}
-          {props.agents.map((a) => (
-            <Fila
-              key={a.id}
-              nombre={a.name}
-              color={a.color}
-              agente
-              marcado={props.filtro.has(a.name)}
-              onClick={() => props.onAlternar(a.name)}
+              key={g.nombre}
+              nombre={g.nombre}
+              color={g.color}
+              agente={g.agente}
+              marcado={props.filtro.has(g.nombre)}
+              onClick={() => props.onAlternar(g.nombre)}
             />
           ))}
           {activos > 0 && (

@@ -339,6 +339,37 @@ function Sala({
     [messages, filtro],
   );
   const ocultos = messages.length - mensajesVisibles.length;
+
+  /**
+   * Quiénes se pueden filtrar: los que están conectados MÁS los que hablaron.
+   *
+   * No basta con `members`: esa lista es de quien está AHORA, y quien cerró la
+   * pestaña desaparece de ahí aunque sus mensajes sigan en el chat. Filtrar por
+   * alguien que ya se fue es justo lo que se quiere poder hacer — es su
+   * conversación la que hay que poder aislar.
+   *
+   * Los que siguen dentro conservan su color real; a los que se fueron se les
+   * saca del propio mensaje, que ya lo trae.
+   */
+  const filtrables = useMemo(() => {
+    const vistos = new Map<string, { nombre: string; color: string; agente: boolean }>();
+    for (const m of members) {
+      vistos.set(m.name, { nombre: m.name, color: m.color, agente: false });
+    }
+    for (const a of agents) {
+      vistos.set(a.name, { nombre: a.name, color: a.color, agente: true });
+    }
+    for (const msg of messages) {
+      if (msg.role === "system") continue;
+      if (vistos.has(msg.from)) continue;
+      vistos.set(msg.from, {
+        nombre: msg.from,
+        color: msg.color,
+        agente: msg.role === "agent",
+      });
+    }
+    return [...vistos.values()];
+  }, [members, agents, messages]);
   const alternarFiltro = useCallback((nombre: string) => {
     setFiltro((prev) => {
       const siguiente = new Set(prev);
@@ -930,8 +961,7 @@ function Sala({
             atajo para quien ya lo sabe. Sin él, nada anuncia que existe. */}
         {roomId && (
           <FiltroChat
-            members={members}
-            agents={agents}
+            gente={filtrables}
             filtro={filtro}
             onAlternar={alternarFiltro}
             onLimpiar={() => setFiltro(new Set())}

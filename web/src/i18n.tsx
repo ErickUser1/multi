@@ -106,6 +106,16 @@ const TEXTOS = {
 
     // Presentar
     ocultarChat: "Ocultar el chat",
+
+    // Filtro del chat
+    filtrarChat: "Filtrar",
+    filtrandoA: (n: number) => (n === 1 ? "Filtrando a 1" : `Filtrando a ${n}`),
+    tagAgente: "agente",
+    filtrarPor: (quien: string) => `Ver solo lo de ${quien}`,
+    quitarDelFiltro: (quien: string) => `Quitar a ${quien} del filtro`,
+    mensajesOcultos: (n: number) =>
+      n === 1 ? "1 mensaje oculto" : `${n} mensajes ocultos`,
+    verTodo: "Ver todo",
     mostrarChat: "Mostrar el chat",
 
     // Imágenes
@@ -303,6 +313,15 @@ const TEXTOS = {
 
     // Presentar
     ocultarChat: "Hide the chat",
+
+    // Chat filter
+    filtrarChat: "Filter",
+    filtrandoA: (n: number) => (n === 1 ? "Filtering 1" : `Filtering ${n}`),
+    tagAgente: "agent",
+    filtrarPor: (quien: string) => `Show only ${quien}`,
+    quitarDelFiltro: (quien: string) => `Remove ${quien} from the filter`,
+    mensajesOcultos: (n: number) => (n === 1 ? "1 message hidden" : `${n} messages hidden`),
+    verTodo: "Show all",
     mostrarChat: "Show the chat",
 
     // Imágenes

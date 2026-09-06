@@ -922,6 +922,149 @@ img.av {
   height: 28px;
   border: 2px solid var(--fondo);
 }
+
+/* Los avatares de la presencia filtran el chat al clicarlos.
+   El botón no se ve: es solo el área clicable alrededor del avatar que ya
+   estaba ahí, para no meter un control nuevo en una columna estrecha. */
+.filtro-btn {
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  transition: opacity 0.15s ease, border-color 0.15s ease;
+}
+.filtro-btn:hover {
+  opacity: 0.8;
+}
+/* Seleccionado: el borde toma el color de la persona (va en línea, desde JS).
+   Los NO seleccionados se atenúan en vez de esconderse: hay que poder ver a
+   quién falta para sumarlo al filtro. */
+.filtro-btn.off {
+  opacity: 0.35;
+}
+.filtro-btn.on .av {
+  border-color: transparent;
+}
+
+/* El botón que abre el filtro, arriba del chat. Los avatares de la presencia
+   hacen lo mismo, pero nada en ellos anuncia que se puede: este es el que hace
+   descubrible la función. */
+.filtro-caja {
+  position: relative;
+  padding: 0 16px 8px;
+}
+.filtro-abrir {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 1px solid var(--linea);
+  border-radius: 3px;
+  color: var(--dim);
+  font-size: 11px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  padding: 7px 10px;
+  cursor: pointer;
+}
+.filtro-abrir:hover {
+  color: var(--texto);
+  border-color: var(--dim);
+}
+/* Con filtro puesto el botón deja de ser neutro: es la única pista permanente
+   de que lo que se está viendo no es todo. */
+.filtro-abrir.on {
+  color: var(--acento);
+  border-color: var(--acento);
+}
+
+.filtro-menu {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  top: calc(100% - 4px);
+  background: var(--fondo2);
+  border: 1px solid var(--linea);
+  border-radius: 6px;
+  /* Tope y scroll: la lista crece con la sala (la gente MÁS los agentes), y sin
+     esto una sala llena taparía el chat que se vino a leer. */
+  max-height: 45vh;
+  overflow-y: auto;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  z-index: 30;
+}
+.filtro-fila {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  text-align: left;
+}
+.filtro-fila:hover {
+  background: var(--panel);
+}
+.filtro-punto {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.filtro-nombre {
+  font-weight: 600;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.filtro-check {
+  color: var(--acento);
+  font-size: 12px;
+  width: 12px;
+}
+.filtro-limpiar {
+  width: 100%;
+  background: transparent;
+  border: none;
+  border-top: 1px solid var(--linea);
+  color: var(--dim);
+  font-size: 11.5px;
+  padding: 8px 12px;
+  cursor: pointer;
+  text-align: left;
+}
+.filtro-limpiar:hover {
+  color: var(--texto);
+}
+
+/* Un chat filtrado se ve igual que uno vacío. Esta línea es lo único que
+   distingue "no hay mensajes" de "los escondiste tú". */
+.filtro-aviso {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 16px;
+  font-size: 11.5px;
+  color: var(--dim);
+  border-bottom: 1px solid var(--linea);
+}
+.filtro-aviso button {
+  background: transparent;
+  border: none;
+  color: var(--acento);
+  font-size: 11.5px;
+  cursor: pointer;
+  padding: 0;
+}
+.filtro-aviso button:hover {
+  text-decoration: underline;
+}
 .invitar {
   font-size: 10px;
   letter-spacing: 2px;

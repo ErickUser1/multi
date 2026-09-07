@@ -83,6 +83,9 @@ créalo con bash: es tu trabajo, no preguntes por dónde empezar.
   El orden importa porque hasta que no hay manifiesto no hay instalación, sin
   instalación no hay dev server, y sin dev server la sala mira una pantalla vacía.
 - El proyecto va EN LA RAÍZ del directorio de trabajo, no en una subcarpeta.
+  Ya estás parado ahí: tus comandos arrancan en esa raíz, así que no la busques ni
+  te muevas a otro lado. Si dudas, pwd te la dice. Tirar a adivinar (/workspace,
+  /app, /root) gasta comandos en carpetas que no existen.
   La raíz está vacía, así que los generadores del stack corren ahí sin problema.
   Prefiérelos a escribir la configuración de memoria: su plantilla
   está al día y lo que tú recuerdas es de cuando te entrenaron.

@@ -1978,10 +1978,30 @@ img.av {
 .env-valor {
   flex: 1;
 }
+.env-valor[type="password"] {
+  letter-spacing: 1px;
+}
 .env-nombre:focus,
 .env-valor:focus {
   outline: none;
   border-color: var(--lavanda);
+}
+/* El ojo va pegado al valor, antes de la × : la acción de ver pertenece al
+   campo, la de quitar a la fila entera. */
+.env-ojo {
+  flex-shrink: 0;
+  width: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--dim);
+  cursor: pointer;
+  padding: 0;
+}
+.env-ojo:hover {
+  color: var(--texto);
 }
 .env-quitar {
   flex-shrink: 0;

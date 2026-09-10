@@ -8,9 +8,10 @@ import {
   isDockerAvailable,
   startContainer,
   stopContainer,
+  IMAGE_TAG,
   type Container,
 } from "./engine/container.js";
-import { containerRunner, localRunner, type Runner } from "./engine/runner.js";
+import { containerRunner, localRunner, NoHayAislamiento, type Runner } from "./engine/runner.js";
 import type { Message } from "./agent/providers/types.js";
 import { AgentRegistry } from "./engine/agents.js";
 import { KeyedMutex } from "./engine/keyed-mutex.js";
@@ -291,6 +292,10 @@ async function bootPreview(room: Room): Promise<void> {
 
     await maybeStartPreview(room);
   } catch (err) {
+    // Sin aislamiento el error ya se explicó al detalle en `ensureRunner`, y
+    // aquí nadie está esperando: esto corre en segundo plano al despertar la
+    // sala. Quien entre lo va a ver al pedirle algo al agente.
+    if (err instanceof NoHayAislamiento) return;
     console.error(`[sala ${room.id}] falló el arranque:`, err);
   }
 }
@@ -372,6 +377,20 @@ async function arrancarPreview(
     }
 
     onEtapa?.("servidor");
+
+    /**
+     * Si el runner está aislado, el dev server TIENE que ir por el contenedor.
+     *
+     * Son dos decisiones sobre el mismo hecho tomadas con datos distintos: el
+     * runner mira si `startContainer` funcionó, y esto miraba
+     * `container.publishedPort`, que puede venir nulo con un contenedor vivo si
+     * `readPublishedPort` falla. Cuando divergían, el proyecto arrancaba en la
+     * máquina del server mientras el agente creía estar encerrado.
+     */
+    if (runner.isolated && !room.container?.publishedPort) {
+      throw new NoHayAislamiento(`la sala ${room.id} no tiene puerto publicado`);
+    }
+
     room.preview = room.container?.publishedPort
       ? await startPreview(room.workspace, launch, {
           roomId: room.id,
@@ -384,6 +403,12 @@ async function arrancarPreview(
     console.log(`[sala ${room.id}] preview listo en ${room.preview.url}`);
     return room.preview.url;
   } catch (err) {
+    // Un fallo de aislamiento se propaga en vez de volverse `null`: arriba,
+    // `null` significa "la sala sigue vacía", que es el estado normal al
+    // empezar. Devolverlo aquí dejaba a la gente mirando una sala en blanco
+    // como si no hubiera proyecto, cuando el proyecto está y lo que falta es
+    // dónde correrlo.
+    if (err instanceof NoHayAislamiento) throw err;
     console.error(`[sala ${room.id}] falló el preview:`, err);
     return null;
   } finally {
@@ -402,11 +427,20 @@ const INTERNAL_DEV_PORT = 5173;
 /**
  * El runner de la sala: dónde corren los comandos del agente.
  *
- * Con Docker, arranca (o reusa) el contenedor de la sala. Sin Docker, cae al
- * runner local — el server ya avisó al arrancar que no hay aislamiento.
+ * Con Docker, arranca (o reusa) el contenedor de la sala, y si no puede, LANZA.
+ * Sin Docker, o con MULTI_SIN_AISLAMIENTO=1, cae al runner local, que son los
+ * dos únicos caminos por los que se ejecuta fuera de un contenedor, y los dos
+ * los eligió alguien. El arranque del server ya gritó en ambos casos.
  */
 export async function ensureRunner(room: Room): Promise<Runner> {
   if (room.runner) return room.runner;
+
+  // Se lee aquí y no como constante del módulo para que una demo pueda probar
+  // los dos caminos en el mismo proceso.
+  if (process.env.MULTI_SIN_AISLAMIENTO === "1") {
+    room.runner = localRunner(room.workspace.dir);
+    return room.runner;
+  }
 
   if (await isDockerAvailable()) {
     try {
@@ -415,12 +449,35 @@ export async function ensureRunner(room: Room): Promise<Runner> {
       console.log(`[sala ${room.id}] contenedor listo (${room.container.name})`);
       return room.runner;
     } catch (err) {
-      // Que Docker exista pero falle NO debe dejar la sala muerta: se avisa
-      // fuerte y se sigue sin aislamiento, igual que si no estuviera instalado.
-      console.error(`[sala ${room.id}] no se pudo crear el contenedor, sigue SIN aislar:`, err);
+      /**
+       * Aquí antes se caía al runner local, y esa fue la peor decisión del
+       * proyecto hasta ahora.
+       *
+       * El razonamiento parecía bueno: que Docker falle no debería dejar la sala
+       * muerta. Pero "seguir" significaba ejecutar los comandos del agente en la
+       * máquina del server, como el usuario que arrancó Multi, y eso solo se
+       * decía en un `console.error`. Un 7 de septiembre la imagen de las salas
+       * desapareció del servidor, y 62 salas de un experimento con 11 personas
+       * corrieron sin aislar durante dos días sin que nadie se enterara.
+       *
+       * Degradar de "aislado" a "sin aislar" no es lo mismo que degradar de
+       * "con preview" a "sin preview". Lo primero cambia quién puede tocar qué,
+       * y eso no se hace sin que alguien lo decida.
+       *
+       * No se cachea el fallo: el siguiente intento vuelve a probar, y como
+       * `startContainer` reconstruye la imagen si hace falta, una sala puede
+       * curarse sola.
+       */
+      console.error(
+        `[sala ${room.id}] SIN CONTENEDOR: no se pudo aislar, la sala NO va a ejecutar código.\n` +
+          `  causa: ${err}\n` +
+          `  revisa: docker images ${IMAGE_TAG} | docker info`,
+      );
+      throw new NoHayAislamiento(`la sala ${room.id} no se pudo aislar`);
     }
   }
 
+  // Sin Docker en la máquina. El arranque ya lo gritó.
   room.runner = localRunner(room.workspace.dir);
   return room.runner;
 }

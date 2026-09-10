@@ -69,17 +69,52 @@ export async function isDockerAvailable(): Promise<boolean> {
   return dockerAvailable;
 }
 
-/** Construye la imagen de las salas si todavía no existe. Idempotente. */
-export async function ensureImage(repoRoot: string): Promise<void> {
-  const { stdout } = await execFileP("docker", ["images", "-q", IMAGE_TAG]);
-  if (stdout.trim().length > 0) return;
+/**
+ * La raíz del repo, para saber dónde está el Dockerfile.
+ *
+ * Se recuerda en el arranque en vez de viajar por parámetro hasta
+ * `startContainer`: la necesita el reintento de la imagen, que ocurre tres
+ * capas más abajo de quien la conoce.
+ */
+let repoRootRecordado: string | null = null;
 
-  console.log(`[docker] construyendo la imagen ${IMAGE_TAG} (solo la primera vez)…`);
+export function recordarRepoRoot(dir: string): void {
+  repoRootRecordado = dir;
+}
+
+/**
+ * Ya se comprobó que la imagen existe.
+ *
+ * Se recuerda porque preguntar cuesta unos 50ms y la respuesta casi siempre es
+ * que sí. Pero se OLVIDA en cuanto un `docker run` falla (ver abajo), y ahí está
+ * todo el asunto: la imagen puede desaparecer con el server corriendo. Un
+ * `docker image prune` se lleva la etiqueta y deja las capas, así que el
+ * siguiente build sale entero de caché en segundos.
+ *
+ * Comprobarla solo al arrancar no alcanza cuando el proceso vive días.
+ */
+let imagenVerificada = false;
+
+/** Construye la imagen de las salas si todavía no existe. Idempotente. */
+export async function ensureImage(repoRoot?: string): Promise<void> {
+  if (imagenVerificada) return;
+
+  const { stdout } = await execFileP("docker", ["images", "-q", IMAGE_TAG]);
+  if (stdout.trim().length > 0) {
+    imagenVerificada = true;
+    return;
+  }
+
+  const raiz = repoRoot ?? repoRootRecordado;
+  if (!raiz) throw new Error("no sé dónde está el Dockerfile de las salas");
+
+  console.log(`[docker] construyendo la imagen ${IMAGE_TAG}…`);
   await execFileP(
     "docker",
-    ["build", "-t", IMAGE_TAG, "-f", join(repoRoot, "docker", "room.Dockerfile"), repoRoot],
+    ["build", "-t", IMAGE_TAG, "-f", join(raiz, "docker", "room.Dockerfile"), raiz],
     { timeout: 600_000, maxBuffer: 10 * 1024 * 1024 },
   );
+  imagenVerificada = true;
   console.log(`[docker] imagen lista`);
 }
 
@@ -107,6 +142,11 @@ export async function startContainer(
     if (existing === "running") {
       return { roomId, name, publishedPort: await readPublishedPort(name, devPort) };
     }
+
+    // Antes de cada contenedor y no solo al arrancar el server: la imagen puede
+    // haberse ido mientras el proceso vivía. Casi siempre es un `docker images`
+    // de 50ms, porque el resultado se recuerda.
+    await ensureImage();
     // Un contenedor parado con la config vieja no sirve: se rehace.
     if (existing !== null) await removeContainer(name);
 
@@ -179,9 +219,17 @@ export async function startContainer(
     } catch (err) {
       // Cinturón por si el nombre quedó tomado de todos modos (un contenedor
       // que Docker seguía borrando, por ejemplo): se limpia y se reintenta una vez.
-      if (!String(err).includes("already in use")) throw err;
-      await removeContainer(name);
-      await execFileP("docker", args, { timeout: 60_000 });
+      if (String(err).includes("already in use")) {
+        await removeContainer(name);
+        await execFileP("docker", args, { timeout: 60_000 });
+      } else {
+        // Cualquier otro fallo pone en duda la imagen, así que la próxima sala
+        // vuelve a comprobarla. Es lo que cura solo el caso que motivó todo
+        // esto: la imagen desaparece, la primera sala falla, y la siguiente la
+        // reconstruye sin que nadie tenga que enterarse.
+        imagenVerificada = false;
+        throw err;
+      }
     }
 
     return { roomId, name, publishedPort: await readPublishedPort(name, devPort) };

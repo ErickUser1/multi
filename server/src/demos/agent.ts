@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { runAgent } from "../agent/loop.js";
+import { localRunner } from "../engine/runner.js";
 import { AnthropicProvider } from "../agent/providers/anthropic.js";
 import { MockProvider } from "../agent/providers/mock.js";
 import { WORKSPACES_ROOT } from "../engine/workspace.js";
@@ -100,6 +101,8 @@ async function main() {
   const result = await runAgent({
     provider,
     workspaceDir,
+    // Sin contenedor a propósito: es una demo, y el runner se pide explícito.
+    runner: localRunner(workspaceDir),
     messages: [],
     userMessage: prompt,
     callbacks: {

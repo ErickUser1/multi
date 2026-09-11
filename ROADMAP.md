@@ -320,6 +320,30 @@ has its commit.
 
 ---
 
+## Room ids are guessable
+
+A room's id is its whole access control: whoever has the link is in. That's
+deliberate, and the ids are readable on purpose (`chido-fiesta-61`, not a UUID)
+so you can say one out loud over the phone.
+
+But readable also means guessable. Eight adjectives by eight nouns by ninety
+numbers is 5,760 possible ids, and after two sessions with students there are 162
+rooms on the server. That's roughly one hit every thirty-five tries, which is
+guessable by hand, never mind with a script. Typing an id you didn't get from
+anyone drops you straight into someone else's room, with their chat, their
+preview and their project, and they see you arrive.
+
+For classroom projects that's a curiosity. It stops being one the moment someone
+puts real credentials in the Variables panel, which is exactly what the panel is
+for.
+
+The fix isn't UUIDs: dictating one over the phone is the thing the readable ids
+were protecting. A longer id keeps the shape (three words instead of two, or a
+wider vocabulary) and moves the space far enough out that guessing stops paying.
+Rooms that already exist keep their ids.
+
+---
+
 ## Outbound network from a room's container
 
 A room's container publishes exactly one port, the dev server's. That covers what

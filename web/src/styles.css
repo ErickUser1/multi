@@ -2494,3 +2494,27 @@ img.av {
 .adjunto-doc-link:hover {
   border-color: var(--lavanda);
 }
+
+/* Mientras el `joined` no llega, el chat dice que está cargando en vez de
+   verse igual que una sala donde nadie ha hablado. Reusa `preview-barra`, que
+   ya resuelve esto mismo en el iframe; el `relative` es para que la barra
+   tenga de dónde colgarse. */
+.chat-cargando {
+  position: relative;
+  margin: auto;
+  padding: 24px 12px;
+  color: var(--dim);
+  font-size: 13px;
+  text-align: center;
+}
+
+/* Se cayó la conexión con mensajes ya en pantalla. Va arriba del chat y no en
+   medio: lo de abajo sigue siendo válido, solo dejó de actualizarse. */
+.chat-desconectado {
+  padding: 6px 12px;
+  background: var(--fondo2);
+  border-bottom: 1px solid var(--linea);
+  color: var(--dim);
+  font-size: 11.5px;
+  text-align: center;
+}

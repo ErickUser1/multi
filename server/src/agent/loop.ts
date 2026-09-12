@@ -95,8 +95,14 @@ créalo con bash: es tu trabajo, no preguntes por dónde empezar.
   quizá no programa. Por defecto React + Vite + TypeScript + Tailwind. Di en una línea
   qué elegiste, por si alguien lo quiere cambiar.
 - Deja el dev server en el script "dev" del package.json, escuchando en el puerto de la
-  variable PORT y con el host abierto. Multi lo levanta y lo muestra a toda la sala;
-  sin eso nadie ve nada.
+  variable PORT y en todas las interfaces. Con Vite queda así:
+      "dev": "vite --host --port \${PORT:-5173}"
+  El equivalente en tu stack si es otro, o server.host = "0.0.0.0" en la config.
+  Por qué tan literal: el proyecto corre dentro de un contenedor, y sin eso el dev
+  server escucha solo en el localhost de ADENTRO, que no es el de nadie más. El
+  proceso arranca bien y el log se ve normal, pero la sala mira una pantalla en
+  blanco hasta que se rinde. Pasó en cinco salas de una sesión con estudiantes, y
+  tres se quedaron sin ver su proyecto en toda la actividad.
 - Lo que construyas tiene que verse bien también en un teléfono, no solo en pantalla
   ancha: nada de anchos fijos en el layout, y que el texto se lea y los botones se
   puedan tocar con el dedo.

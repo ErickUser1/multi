@@ -9,16 +9,20 @@ import {
   startContainer,
   stopContainer,
 } from "../engine/container.js";
-import { containerRunner, localRunner } from "../engine/runner.js";
+import { containerRunner, localRunner, NoHayAislamiento } from "../engine/runner.js";
 
 /**
  * Demo Fase 7b: verifica que el agente NO puede salirse de su sala.
  * Uso: npm run demo:aislamiento
  *
  * El punto: las tools de archivos ya validan la ruta (safePath), pero bash no
- * puede — a un shell le das cwd, que dice dónde EMPIEZA, no hasta dónde LLEGA.
+ * puede, a un shell le das cwd, que dice dónde EMPIEZA, no hasta dónde LLEGA.
  * Esta demo prueba las dos cosas: que sin contenedor bash SÍ se sale (por eso
  * existe la fase), y que con contenedor ya no.
+ *
+ * Las secciones 8 y 9 cubren lo que pasa cuando el contenedor no se puede
+ * crear. Antes la sala caía al runner local sin decirle a nadie, y así 62 salas
+ * de un experimento corrieron en la máquina del server durante dos días.
  */
 
 let pass = 0;
@@ -137,6 +141,65 @@ async function main() {
     muerto === null || muerto.code !== 0,
     muerto ? `code ${muerto.code}` : "",
   );
+
+  /**
+   * El caso que nadie cubría, y que costó 62 salas sin aislar.
+   *
+   * Las secciones de arriba prueban que el contenedor encierra. Esta prueba lo
+   * otro: qué pasa cuando NO se puede crear. Antes se caía al runner local en
+   * silencio, así que el agente seguía trabajando, pero en la máquina del
+   * server.
+   *
+   * Para forzar el fallo, un id de sala que Docker rechaza como nombre de
+   * contenedor: `docker run` truena de inmediato y sin tocar la imagen (borrarla
+   * haría que la demo tarde minutos en reconstruirla). No se usa
+   * MULTI_ROOM_MEMORY porque el límite se lee al importar el módulo, así que
+   * cambiarlo aquí no haría nada y la prueba pasaría por la razón equivocada.
+   */
+  console.log("\n8. Si el contenedor no se puede crear, la sala NO ejecuta nada");
+  {
+    const { ensureRunner } = await import("../rooms.js");
+
+    const sala = {
+      id: "Sala Con Espacios",
+      workspace: await createWorkspace("demo-aislamiento-falla", { clean: true }),
+    } as never as Parameters<typeof ensureRunner>[0];
+
+    let lanzo: unknown = null;
+    try {
+      await ensureRunner(sala);
+    } catch (err) {
+      lanzo = err;
+    }
+
+    check(
+      "lanza en vez de degradar",
+      lanzo instanceof NoHayAislamiento,
+      lanzo ? `lanzó ${lanzo}` : "no lanzó nada",
+    );
+    check(
+      "no se queda con un runner sin aislar",
+      (sala as { runner?: unknown }).runner === undefined,
+      "quedó un runner cacheado",
+    );
+  }
+
+  console.log("\n9. Con MULTI_SIN_AISLAMIENTO=1 sí corre local, porque alguien lo pidió");
+  {
+    const { ensureRunner } = await import("../rooms.js");
+    process.env.MULTI_SIN_AISLAMIENTO = "1";
+
+    const sala = {
+      id: "demo-aislamiento-explicito",
+      workspace: await createWorkspace("demo-aislamiento-explicito", { clean: true }),
+    } as never as Parameters<typeof ensureRunner>[0];
+
+    const runner = await ensureRunner(sala);
+    check("devuelve un runner", runner !== undefined);
+    check("y NO está aislado", runner?.isolated === false);
+
+    delete process.env.MULTI_SIN_AISLAMIENTO;
+  }
 
   console.log(`\n${pass} pasaron, ${fail} fallaron\n`);
   process.exit(fail > 0 ? 1 : 0);

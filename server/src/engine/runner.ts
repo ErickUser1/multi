@@ -8,6 +8,16 @@ import { execInContainer, type ExecResult } from "./container.js";
  * o directo en la máquina (cuando no hay Docker). La tool de bash no sabe cuál
  * le tocó — solo pide "corre esto".
  */
+/**
+ * No se pudo aislar la sala, así que no va a ejecutar nada.
+ *
+ * Es un tipo propio y no un Error cualquiera porque arriba hay que distinguirlo
+ * de "falló el proyecto": al agente y a quien está en la sala se les dice cosas
+ * muy distintas. Ir por el tipo y no por el texto deja cambiar los mensajes sin
+ * romper esa traducción.
+ */
+export class NoHayAislamiento extends Error {}
+
 export interface Runner {
   readonly isolated: boolean;
   exec(
@@ -36,9 +46,16 @@ export function containerRunner(roomId: string): Runner {
  * El de respaldo: el comando corre en la máquina donde vive el server.
  *
  * `cwd` acota dónde EMPIEZA el comando, no hasta dónde llega: un `cd ..` sale
- * del workspace. No es un descuido de esta función — es el límite de lo que se
+ * del workspace. No es un descuido de esta función, es el límite de lo que se
  * puede hacer sin ayuda del sistema operativo, y la razón de que exista el
- * contenedor. Se usa solo cuando no hay Docker, y el server lo avisa al arrancar.
+ * contenedor.
+ *
+ * Solo se llega aquí por dos caminos, los dos deliberados: que no haya Docker en
+ * la máquina, o que alguien haya puesto MULTI_SIN_AISLAMIENTO=1. Nunca porque
+ * algo falló. Antes sí: cuando `docker run` tronaba, la sala caía aquí sola y lo
+ * decía en un `console.error` que nadie lee. En un experimento con 11 personas
+ * eso significó 62 salas ejecutando como root en el servidor, y a nadie le
+ * constó hasta dos días después.
  */
 export function localRunner(workspaceDir: string): Runner {
   return {

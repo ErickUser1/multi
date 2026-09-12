@@ -320,6 +320,61 @@ has its commit.
 
 ---
 
+## Room ids are guessable
+
+A room's id is its whole access control: whoever has the link is in. That's
+deliberate, and the ids are readable on purpose (`chido-fiesta-61`, not a UUID)
+so you can say one out loud over the phone.
+
+But readable also means guessable. Eight adjectives by eight nouns by ninety
+numbers is 5,760 possible ids, and after two sessions with students there are 162
+rooms on the server. That's roughly one hit every thirty-five tries, which is
+guessable by hand, never mind with a script. Typing an id you didn't get from
+anyone drops you straight into someone else's room, with their chat, their
+preview and their project, and they see you arrive.
+
+For classroom projects that's a curiosity. It stops being one the moment someone
+puts real credentials in the Variables panel, which is exactly what the panel is
+for.
+
+The fix isn't UUIDs: dictating one over the phone is the thing the readable ids
+were protecting. A longer id keeps the shape (three words instead of two, or a
+wider vocabulary) and moves the space far enough out that guessing stops paying.
+Rooms that already exist keep their ids.
+
+---
+
+## Outbound network from a room's container
+
+A room's container publishes exactly one port, the dev server's. That covers what
+comes IN, and nothing that goes OUT.
+
+Found on 2026-09-07, during the first experiment, by a participant who had been
+asked to try and break it: he installed Arch Linux inside his room's container,
+then XFCE, Firefox and VLC, and exposed the whole desktop through an ngrok tunnel.
+An ngrok tunnel doesn't come in, it dials out, so the single-port rule never
+applies to it. Eight hours of session, and about 15 dollars of API spend that
+looked suspicious until the logs explained it.
+
+So anyone with a room can host whatever they want on the host machine, on its
+bandwidth and its IP. Today the blast radius is small: the tunnel dies with the
+container, and idle rooms already sleep after 30 minutes. On a public service it
+stops being small, because the one answering to the provider is whoever hosts
+Multi.
+
+The fix is not a line in the system prompt. A prompt is a suggestion, not a
+control: ask for cloudflared instead of ngrok, or build the tunnel by hand from
+bash, and the rule is gone. What holds is the network itself: default-deny
+egress with an allowlist for the package registries and whatever the app actually
+needs, plus blocking cloud metadata endpoints and internal ranges. The cost is
+that the allowlist has to be right, or `npm install` breaks.
+
+And it isn't solved by moving to a managed sandbox (Modal, Daytona, E2B): they
+also allow outbound traffic by default. What that buys is that abuse stops being
+your legal problem, which is worth something but is a different thing.
+
+---
+
 ## Hosting
 
 Multi runs locally today. To actually host it, still missing:

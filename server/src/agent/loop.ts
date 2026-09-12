@@ -258,8 +258,8 @@ export async function runAgent(opts: {
   /** Avisos de espera de lock (para mostrar "esperando a X" — dos relojes). */
   onWaitStart?: (info: { path: string; holder?: string }) => void;
   onWaitEnd?: () => void;
-  /** Dónde corren los comandos de bash. Sin esto, corren en la máquina del server. */
-  runner?: ToolContext["runner"];
+  /** Dónde corren los comandos de bash. Obligatorio: ver ToolContext. */
+  runner: ToolContext["runner"];
   /**
    * El historial tal como va, para que sobreviva si el turno LANZA.
    *

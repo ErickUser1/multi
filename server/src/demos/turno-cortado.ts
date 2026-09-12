@@ -2,6 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runAgent } from "../agent/loop.js";
+import { localRunner } from "../engine/runner.js";
 import type { Message, ModelProvider, StreamEvent } from "../agent/providers/types.js";
 
 /**
@@ -122,6 +123,8 @@ async function main() {
         await runAgent({
           provider,
           workspaceDir: dir,
+          // Sin contenedor a propósito: es una demo, y el runner se pide explícito.
+          runner: localRunner(dir),
           messages: [],
           userMessage: "haz el nivel 1",
           onProgreso: (msgs) => {
@@ -157,6 +160,8 @@ async function main() {
         await runAgent({
           provider: p1,
           workspaceDir: dir,
+          // Sin contenedor a propósito: es una demo, y el runner se pide explícito.
+          runner: localRunner(dir),
           messages: [],
           userMessage: "haz el nivel 1",
           onProgreso: (m) => {
@@ -174,6 +179,8 @@ async function main() {
       const r = await runAgent({
         provider: p2,
         workspaceDir: dir,
+        // Sin contenedor a propósito: es una demo, y el runner se pide explícito.
+        runner: localRunner(dir),
         messages: rescatado,
         userMessage: "continua",
       });
@@ -193,6 +200,8 @@ async function main() {
         await runAgent({
           provider,
           workspaceDir: dir,
+          // Sin contenedor a propósito: es una demo, y el runner se pide explícito.
+          runner: localRunner(dir),
           messages: [],
           userMessage: "haz algo",
           onProgreso: (m) => {
@@ -219,6 +228,8 @@ async function main() {
       const r = await runAgent({
         provider,
         workspaceDir: dir,
+        // Sin contenedor a propósito: es una demo, y el runner se pide explícito.
+        runner: localRunner(dir),
         messages: [],
         userMessage: "haz algo",
         onProgreso: (m) => {
@@ -246,6 +257,8 @@ async function main() {
       const r = await runAgent({
         provider,
         workspaceDir: dir,
+        // Sin contenedor a propósito: es una demo, y el runner se pide explícito.
+        runner: localRunner(dir),
         messages: [],
         userMessage: "haz algo",
         signal: ac.signal,

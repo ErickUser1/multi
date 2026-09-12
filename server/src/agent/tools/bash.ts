@@ -1,5 +1,4 @@
 import { type Tool, ToolError, reqString } from "./base.js";
-import { localRunner } from "../../engine/runner.js";
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 const MAX_OUTPUT = 30_000; // truncar salidas enormes para no reventar el contexto
@@ -10,7 +9,7 @@ const MAX_OUTPUT = 30_000; // truncar salidas enormes para no reventar el contex
  * (eso va por edit_file, que es preciso y observable).
  *
  * Dónde corre lo decide el `runner` del contexto: normalmente el contenedor de
- * la sala; sin Docker, la máquina del server. Aquí no se distingue — de eso se
+ * la sala; sin Docker, la máquina del server. Aquí no se distingue, de eso se
  * trata la interfaz.
  */
 export const bashTool: Tool = {
@@ -33,7 +32,7 @@ export const bashTool: Tool = {
 
     ctx.emit?.({ type: "tool:bash", command });
 
-    const runner = ctx.runner ?? localRunner(ctx.workspaceDir);
+    const runner = ctx.runner;
 
     let result;
     try {

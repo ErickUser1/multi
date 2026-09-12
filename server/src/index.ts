@@ -90,7 +90,13 @@ import {
 import { getHistory, setBookmark } from "./engine/history.js";
 import { buildApiMap } from "./engine/api-map.js";
 import { handlePreviewRequest, handlePreviewUpgrade } from "./engine/proxy.js";
-import { isDockerAvailable, ensureImage, sweepOrphanContainers } from "./engine/container.js";
+import {
+  isDockerAvailable,
+  ensureImage,
+  recordarRepoRoot,
+  sweepOrphanContainers,
+} from "./engine/container.js";
+import { NoHayAislamiento } from "./engine/runner.js";
 import { runAgent } from "./agent/loop.js";
 import type { ModelProvider, Message, ContentBlock } from "./agent/providers/types.js";
 import { createDevMock } from "./agent/providers/mock-scenarios.js";
@@ -748,7 +754,12 @@ async function publicarEnSegundoPlano(room: Room, cred: Credencial): Promise<voi
     systemMsg(room, `la app está publicada: ${url}`);
   } catch (err) {
     console.error(`[sala ${room.id}] falló la publicación:`, err);
-    const mensaje = err instanceof NoSePudoPublicar ? err.message : "no se pudo publicar";
+    const mensaje =
+      err instanceof NoHayAislamiento
+        ? AVISO_SIN_AISLAMIENTO
+        : err instanceof NoSePudoPublicar
+          ? err.message
+          : "no se pudo publicar";
     io.to(room.id).emit("deploy:fallo", { mensaje });
     systemMsg(room, `no se pudo publicar: ${mensaje}`, "#d95d63");
   } finally {
@@ -1429,6 +1440,24 @@ async function runAgentTurn(
   room.agents.setState(agentId, "working");
   io.to(room.id).emit("agents", { agents: room.agents.list() });
 
+  /**
+   * Dónde va a correr, ANTES de abrir el turno.
+   *
+   * Si no hay dónde, el turno no llega a existir: el agente no alcanzó a tocar
+   * nada, así que un turno fallido en el historial sería ruido en la línea de
+   * tiempo de la sala, con un commit vacío que no lleva a ningún lado.
+   */
+  let runner;
+  try {
+    runner = await ensureRunner(room);
+  } catch (err) {
+    if (!(err instanceof NoHayAislamiento)) throw err;
+    systemMsg(room, `${agent.name}: ${AVISO_SIN_AISLAMIENTO}`, "#d95d63");
+    room.agents.finish(agentId);
+    io.to(room.id).emit("agents", { agents: room.agents.list() });
+    return;
+  }
+
   const turn = await startTurn(room.workspace.dir, { roomId: room.id, agentId, task });
   // Si la sala despertó tras un reinicio, el historial vive en la BD.
   let history = room.histories.get(agentId);
@@ -1455,7 +1484,7 @@ async function runAgentTurn(
       },
       // Los comandos del agente corren en el contenedor de la sala (o local si
       // no hay Docker). El agente no distingue: es la misma tool.
-      runner: await ensureRunner(room),
+      runner,
       messages: history,
       // Qué están haciendo los demás, para que no repita su trabajo. Se calcula
       // AL EMPEZAR el turno: es una foto del momento, no una suscripción.
@@ -1612,12 +1641,24 @@ function summarizeTool(name: string, input: Record<string, unknown>): string {
  * Que no arranque NO es error: la sala vacía es el estado normal al empezar.
  */
 async function notifyPreviewWhenReady(room: Room): Promise<void> {
-  const url = await maybeStartPreview(room, (etapa) => {
-    // Por dónde va el arranque. Sin esto la sala muestra "está vacía" mientras
-    // el proyecto SÍ existe y se está levantando, que es mentira y se siente
-    // como una pantalla muerta.
-    io.to(room.id).emit("preview:arrancando", { etapa });
-  });
+  let url: string | null;
+  try {
+    url = await maybeStartPreview(room, (etapa) => {
+      // Por dónde va el arranque. Sin esto la sala muestra "está vacía" mientras
+      // el proyecto SÍ existe y se está levantando, que es mentira y se siente
+      // como una pantalla muerta.
+      io.to(room.id).emit("preview:arrancando", { etapa });
+    });
+  } catch (err) {
+    if (!(err instanceof NoHayAislamiento)) throw err;
+    // Se dice una vez, aquí, y no cada vez que alguien entra: quien esté en la
+    // sala necesita saber por qué no hay preview, y es lo mismo que le va a
+    // pasar si le pide algo al agente.
+    systemMsg(room, AVISO_SIN_AISLAMIENTO, "#d95d63");
+    io.to(room.id).emit("preview:sin-arranque");
+    return;
+  }
+
   if (url) {
     io.to(room.id).emit("preview:ready", { previewUrl: url });
     return;
@@ -1653,6 +1694,23 @@ process.on("SIGTERM", () => void shutdown("SIGTERM"));
  * de la máquina debe estar tomando a sabiendas, no descubrir después.
  */
 async function setupIsolation(): Promise<void> {
+  // Quien puso la variable ya sabe lo que hace, pero se le recuerda: es la única
+  // forma de correr sin aislamiento teniendo Docker, y no debería estar puesta
+  // en una máquina con gente entrando a las salas.
+  if (process.env.MULTI_SIN_AISLAMIENTO === "1") {
+    console.warn(
+      [
+        "",
+        "  *** SIN AISLAMIENTO A PROPOSITO (MULTI_SIN_AISLAMIENTO=1) ***",
+        "  Los comandos del agente corren en ESTA máquina, con acceso a todo lo",
+        "  que alcance el usuario que arrancó Multi. Cualquiera que entre a una",
+        "  sala le puede dar órdenes a ese agente.",
+        "",
+      ].join("\n"),
+    );
+    return;
+  }
+
   if (!(await isDockerAvailable())) {
     console.warn(
       [
@@ -1670,6 +1728,9 @@ async function setupIsolation(): Promise<void> {
   const barridos = await sweepOrphanContainers();
   if (barridos > 0) console.log(`[docker] ${barridos} contenedor(es) de una corrida anterior, borrados`);
 
+  // Para que `startContainer` pueda rehacer la imagen si desaparece con el
+  // server ya corriendo, que es justo lo que pasó y nadie notó.
+  recordarRepoRoot(join(process.cwd(), ".."));
   await ensureImage(join(process.cwd(), ".."));
 }
 
@@ -1741,7 +1802,23 @@ async function loadEnv(): Promise<void> {
  * el problema es su cuenta, su key, o que el servicio se cayó — y sin saberlo no
  * puede hacer nada.
  */
+/**
+ * Lo que ve la gente de la sala cuando no se pudo aislar.
+ *
+ * No dice "Docker" ni "contenedor": esas palabras no significan nada para quien
+ * está adentro, que puede no ser programador. Dice qué no se puede hacer, qué SI
+ * sigue guardado (para que nadie crea que perdió su trabajo) y de quién es el
+ * problema. El detalle técnico va al log del server.
+ */
+const AVISO_SIN_AISLAMIENTO =
+  "no puedo ejecutar código en esta sala ahora mismo, falta la caja donde corre. " +
+  "Pueden seguir platicando, y todo lo que ya hicieron sigue guardado. " +
+  "Quien administra este Multi tiene que revisarlo.";
+
 function explicarFalla(err: unknown): string {
+  // Por tipo y no por texto: así el mensaje se puede reescribir sin romper esto.
+  if (err instanceof NoHayAislamiento) return AVISO_SIN_AISLAMIENTO;
+
   const texto = String(err);
 
   // Antes que el de créditos: este mensaje TAMBIÉN habla de saldo, y si cae en

@@ -9,10 +9,15 @@ export interface ToolContext {
   /** Raíz del workspace de la sala. Ninguna tool puede salir de aquí. */
   workspaceDir: string;
   /**
-   * Dónde se ejecutan los comandos de bash (contenedor de la sala o, sin Docker,
-   * la máquina del server). Si falta, bash corre local — es lo que usan los demos.
+   * Dónde se ejecutan los comandos de bash: el contenedor de la sala o, cuando
+   * no hay aislamiento, la máquina del server.
+   *
+   * Obligatorio a propósito. Antes era opcional y bash caía al runner local
+   * cuando faltaba, así que un olvido en cualquier llamador nuevo abría un
+   * camino silencioso al host. Quien no tenga contenedor (los demos) tiene que
+   * escribir `localRunner` con las manos, y eso se ve en un diff.
    */
-  runner?: import("../../engine/runner.js").Runner;
+  runner: import("../../engine/runner.js").Runner;
   /** Emite un evento observable (ej. file:changed). Opcional (CLI no lo usa). */
   emit?: (event: ToolEvent) => void;
   /** Quién está usando las tools. Para el CAS ("lo tocó Agente-1") y los locks. */

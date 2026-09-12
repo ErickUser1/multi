@@ -222,11 +222,23 @@ export async function startContainer(
       if (String(err).includes("already in use")) {
         await removeContainer(name);
         await execFileP("docker", args, { timeout: 60_000 });
+      } else if (/Unable to find image|No such image|pull access denied/i.test(String(err))) {
+        /**
+         * La imagen se fue mientras el proceso creía tenerla.
+         *
+         * Se reconstruye y se reintenta AQUÍ, no en la sala siguiente. Probado
+         * en el servidor: dejarlo para la próxima funciona, pero la primera
+         * sala que llega paga el error completo, y esa es una persona mirando
+         * una sala que no arranca sin saber por qué. La imagen tarda medio
+         * minuto en rehacerse desde caché, que es menos que explicarlo.
+         */
+        console.warn(`[docker] la imagen ${IMAGE_TAG} ya no está; se reconstruye`);
+        imagenVerificada = false;
+        await ensureImage();
+        await execFileP("docker", args, { timeout: 60_000 });
       } else {
         // Cualquier otro fallo pone en duda la imagen, así que la próxima sala
-        // vuelve a comprobarla. Es lo que cura solo el caso que motivó todo
-        // esto: la imagen desaparece, la primera sala falla, y la siguiente la
-        // reconstruye sin que nadie tenga que enterarse.
+        // vuelve a comprobarla.
         imagenVerificada = false;
         throw err;
       }

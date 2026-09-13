@@ -273,6 +273,17 @@ function Sala({
    * blanco sin que nada diga que algo está pasando.
    */
   const [cargandoFrame, setCargandoFrame] = useState(false);
+
+  /**
+   * Ya llegó el estado de la sala (el `joined`).
+   *
+   * Sin esto, entre que el socket conecta y el server responde, el chat vacío se
+   * ve IGUAL que una sala donde nadie ha hablado. Con internet lento eso son
+   * varios segundos, y en las sesiones con estudiantes fue lo más reportado:
+   * recargaban, veían todo en blanco y creían que habían perdido su trabajo.
+   * Nadie perdió nada, faltaba decirles que estaban esperando.
+   */
+  const [unido, setUnido] = useState(false);
   const [draft, setDraft] = useState("");
   /**
    * El nombre de la sala, o null si nadie la ha nombrado (ahí se ve el id).
@@ -459,6 +470,10 @@ function Sala({
     const socket = connectSocket();
     socketRef.current = socket;
 
+    // Se cayó la conexión. Socket.io reconecta solo, así que esto no arregla
+    // nada: solo evita que la sala se vea normal mientras ya no llega nada.
+    socket.on("disconnect", () => setUnido(false));
+
     socket.on("connect", () => {
       socket.emit("join", { roomId, name });
       // La key ya configurada viaja sola: no se pide de nuevo en cada sala.
@@ -467,6 +482,7 @@ function Sala({
     });
 
     socket.on("joined", (p: JoinedPayload) => {
+      setUnido(true);
       setMembers(p.members);
       setNombre(p.nombre ?? null);
       recordarNombre(roomId, p.nombre ?? null);
@@ -905,6 +921,12 @@ function Sala({
     <div className={`sala ver-${tab} ${chatColapsado ? "chat-colapsado" : ""}`}>
       {/* Chat izquierda */}
       <aside className="chat">
+        {/* Con mensajes ya en pantalla, el chat se ve normal aunque no llegue
+            nada. Esta barra es lo único que distingue "nadie ha escrito" de
+            "se cayó el wifi". */}
+        {roomId && !unido && messages.length > 0 && (
+          <div className="chat-desconectado">{t.reconectando}</div>
+        )}
         <div className="sala-cab">
           <MenuSalas actual={roomId ?? undefined} />
           <div className="sala-titulo">
@@ -997,6 +1019,15 @@ function Sala({
         )}
 
         <div className="chat-scroll">
+          {/* Solo mientras no sabemos qué hay: en cuanto llega el `joined`, un
+              chat vacío SÍ significa que nadie ha hablado. Y si ya hay mensajes
+              pintados (una reconexión), taparlos sería peor que el vacío. */}
+          {roomId && !unido && messages.length === 0 && (
+            <div className="chat-cargando">
+              <div className="preview-barra" aria-hidden="true" />
+              <p>{t.cargandoSala}</p>
+            </div>
+          )}
           {mensajesVisibles.map((m, i) => (
             // Mensajes seguidos del mismo autor se agrupan sin repetir avatar
             // ni nombre (patrón Discord): el chat respira y se lee como
@@ -1361,6 +1392,13 @@ function Sala({
                 <>
                   <p>{t.ningunaSala}</p>
                   <p className="preview-loading-sub">{t.eligeOCrea}</p>
+                </>
+              ) : !unido ? (
+                // Hay sala, pero su estado todavía no llega. Decir aquí que está
+                // vacía sería inventar: no se sabe.
+                <>
+                  <div className="preview-spinner" aria-hidden="true" />
+                  <p>{t.cargandoSala}</p>
                 </>
               ) : (
                 <>

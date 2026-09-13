@@ -284,6 +284,25 @@ function Sala({
    * Nadie perdió nada, faltaba decirles que estaban esperando.
    */
   const [unido, setUnido] = useState(false);
+
+  /**
+   * Ya pasó el tiempo suficiente como para que valga la pena decir "cargando".
+   *
+   * Con conexión buena el `joined` llega en milisegundos, y un indicador que
+   * aparece y desaparece en ese rato es peor que no poner nada: parpadea en cada
+   * entrada a una sala, incluso en una recién creada que sabemos vacía. Este
+   * retraso deja pasar el caso rápido en silencio, que es el común, y solo habla
+   * cuando la espera de verdad se siente.
+   */
+  const [esperaLarga, setEsperaLarga] = useState(false);
+  useEffect(() => {
+    if (unido || !roomId) {
+      setEsperaLarga(false);
+      return;
+    }
+    const t = setTimeout(() => setEsperaLarga(true), 600);
+    return () => clearTimeout(t);
+  }, [unido, roomId]);
   const [draft, setDraft] = useState("");
   /**
    * El nombre de la sala, o null si nadie la ha nombrado (ahí se ve el id).
@@ -466,6 +485,10 @@ function Sala({
     // Sin sala no hay a qué conectarse: la Sala vacía es solo el marco con el
     // menú y el botón de crear.
     if (!roomId) return;
+
+    // Cambiar de sala deja el estado de la anterior: sin esto, entrar a una
+    // segunda sala la pinta como si ya se supiera qué hay dentro.
+    setUnido(false);
 
     const socket = connectSocket();
     socketRef.current = socket;
@@ -924,7 +947,7 @@ function Sala({
         {/* Con mensajes ya en pantalla, el chat se ve normal aunque no llegue
             nada. Esta barra es lo único que distingue "nadie ha escrito" de
             "se cayó el wifi". */}
-        {roomId && !unido && messages.length > 0 && (
+        {esperaLarga && messages.length > 0 && (
           <div className="chat-desconectado">{t.reconectando}</div>
         )}
         <div className="sala-cab">
@@ -1022,7 +1045,7 @@ function Sala({
           {/* Solo mientras no sabemos qué hay: en cuanto llega el `joined`, un
               chat vacío SÍ significa que nadie ha hablado. Y si ya hay mensajes
               pintados (una reconexión), taparlos sería peor que el vacío. */}
-          {roomId && !unido && messages.length === 0 && (
+          {esperaLarga && messages.length === 0 && (
             <div className="chat-cargando">
               <div className="preview-barra" aria-hidden="true" />
               <p>{t.cargandoSala}</p>
@@ -1393,7 +1416,7 @@ function Sala({
                   <p>{t.ningunaSala}</p>
                   <p className="preview-loading-sub">{t.eligeOCrea}</p>
                 </>
-              ) : !unido ? (
+              ) : esperaLarga ? (
                 // Hay sala, pero su estado todavía no llega. Decir aquí que está
                 // vacía sería inventar: no se sabe.
                 <>

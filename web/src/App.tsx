@@ -13,7 +13,7 @@ import {
   type Agent,
   type OrphanTurn,
 } from "./socket.js";
-import { AgentList } from "./AgentList.js";
+import { AgentList, textoDeEstado } from "./AgentList.js";
 import { FiltroChat } from "./FiltroChat.js";
 import { MentionMenu } from "./MentionMenu.js";
 import { Historial } from "./Historial.js";
@@ -369,6 +369,16 @@ function Sala({
     [messages, filtro],
   );
   const ocultos = messages.length - mensajesVisibles.length;
+
+  /**
+   * Los agentes que están en algo, como objeto para poder mezclarlos con
+   * `streaming` y `toolLines` sin duplicar a nadie: las tres fuentes se indexan
+   * por agentId, así que el spread las deduplica solo.
+   */
+  const trabajando = useMemo(
+    () => Object.fromEntries(agents.filter((a) => a.state !== "idle").map((a) => [a.id, true])),
+    [agents],
+  );
 
   /**
    * Quiénes se pueden filtrar: los que están conectados MÁS los que hablaron.
@@ -1063,7 +1073,13 @@ function Sala({
             <ChatRow key={i} msg={m} seguido={esSeguido(mensajesVisibles, i)} roomId={roomId!} />
           ))}
           {/* Un bloque de streaming POR AGENTE: varios pueden hablar a la vez */}
-          {Object.keys({ ...streaming, ...toolLines })
+          {/* Los que trabajan entran aunque no hayan emitido NADA todavía.
+              Escribir un archivo grande son cuarenta segundos en los que el
+              modelo arma los argumentos de la herramienta y no hay nada que
+              transmitir: sin esto el chat se ve idéntico a no haber mandado el
+              mensaje, y la gente lo reenvía creyendo que se perdió. El estado
+              ya viajaba, solo lo pintaba la lista de arriba. */}
+          {Object.keys({ ...streaming, ...toolLines, ...trabajando })
             // El streaming NO sale de `messages`, así que sin esto un agente
             // filtrado fuera seguiría apareciendo mientras escribe y el filtro
             // se vería roto.
@@ -1092,6 +1108,12 @@ function Sala({
                     />
                   ) : null}
                   {streaming[agentId] && <div className="burbuja">{streaming[agentId]}</div>}
+                  {/* Se va sola en cuanto llega el primer evento: su condición
+                      deja de cumplirse y no hay nada que limpiar. Sin la tarea,
+                      que ya se lee en el mensaje que la pidió. */}
+                  {!toolLines[agentId]?.length && !streaming[agentId] && agent && (
+                    <div className="agente-pensando">{textoDeEstado(agent, t, false)}</div>
+                  )}
                 </div>
               </div>
             );

@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { salasVisitadas, olvidarSala, type SalaVisitada } from "./historial-salas.js";
+import {
+  salasVisitadas,
+  guardarSalas,
+  olvidarSala,
+  type SalaVisitada,
+} from "./historial-salas.js";
+import { sincronizarSalas } from "./cuenta.js";
 import { createRoom, borrarSala } from "./socket.js";
 import { useTextos } from "./i18n.js";
 
@@ -65,8 +71,23 @@ export function MenuSalas({ actual }: { actual?: string }) {
 
   // Se lee al abrir, no al montar: así refleja lo que haya pasado en otra
   // pestaña sin tener que escuchar el evento `storage`.
+  //
+  // Primero lo local, que es instantáneo, y luego se pregunta al server: con
+  // cuenta, tus salas viven ahí y pueden ser más de las que cupieron en este
+  // navegador. Sin sesión la petición devuelve lo mismo que ya se pintó, así
+  // que no cambia nada visible.
   useEffect(() => {
-    if (abierto) setSalas(salasVisitadas());
+    if (!abierto) return;
+    setSalas(salasVisitadas());
+    let cancelado = false;
+    void sincronizarSalas().then((delServer) => {
+      if (cancelado) return;
+      guardarSalas(delServer);
+      setSalas(delServer);
+    });
+    return () => {
+      cancelado = true;
+    };
   }, [abierto]);
 
   // Cerrar al hacer click fuera o con Escape, como cualquier menú.

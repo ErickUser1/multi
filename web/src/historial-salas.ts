@@ -19,8 +19,19 @@
 
 const CLAVE = "multi.salas";
 
-/** Cuántas se recuerdan. Más allá de esto la lista deja de ser útil. */
-const MAXIMO = 20;
+/**
+ * Cuántas se recuerdan en ESTE navegador.
+ *
+ * Eran veinte, y se desbordaba en unos días de trabajo normal: cada sala nueva
+ * empujaba a las de abajo, y la que se caía no era la que menos usabas sino la
+ * más vieja. Una sala de la semana pasada desaparecía del menú aunque siguiera
+ * viva, y eso se siente igual que perderla.
+ *
+ * Con cuenta esto importa menos, porque la lista de verdad vive en el server y
+ * el menú la pide al abrirse. El tope se queda para quien entra sin cuenta, que
+ * es la mayoría, y para que un localStorage no crezca sin fin.
+ */
+const MAXIMO = 100;
 
 export interface SalaVisitada {
   id: string;
@@ -118,10 +129,16 @@ export function olvidarSala(id: string): void {
  * Se escribe también en local a propósito: así, si mañana entras sin sesión o
  * el server no responde, tus salas siguen ahí. La cuenta añade que te sigan
  * entre dispositivos, no reemplaza lo que ya funcionaba.
+ *
+ * Y NO se recorta al máximo local. Ese tope existe para una lista que crece
+ * sola visita tras visita, no para una que el server ya tiene completa:
+ * recortarla aquí hacía que la cuenta sirviera solo para las primeras veinte, y
+ * que en la siguiente sincronización se subieran nada más esas. Las demás
+ * seguían en la base sin que nadie las volviera a ver.
  */
 export function guardarSalas(salas: SalaVisitada[]): void {
   try {
-    localStorage.setItem(CLAVE, JSON.stringify(salas.slice(0, MAXIMO)));
+    localStorage.setItem(CLAVE, JSON.stringify(salas));
   } catch {
     // Igual que arriba: el historial no vale romper nada.
   }

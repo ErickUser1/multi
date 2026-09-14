@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { Agent } from "./socket.js";
+import { useTextos, type Textos } from "./i18n.js";
 
 /**
  * Lista de agentes de la sala — tres estados visualmente distintos:
@@ -46,30 +47,38 @@ export function AgentList({ agents }: { agents: Agent[] }) {
 }
 
 function AgentRow({ agent }: { agent: Agent }) {
+  const { t } = useTextos();
   return (
     <div className={`agent-row agent-${agent.state}`}>
       <span className="agent-dot" style={{ background: agent.color }} />
       <span className="agent-name" style={{ color: agent.color }}>
         {agent.name}
       </span>
-      <span className="agent-status">{statusText(agent)}</span>
+      <span className="agent-status">{textoDeEstado(agent, t)}</span>
     </div>
   );
 }
 
-function statusText(a: Agent): string {
+/**
+ * Qué está haciendo un agente, en una línea.
+ *
+ * Se exporta porque el chat pinta lo mismo mientras el agente todavía no emite
+ * nada: el mismo hecho contado distinto en dos lugares de la misma pantalla se
+ * lee como dos cosas.
+ */
+export function textoDeEstado(a: Agent, t: Textos, conTarea = true): string {
   switch (a.state) {
     case "working":
-      return a.task ? truncate(a.task) : "trabajando";
+      return conTarea && a.task ? truncate(a.task) : t.estadoTrabajando;
     case "waiting":
       // Decir A QUIÉN espera convierte una espera opaca en algo comprensible.
       return a.waitingFor
-        ? `esperando a ${a.waitingFor.holder ?? "otro agente"} (${a.waitingFor.path})`
-        : "esperando";
+        ? t.estadoEsperandoA(a.waitingFor.holder ?? t.otroAgente, a.waitingFor.path)
+        : t.estadoEsperando;
     case "stuck":
-      return "atorado — sin avanzar";
+      return t.estadoAtorado;
     default:
-      return "inactivo";
+      return t.estadoInactivo;
   }
 }
 

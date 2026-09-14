@@ -115,6 +115,14 @@ const TEXTOS = {
     filtrarChat: "Filtrar",
     filtrandoA: (n: number) => (n === 1 ? "Filtrando a 1" : `Filtrando a ${n}`),
     tagAgente: "agente",
+    // Estado de un agente. Los usan la lista de arriba y el bloque del chat: el
+    // mismo hecho no debe leerse distinto en dos lugares de la misma pantalla.
+    estadoTrabajando: "trabajando",
+    estadoEsperandoA: (quien: string, ruta: string) => `esperando a ${quien} (${ruta})`,
+    estadoEsperando: "esperando",
+    otroAgente: "otro agente",
+    estadoAtorado: "atorado, sin avanzar",
+    estadoInactivo: "inactivo",
     filtrarPor: (quien: string) => `Ver solo lo de ${quien}`,
     quitarDelFiltro: (quien: string) => `Quitar a ${quien} del filtro`,
     mensajesOcultos: (n: number) =>
@@ -326,6 +334,12 @@ const TEXTOS = {
     filtrarChat: "Filter",
     filtrandoA: (n: number) => (n === 1 ? "Filtering 1" : `Filtering ${n}`),
     tagAgente: "agent",
+    estadoTrabajando: "working",
+    estadoEsperandoA: (quien: string, ruta: string) => `waiting for ${quien} (${ruta})`,
+    estadoEsperando: "waiting",
+    otroAgente: "another agent",
+    estadoAtorado: "stuck, not moving",
+    estadoInactivo: "idle",
     filtrarPor: (quien: string) => `Show only ${quien}`,
     quitarDelFiltro: (quien: string) => `Remove ${quien} from the filter`,
     mensajesOcultos: (n: number) => (n === 1 ? "1 message hidden" : `${n} messages hidden`),

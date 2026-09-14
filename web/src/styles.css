@@ -2518,3 +2518,21 @@ img.av {
   font-size: 11.5px;
   text-align: center;
 }
+
+/* Lo que dice un agente que todavía no dice nada.
+   Atenuado y en cursiva: es estado, no contenido, y en cuanto llega la primera
+   línea de verdad desaparece. Los tres puntos laten para que se distinga de un
+   mensaje que quedó a medias. */
+.agente-pensando {
+  font-size: 12.5px;
+  color: var(--dim);
+  font-style: italic;
+}
+.agente-pensando::after {
+  content: "…";
+  animation: pensando-late 1.4s ease-in-out infinite;
+}
+@keyframes pensando-late {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 1; }
+}

@@ -3,7 +3,7 @@ import { createConnection, createServer } from "node:net";
 import { readFile, readdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import type { Workspace } from "./workspace.js";
+import { homeDir, type Workspace } from "./workspace.js";
 import { spawnInContainer, execInContainer } from "./container.js";
 
 export interface Preview {
@@ -46,9 +46,28 @@ async function nextPort(): Promise<number> {
   throw new Error(`no hay puertos libres en el rango ${BASE_PORT}-${MAX_PORT}`);
 }
 
+/**
+ * Marcador que `startPreview` sustituye por el puerto real.
+ *
+ * Existe porque no todos los dev servers leen el puerto de una variable: Flutter
+ * lo quiere como flag (`--web-port=5173`). Con esto el Launch puede pedirlo
+ * donde le toque sin que cada stack necesite su propio camino.
+ */
+export const PUERTO = "__PUERTO__";
+
+/**
+ * Dónde se ve el HOME de la sala DESDE ADENTRO del contenedor.
+ *
+ * En el host es `<workspace>.home`; adentro se monta aquí. Lo que se instale en
+ * ese directorio sobrevive a que el contenedor se recree, a diferencia de un
+ * `apt install`, que se va con él.
+ */
+const HOME_EN_CONTENEDOR = "/home/multi";
+
 /** Cómo levantar el proyecto. Sale de lo que el AGENTE escribió, no de un molde. */
 export interface Launch {
   command: string;
+  /** Un arg puede llevar PUERTO, y se sustituye por el real al arrancar. */
   args: string[];
   /** Variable por la que se le pasa el puerto (la mayoría de dev servers usan PORT). */
   portEnv?: string;
@@ -65,9 +84,10 @@ export interface Launch {
  * La sala nace vacía: hasta que el agente no scaffoldee un proyecto, no hay dev
  * server que arrancar y eso NO es un error — es el estado normal al empezar.
  *
- * No asume el stack: lee lo que el proyecto declara. Hoy soporta `package.json`
- * con un script de desarrollo (cubre Vite, Next, Nuxt, Astro, Remix y demás).
- * Otros ecosistemas se suman aquí, sin tocar el resto del motor.
+ * No asume el stack: lee lo que el proyecto declara. Hoy reconoce `package.json`
+ * con un script de desarrollo (cubre Vite, Next, Nuxt, Astro, Remix y demás) y
+ * `pubspec.yaml` para Flutter. Otros ecosistemas se suman en `leerLaunch`, sin
+ * tocar el resto del motor.
  */
 export async function detectLaunch(dir: string): Promise<Launch | null> {
   const enRaiz = await leerLaunch(dir);
@@ -82,6 +102,42 @@ export async function detectLaunch(dir: string): Promise<Launch | null> {
 
 /** Lee el launch de un directorio concreto, o null si ahí no hay proyecto. */
 async function leerLaunch(dir: string): Promise<Launch | null> {
+  return (await leerLaunchNode(dir)) ?? leerLaunchFlutter(dir);
+}
+
+/**
+ * Un proyecto de Flutter, si además hay un Flutter con qué correrlo.
+ *
+ * El binario no viene en la imagen: el agente lo clona en el HOME de la sala
+ * cuando alguien se lo pide, y ese HOME está montado desde el host, así que
+ * sobrevive a que el contenedor se recree. Se llama por ruta completa porque el
+ * PATH de adentro no incluye el HOME.
+ *
+ * El `--web-hostname=0.0.0.0` es el `--host` de Vite en versión Flutter: sin él
+ * escucha solo en el localhost de ADENTRO del contenedor y el puerto publicado
+ * no lleva a nadie. Eso ya dejó cinco salas mirando una pantalla en blanco.
+ */
+function leerLaunchFlutter(dir: string): Launch | null {
+  if (!existsSync(join(dir, "pubspec.yaml"))) return null;
+  // La comprobación va contra el disco del host; el comando corre adentro, donde
+  // ese mismo directorio se ve como HOME_EN_CONTENEDOR.
+  if (!existsSync(join(homeDir(dir), "flutter", "bin", "flutter"))) return null;
+
+  return {
+    command: `${HOME_EN_CONTENEDOR}/flutter/bin/flutter`,
+    args: [
+      "run",
+      "-d",
+      "web-server",
+      "--web-hostname=0.0.0.0",
+      `--web-port=${PUERTO}`,
+    ],
+    cwd: dir,
+  };
+}
+
+/** El caso común: un package.json con script de desarrollo. */
+async function leerLaunchNode(dir: string): Promise<Launch | null> {
   const pkgPath = join(dir, "package.json");
   if (!existsSync(pkgPath)) return null;
 
@@ -145,7 +201,12 @@ export async function startPreview(
 ): Promise<Preview> {
   // Dentro del contenedor el puerto lo fija el contenedor; fuera, lo elegimos.
   const port = container ? container.publishedPort : await nextPort();
-  const { command, args, portEnv } = launch;
+  const { command, portEnv } = launch;
+
+  // El puerto que ve el dev server: adentro del contenedor es el interno, y
+  // Docker lo publica hacia afuera. Sin contenedor son el mismo.
+  const puertoInterno = container ? container.internalPort : port;
+  const args = launch.args.map((a) => a.replaceAll(PUERTO, String(puertoInterno)));
 
   // Matar dev servers previos DENTRO del contenedor antes de arrancar otro.
   //

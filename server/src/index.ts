@@ -1538,6 +1538,22 @@ async function runAgentTurn(
       text: result.finalText,
     });
 
+    /**
+     * La sala se bautiza sola con lo primero que le pidieron.
+     *
+     * Nacía mostrando su id (`pixel-lab-34`), que sirve para dictarlo por
+     * teléfono pero no dice nada de lo que hay dentro: con varias salas abiertas
+     * el menú era una lista de nombres intercambiables. El primer mensaje ya
+     * describe el proyecto mejor que cualquier etiqueta generada, y sale gratis.
+     *
+     * Solo la primera vez y solo si nadie le puso nombre: renombrar sigue siendo
+     * de quien esté en la sala, y esto no le pisa la decisión a nadie.
+     */
+    if (!room.nombre) {
+      const puesto = await renameRoom(room, tituloDesde(turn.task));
+      if (puesto) io.to(room.id).emit("room:renamed", { nombre: puesto });
+    }
+
     // Canal 2: el turno cierra con UN commit (unidad de sentido del scrubber).
     const hash = await commitTurn(room.workspace.dir, turn, { summary: result.finalText });
     if (hash) io.to(room.id).emit("history:new", { hash, agentId, message: turn.task });
@@ -1814,6 +1830,28 @@ const AVISO_SIN_AISLAMIENTO =
   "no puedo ejecutar código en esta sala ahora mismo, falta la caja donde corre. " +
   "Pueden seguir platicando, y todo lo que ya hicieron sigue guardado. " +
   "Quien administra este Multi tiene que revisarlo.";
+
+/**
+ * Un nombre de sala a partir de lo primero que se pidió.
+ *
+ * Recorta el arranque típico ("hazme una", "crea un") porque en una lista de
+ * salas todas empezarían igual y la parte que distingue quedaría fuera del
+ * ancho visible. Lo que queda son las primeras palabras de la petición, que es
+ * lo que la persona reconoce.
+ */
+function tituloDesde(task: string): string {
+  const limpio = task
+    .replace(/@[a-z0-9-]+/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(
+      /^(?:(?:hazme|haz|crea|crear|créame|creame|quiero|necesito|puedes|podrias|podrías|me gustaria|me gustaría|ayudame|ayúdame|dame|genera|arma)\s+)+(?:que\s+)?(?:crees|hagas|generes|armes)?\s*(?:el\s+c[oó]digo\s+para\s+)?(?:una?|el|la|unos|unas)?\s*/i,
+      "",
+    );
+  const corto = limpio.split(/[.,;\n?]/)[0]?.trim() ?? "";
+  const palabras = corto.split(" ").slice(0, 6).join(" ");
+  return palabras.charAt(0).toUpperCase() + palabras.slice(1);
+}
 
 function explicarFalla(err: unknown): string {
   // Por tipo y no por texto: así el mensaje se puede reescribir sin romper esto.

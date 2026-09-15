@@ -232,14 +232,39 @@ body {
   position: relative;
   flex-shrink: 0;
 }
+/* Con borde y en versalitas, como los demás botones de la barra: sin eso el
+   texto suelto no se lee como algo que se pueda tocar. */
 .menu-btn {
-  background: none;
-  border: none;
+  background: transparent;
+  border: 1px solid var(--linea);
+  border-radius: 3px;
   cursor: pointer;
-  padding: 6px 4px;
+  padding: 7px 14px;
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
+}
+.menu-btn:hover {
+  border-color: var(--dim);
+}
+.menu-btn-texto {
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--dim);
+  white-space: nowrap;
+  transition: color 0.15s;
+}
+.menu-btn:hover .menu-btn-texto {
+  color: var(--texto);
+}
+/* En el teléfono vuelve a ser solo el icono, así que el borde estorba. */
+@media (max-width: 720px) {
+  .menu-btn {
+    border: none;
+    padding: 6px 4px;
+  }
 }
 /* Las tres rayas, con pseudo-elementos: sin SVG ni fuente de iconos. */
 .menu-icono,
@@ -272,6 +297,22 @@ body {
 .menu-btn:hover .menu-icono::after {
   background: var(--texto);
 }
+
+/* En escritorio manda el texto y el icono sobra: dos cosas diciendo lo mismo.
+   En pantalla angosta se invierte, porque ahí la barra va apretada y las tres
+   rayas son lo unico que cabe. */
+.menu-icono {
+  display: none;
+}
+@media (max-width: 720px) {
+  .menu-btn-texto {
+    display: none;
+  }
+  .menu-icono {
+    display: block;
+  }
+}
+
 
 .menu-panel {
   position: absolute;

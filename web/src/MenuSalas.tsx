@@ -119,6 +119,10 @@ export function MenuSalas({ actual }: { actual?: string }) {
         aria-expanded={abierto}
       >
         <span className="menu-icono" aria-hidden="true" />
+        {/* El texto al lado, no solo en el `title`: un tooltip solo aparece si
+            dejas el cursor quieto un segundo, y en el teléfono no existe. Tres
+            rayas sueltas no le dicen a nadie que ahí están sus proyectos. */}
+        <span className="menu-btn-texto">{t.tusSalas}</span>
       </button>
 
       {abierto && (

@@ -890,6 +890,15 @@ img.av {
   padding: 12px 14px;
   font-size: 13px;
   color: var(--texto);
+  /* Un textarea trae fuente de formulario y se ve distinto al resto del chat. */
+  font-family: inherit;
+  line-height: 1.5;
+  /* La altura la calcula el JS midiendo el contenido; el resize manual de la
+     esquina sobra y se pelea con eso. */
+  resize: none;
+  /* Mientras crece no debe verse barra: aparece sola al topar el máximo. */
+  overflow-y: auto;
+  display: block;
 }
 .caja:focus {
   outline: none;

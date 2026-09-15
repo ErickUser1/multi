@@ -47,6 +47,14 @@ import {
 const MAX_ADJUNTOS = 4;
 
 /**
+ * Hasta dónde crece la caja del chat antes de hacer scroll adentro.
+ *
+ * Unas ocho líneas. Más que eso y la caja se come el chat, que es lo que la
+ * persona está leyendo mientras escribe.
+ */
+const ALTO_MAXIMO_CAJA = 180;
+
+/**
  * A qué ancho se mira el preview.
  *
  * Un solo botón las cicla en este orden, en vez de tres botones en la barra:
@@ -478,7 +486,23 @@ function Sala({
 
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const escenarioRef = useRef<HTMLElement | null>(null);
-  const inputRef = useRef<HTMLInputElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
+
+  /**
+   * La caja crece con lo que escribes, hasta un tope.
+   *
+   * Era un <input> de una línea, así que un mensaje largo se iba de lado y solo
+   * se veía el final: para releer lo que llevabas había que hacer scroll
+   * horizontal. El alto se pone en `auto` ANTES de medir porque scrollHeight no
+   * baja solo, y sin eso la caja crece con cada tecla y ya nunca se encoge al
+   * borrar.
+   */
+  useEffect(() => {
+    const caja = inputRef.current;
+    if (!caja) return;
+    caja.style.height = "auto";
+    caja.style.height = `${Math.min(caja.scrollHeight, ALTO_MAXIMO_CAJA)}px`;
+  }, [draft]);
   /** El <input type="file"> escondido que abre el botón de adjuntar. */
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -1221,9 +1245,10 @@ function Sala({
                 />
               </svg>
             </button>
-            <input
+            <textarea
               ref={inputRef}
               className="caja"
+              rows={1}
               // Sin sala no hay a dónde mandar nada: se apaga en vez de dejar
               // escribir un mensaje que se perdería al darle enter.
               disabled={!roomId}
@@ -1242,7 +1267,12 @@ function Sala({
                 }
               }}
               onKeyDown={(e) => {
-                if (e.key === "Enter") send();
+                // Enter manda, Shift+Enter hace salto de línea. Es lo que hace
+                // cualquier chat, y sin esto un textarea se traga el enter.
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  send();
+                }
                 if (e.key === "Escape") setMention(null);
               }}
             />

@@ -42,7 +42,7 @@ const TEXTOS = {
     cargandoSala: "Cargando la sala…",
     reconectando: "Sin conexión. Reconectando…",
     pideAlgo: "@agente crea un Next con Tailwind",
-    hablaConLaSala: "habla con la sala — o escribe @agente para pedir algo",
+    hablaConLaSala: "escribe @agente para pedir algo",
     adjuntarImagen: "Adjuntar un archivo",
     agentesInactivos: (n: number) => `${n} agente${n === 1 ? "" : "s"} inactivo${n === 1 ? "" : "s"}`,
     seInterrumpio: (n: number) =>
@@ -262,7 +262,7 @@ const TEXTOS = {
     cargandoSala: "Loading the room…",
     reconectando: "No connection. Reconnecting…",
     pideAlgo: "@agente build a Next app with Tailwind",
-    hablaConLaSala: "talk to the room — or type @agente to ask for something",
+    hablaConLaSala: "type @agente to ask for something",
     adjuntarImagen: "Attach a file",
     agentesInactivos: (n: number) => `${n} idle agent${n === 1 ? "" : "s"}`,
     seInterrumpio: (n: number) =>

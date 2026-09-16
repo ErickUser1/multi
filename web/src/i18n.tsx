@@ -41,6 +41,8 @@ const TEXTOS = {
     salaVacia: "La sala está vacía.",
     cargandoSala: "Cargando la sala…",
     reconectando: "Sin conexión. Reconectando…",
+    pistaMencion:
+      "Escribe @ y selecciona agente para invocarlo. Si ya hay uno trabajando, selecciona @agente-1 para seguir con él. Puedes tener varios al mismo tiempo.",
     pideAlgo: "@agente crea un Next con Tailwind",
     hablaConLaSala: "escribe @agente para pedir algo",
     adjuntarImagen: "Adjuntar un archivo",
@@ -261,6 +263,8 @@ const TEXTOS = {
     salaVacia: "The room is empty.",
     cargandoSala: "Loading the room…",
     reconectando: "No connection. Reconnecting…",
+    pistaMencion:
+      "Type @ and pick agente to summon one. If one is already working, pick @agente-1 to keep going with it. You can have several at once.",
     pideAlgo: "@agente build a Next app with Tailwind",
     hablaConLaSala: "type @agente to ask for something",
     adjuntarImagen: "Attach a file",

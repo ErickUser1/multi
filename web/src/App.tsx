@@ -294,6 +294,12 @@ function Sala({
   const [unido, setUnido] = useState(false);
 
   /**
+   * Escribió sin mencionar al agente y está solo: el server lo avisa y aquí se
+   * pinta hasta que mande otra cosa. Que reaccione es la señal de que ya lo vio.
+   */
+  const [pistaMencion, setPistaMencion] = useState(false);
+
+  /**
    * Ya pasó el tiempo suficiente como para que valga la pena decir "cargando".
    *
    * Con conexión buena el `joined` llega en milisegundos, y un indicador que
@@ -530,6 +536,9 @@ function Sala({
     // Se cayó la conexión. Socket.io reconecta solo, así que esto no arregla
     // nada: solo evita que la sala se vea normal mientras ya no llega nada.
     socket.on("disconnect", () => setUnido(false));
+
+    // Le habló al vacío. La pista llega solo a quien escribió y no se guarda.
+    socket.on("pista:mencion", () => setPistaMencion(true));
 
     socket.on("connect", () => {
       socket.emit("join", { roomId, name });
@@ -809,6 +818,7 @@ function Sala({
         : undefined,
     });
     setDraft("");
+    setPistaMencion(false);
     setPendientes([]);
     setMention(null);
     if (mySelection) {
@@ -1142,6 +1152,12 @@ function Sala({
               </div>
             );
           })}
+
+          {/* Va aquí abajo y no en una barra arriba: la persona acaba de
+              escribir y está mirando el final del chat, que es justo donde no
+              pasó nada. Un aviso fuera de su campo de visión se lee igual que
+              el silencio que viene a explicar. */}
+          {pistaMencion && <div className="chat-pista">{t.pistaMencion}</div>}
         </div>
 
         <div

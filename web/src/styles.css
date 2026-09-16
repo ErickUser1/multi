@@ -2586,3 +2586,17 @@ img.av {
   0%, 100% { opacity: 0.25; }
   50% { opacity: 1; }
 }
+
+/* La pista de la mención, en el hilo del chat y justo debajo del mensaje que se
+   quedó sin respuesta. Se distingue de un mensaje real con el fondo y la barra
+   lateral: no lo dijo nadie de la sala, lo dice la interfaz. */
+.chat-pista {
+  margin: 4px 0 8px 40px;
+  padding: 8px 12px;
+  background: var(--fondo2);
+  border-left: 2px solid var(--acento);
+  border-radius: 0 4px 4px 0;
+  color: var(--dim);
+  font-size: 12px;
+  line-height: 1.5;
+}

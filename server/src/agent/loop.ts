@@ -178,9 +178,29 @@ créalo con bash: es tu trabajo, no preguntes por dónde empezar.
       ningún lado.
     * Datos que VARIAS personas comparten y ven al mismo tiempo (un registro que
       llenan entre todos, un inventario de un equipo) → eso no cabe en una base local.
-      Pide las credenciales de una base externa por el panel de Variables, diciendo
-      los nombres exactos que vas a leer, y ofrece dejar la app andando con datos de
-      prueba mientras llegan.
+      Si en el .env ya están VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY, la sala ya
+      conectó su base: úsalas desde el código de la app para leer y escribir filas,
+      y usa la tool sql para crear las tablas y sus políticas. Con esa tool tienes
+      todo lo que necesitas, así que NO pidas contraseñas ni llaves a nadie.
+      Si no están, di que se conecta desde el panel de Variables, con el botón de
+      Supabase, y ofrece dejar la app andando con datos de prueba mientras tanto.
+- Trabajando contra Supabase hay dos reglas que NO se negocian:
+    * La llave que va al navegador (la "anon") es PÚBLICA por diseño: cualquiera que
+      abra la app la puede leer, y está bien. Lo que decide quién ve qué son las
+      políticas de RLS del lado de Supabase, NUNCA esconder la llave.
+      La otra llave, la "service_role", se salta todas esas políticas: esa no la
+      pidas, no la uses y no la escribas en ningún archivo del proyecto. En una app
+      de puro front no hay dónde esconderla, porque lo que el navegador usa, el
+      navegador lo enseña.
+    * NUNCA desactives RLS, ni con ALTER TABLE ... DISABLE ROW LEVEL SECURITY ni
+      quitando el event trigger que lo activa solo. Si una tabla no deja leer o
+      escribir, es que le faltan políticas: escríbelas. Apagar RLS hace que la app
+      funcione en el momento y deja la base entera abierta a cualquiera que tenga
+      la llave pública, que es de dominio público.
+      Por qué tan tajante: así es como se filtran las apps hechas con estas
+      herramientas. Cuando el agente se topa con que la app no jala, el camino
+      corto es apagar la protección, y nadie se entera hasta que los datos ya
+      salieron. Toda tabla que crees necesita sus políticas en el mismo turno.
   El archivo de una base local NO entra al historial (Multi ya lo ignora). Deja el
   esquema en el código o en una migración, para que la app arranque sola en una
   base vacía.
@@ -285,6 +305,8 @@ export async function runAgent(opts: {
   onWaitEnd?: () => void;
   /** Dónde corren los comandos de bash. Obligatorio: ver ToolContext. */
   runner: ToolContext["runner"];
+  /** Con qué cambia el esquema de la base, si la sala conectó una. */
+  ejecutarSql?: ToolContext["ejecutarSql"];
   /**
    * El historial tal como va, para que sobreviva si el turno LANZA.
    *
@@ -313,6 +335,7 @@ export async function runAgent(opts: {
   const toolCtx: ToolContext = {
     workspaceDir,
     runner: opts.runner,
+    ejecutarSql: opts.ejecutarSql,
     emit: callbacks.onToolEvent,
     agentId: opts.agentId,
     onWaitStart: opts.onWaitStart,

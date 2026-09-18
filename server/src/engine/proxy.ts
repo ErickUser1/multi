@@ -45,6 +45,10 @@ const RUTAS_DE_LA_SALA = [
   "/preview",
   "/socket.io",
   "/auth",
+  // La vuelta de Supabase. Sin esto, quien ya hubiera visto un preview en esa
+  // pestaña traía su cookie, el proxy se quedaba con la petición, y en vez de
+  // volver a su sala acababa mirando "despertando el preview" para siempre.
+  "/supabase",
   "/index.html",
   "/vite.svg",
 ];

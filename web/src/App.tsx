@@ -19,7 +19,7 @@ import { MentionMenu } from "./MentionMenu.js";
 import { Historial } from "./Historial.js";
 import { BackCanvas, type Endpoint } from "./BackCanvas.js";
 import { KeyPanel, loadStoredCredencial, type Credencial } from "./KeyPanel.js";
-import { EnvPanel } from "./EnvPanel.js";
+import { EnvPanel, type EstadoSupabase } from "./EnvPanel.js";
 import { PublicarPanel } from "./PublicarPanel.js";
 import { useTextos } from "./i18n.js";
 import { MenuSalas } from "./MenuSalas.js";
@@ -342,6 +342,17 @@ function Sala({
    */
   const [urlPublicada, setUrlPublicada] = useState<string | null>(null);
   /**
+   * La base de datos de la sala.
+   *
+   * Arranca sin configurar y se consulta al entrar: así, si quien hospeda este
+   * Multi no puso la integración, el bloque no aparece nunca y nadie descubre
+   * un botón que no lleva a ningún lado.
+   */
+  const [supabase, setSupabase] = useState<EstadoSupabase>({
+    configurado: false,
+    proyecto: null,
+  });
+  /**
    * Si la sala tiene algo guardado que llevarse.
    *
    * Se pregunta al server en vez de deducirlo de `previewReady`: lo que hace
@@ -574,6 +585,35 @@ function Sala({
     socket.on("room:renamed", ({ nombre }: { nombre: string | null }) => {
       setNombre(nombre);
       recordarNombre(roomId, nombre);
+    });
+
+    // Crear una base tarda minutos, así que el server va contando por dónde va.
+    // Lo ve toda la sala a propósito: es del proyecto, no de quien apretó.
+    socket.on("supabase:etapa", (d: { etapa: EstadoSupabase["etapa"]; segundos?: number }) => {
+      setSupabase((s) => ({ ...s, etapa: d.etapa, segundos: d.segundos, error: null }));
+    });
+
+    socket.on(
+      "supabase:listo",
+      (d: { proyecto: string; password?: string }) => {
+        setSupabase((s) => ({
+          ...s,
+          proyecto: d.proyecto,
+          etapa: null,
+          // La contraseña vive SOLO en este estado de React: al recargar se va, y
+          // eso es lo correcto. Supabase no la devuelve nunca, así que guardarla
+          // en el navegador sería dejarla tirada donde nadie la vigila.
+          password: d.password ?? null,
+        }));
+      },
+    );
+
+    socket.on("supabase:fallo", (d: { error: string }) => {
+      setSupabase((s) => ({ ...s, etapa: null, error: d.error }));
+    });
+
+    socket.on("supabase:desconectado", () => {
+      setSupabase((s) => ({ ...s, proyecto: null, etapa: null, password: null, error: null }));
     });
 
     // La publicación la ve toda la sala. El link y los fallos llegan además al
@@ -923,6 +963,27 @@ function Sala({
    * propia barra de progreso, y un proyecto grande no se carga entero en
    * memoria de la pestaña.
    */
+  /**
+   * Manda a la persona a autorizar en Supabase.
+   *
+   * Navegación completa y no fetch, igual que entrar con Google: el ida y
+   * vuelta de OAuth pasa por el navegador, y al volver el server redirige de
+   * regreso a esta misma sala.
+   */
+  const conectarSupabase = () => {
+    if (!roomId) return;
+    window.location.href = `${SERVER_URL}/rooms/${roomId}/supabase/conectar`;
+  };
+
+  const desconectarSupabase = async () => {
+    if (!roomId) return;
+    // El estado real llega por socket, que es lo que además avisa al resto de
+    // la sala. Aquí solo se dispara.
+    await fetch(`${SERVER_URL}/rooms/${roomId}/supabase`, { method: "DELETE" }).catch(() => {
+      // Si no se pudo, la conexión sigue ahí y el panel la sigue mostrando.
+    });
+  };
+
   const descargarZip = async () => {
     setZipAviso(t.preparandoZip);
     try {
@@ -981,6 +1042,24 @@ function Sala({
       cancelado = true;
     };
   }, [roomId, histVersion]);
+
+  // Si esta sala ya tiene base, y si este Multi siquiera ofrece conectarla.
+  useEffect(() => {
+    if (!roomId) return;
+    let cancelado = false;
+    fetch(`${SERVER_URL}/rooms/${roomId}/supabase`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { configurado: boolean; proyecto: string | null } | null) => {
+        if (!cancelado && d) setSupabase((s) => ({ ...s, ...d }));
+      })
+      .catch(() => {
+        // Sin respuesta se queda sin configurar, que es el estado que no
+        // promete nada. Peor sería enseñar un botón que no va a funcionar.
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, [roomId]);
 
   return (
     // `ver-*` es lo que el CSS usa en móvil para decidir qué se muestra. En
@@ -1394,7 +1473,14 @@ function Sala({
             />
             {/* Las variables son del proyecto de la sala, así que sin sala no
                 hay dónde escribirlas. */}
-            {roomId && <EnvPanel roomId={roomId} />}
+            {roomId && (
+              <EnvPanel
+                roomId={roomId}
+                supabase={supabase}
+                onConectarSupabase={conectarSupabase}
+                onDesconectarSupabase={desconectarSupabase}
+              />
+            )}
             {/* Sin sala no hay link que compartir: copiaría la URL pelada. */}
             <button className="invitar" onClick={copyLink} disabled={!roomId}>
               {t.copiarLink}

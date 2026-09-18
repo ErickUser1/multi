@@ -95,6 +95,12 @@ function main() {
     check("los modelos de un proveedor", aLaSala("/providers/openrouter/models"));
     check("el health", aLaSala("/health"));
     check("el socket", aLaSala("/socket.io/?EIO=4"));
+    // Las vueltas de OAuth son el caso que más duele si se escapa: se ven
+    // exactamente una vez, con cookie de preview en la pestaña, y lo que la
+    // persona recibe en vez de su sala es "despertando el preview" para
+    // siempre. Pasó con la de Supabase el día que se agregó.
+    check("la vuelta de Google", aLaSala("/auth/google/callback?code=abc"));
+    check("la vuelta de Supabase", aLaSala("/supabase/callback?code=abc&state=xyz"));
     // /assets/ lo usan los dos (ahí compila la Sala, y ahí sirve Rails). Sin
     // referer del preview es de la Sala; con él, del proyecto (ver caso 5).
     check("los assets compilados de la Sala", aLaSala("/assets/index-abc123.js"));

@@ -93,10 +93,20 @@ export interface SelectionInfo {
   element: SelectedElement | null;
 }
 
+/** Cuánta gente asume una sala. */
+export type ModoDeSala = "solo" | "multi";
+
 export interface JoinedPayload {
   roomId: string;
   /** Cómo le dicen a esta sala, o null si nadie la ha nombrado (se ve el id). */
   nombre?: string | null;
+  /**
+   * Si en esta sala hay que mencionar al agente para despertarlo.
+   *
+   * En "solo" no: escribir es pedirle algo, como en todo lo que la gente ya
+   * conoce. En "multi" sí, que es lo que deja platicar sin gastar tokens.
+   */
+  modo?: ModoDeSala;
   you: Member;
   members: Member[];
   previewUrl: string | null;

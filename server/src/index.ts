@@ -17,11 +17,13 @@ import {
   membersList,
   stopAllPreviews,
   parseIntent,
+  intentDeLaSala,
   wakeRoom,
   maybeStartPreview,
   ensureRunner,
   loadRoomIndex,
   deleteRoom,
+  cambiarModo,
   renameRoom,
   type Room,
   type SelectedElement,
@@ -1089,6 +1091,7 @@ fastify.get<{ Params: { id: string } }>("/rooms/:id", async (req, reply) => {
   return {
     id: room.id,
     nombre: room.nombre ?? null,
+    modo: room.modo,
     previewUrl: room.preview?.url ?? null,
     members: membersList(room),
   };
@@ -1207,6 +1210,7 @@ io.on("connection", (socket) => {
       roomId,
       // Null si nadie la ha nombrado: la Sala muestra el id en ese caso.
       nombre: room.nombre ?? null,
+      modo: room.modo,
       you: member,
       members: membersList(room),
       previewUrl: room.preview?.url ?? null,
@@ -1235,6 +1239,29 @@ io.on("connection", (socket) => {
     });
     // Avisar a los demás de la nueva presencia.
     socket.to(roomId).emit("presence", { members: membersList(room) });
+
+    /**
+     * En cuanto entra alguien más, la sala deja de ser de una persona.
+     *
+     * Y hay que decirlo, porque a partir de aquí escribir sin mención deja de
+     * despertar al agente. Ese cambio en silencio sería el mismo silencio que
+     * esto vino a quitar, solo que a mitad del trabajo de alguien.
+     *
+     * El aviso enseña la mención en vez de solo informar del cambio: es la
+     * única vez que la sala tiene la atención de los dos sobre el tema.
+     *
+     * No vuelve a "solo" cuando alguien se va. Un modo que sube y baja solo
+     * cambia dos veces bajo los pies de la gente, y el botón está para quien lo
+     * quiera bajar.
+     */
+    if (room.modo === "solo" && room.members.size > 1) {
+      await cambiarModo(room, "multi");
+      io.to(roomId).emit("room:modo", { modo: room.modo });
+      systemMsg(
+        room,
+        "ahora hay más de una persona en la sala, así que para pedirle algo al agente hay que escribir @agente antes del mensaje",
+      );
+    }
 
     // Si el preview aún no está listo, avisar cuando lo esté.
     if (!room.preview) void notifyPreviewWhenReady(room);
@@ -1310,8 +1337,15 @@ io.on("connection", (socket) => {
       foto: member.foto,
     });
 
-    // 2) ¿Es plática o una orden? El agente solo despierta si lo llaman.
-    const intent = parseIntent(text, !!anchor);
+    // 2) ¿Es plática o una orden? El agente solo despierta si lo llaman, salvo
+    //    en una sala de una persona, donde escribir ya es pedirle algo.
+    //    La decisión vive en rooms.ts, junto a parseIntent, y ahí se prueba.
+    const intent = intentDeLaSala(parseIntent(text, !!anchor), {
+      modo: room.modo,
+      texto: text,
+      primerAgente: room.agents.list()[0]?.name,
+    });
+
     if (intent.kind === "talk") {
       /**
        * Plática entre humanos: nadie despierta. Pero si estás SOLO, lo más
@@ -1327,6 +1361,10 @@ io.on("connection", (socket) => {
        * La regla no cambia, porque es la que deja platicar sin gastar tokens y
        * la que permite lanzar varios agentes. Lo que cambia es que equivocarse
        * deje de ser mudo.
+       *
+       * Aquí abajo solo llegan ya las salas en "multi": en las de una persona
+       * el mensaje se convirtió en una orden más arriba, así que no hay
+       * silencio que explicar.
        */
       if (room.members.size === 1 && !salasConPista.has(room.id)) {
         salasConPista.add(room.id);
@@ -1554,6 +1592,33 @@ io.on("connection", (socket) => {
     systemMsg(
       room,
       puesto ? `${quien} le puso "${puesto}" a la sala` : `${quien} le quitó el nombre a la sala`,
+      member?.color,
+    );
+  });
+
+  /**
+   * Cambiar si en esta sala hay que mencionar al agente.
+   *
+   * Se anuncia siempre, aunque lo haya pedido quien está mirando: cambia cómo
+   * responde la sala a lo que escribes, y con más gente adentro los demás
+   * tienen que enterarse antes de que su siguiente mensaje haga algo distinto.
+   */
+  socket.on("room:modo", async ({ modo }: { modo: unknown }) => {
+    const room = joinedRoom;
+    if (!room) return;
+    const member = room.members.get(socket.id);
+    const quien = member?.name ?? "alguien";
+
+    const antes = room.modo;
+    const puesto = await cambiarModo(room, modo);
+    if (puesto === antes) return;
+
+    io.to(room.id).emit("room:modo", { modo: puesto });
+    systemMsg(
+      room,
+      puesto === "solo"
+        ? `${quien} puso la sala en una persona: escribir despierta al agente sin tener que mencionarlo`
+        : `${quien} puso la sala en multijugador: para pedirle algo al agente hay que escribir @agente`,
       member?.color,
     );
   });

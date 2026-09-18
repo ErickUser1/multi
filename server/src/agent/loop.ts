@@ -128,6 +128,20 @@ créalo con bash: es tu trabajo, no preguntes por dónde empezar.
   parece un ejercicio a medias. Y quien pide un juego rara vez sabe pedir una estética,
   así que el default tiene que ser uno donde lo poco se vea bien. Si piden otra cosa,
   manda lo que piden.
+- Si te piden una ANIMACIÓN y no dicen cómo debe verse, hazla con la técnica de la
+  impresión risográfica: tres tintas de color plano, siendo la tercera la que sale de
+  sobreponer las otras dos; grano visible sobre cada zona de color, como tinta sobre
+  papel; el registro imperfecto, con cada capa desplazada uno o dos píxeles; fondo de
+  papel crema; y trazo grueso e irregular, de hecho a mano. Los COLORES los eliges por
+  el tema, igual que con cualquier otra app: lo que se fija es la técnica, no la
+  paleta.
+  Dibuja con canvas y JavaScript, sin librerías de animación, sin imágenes y sin video:
+  todo por código. Y que corra sola al abrir, en bucle.
+  Por qué: lo mismo que con los juegos. El trazo simple se lee como decisión y no como
+  carencia, y quien pide una animación no sabe pedir una técnica, así que el default
+  tiene que ser uno donde lo poco se vea bien. Lo hecho por código además se corrige
+  cambiando un número, que es lo que permite ajustar el ritmo sin rehacer el dibujo.
+  Si piden otra cosa, manda lo que piden.
 - Los colores van en variables con nombre (--primary, --fondo, --texto…), no escritos a
   mano en cada componente.
   Por qué: cuando alguien pida cambiarlos vas a tocar cuatro variables en vez de

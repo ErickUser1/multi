@@ -73,6 +73,39 @@ export interface StoredUsuario {
   creadoEn: number;
 }
 
+/**
+ * La conexión de una sala con Supabase, para que su app tenga base de datos.
+ *
+ * Es DE LA SALA y no de quien la conectó: quien entra con el link la hereda y
+ * puede construir sobre esa base sin volver a autorizar nada. Es la misma
+ * decisión que el resto de la sala (lo que hay dentro es de quien tenga el
+ * link), y tiene la misma consecuencia: hoy los ids se pueden adivinar, así que
+ * acertar uno da acceso a la cuenta de Supabase de quien conectó. Está en el
+ * ROADMAP junto a los permisos de sala.
+ *
+ * Los tokens y la contraseña se guardan CIFRADOS (ver `cripto.ts`). Aquí viajan
+ * ya en claro: cifrar y descifrar es trabajo de la implementación, para que
+ * quien use esto no pueda olvidarse.
+ */
+export interface ConexionSupabase {
+  roomId: string;
+  acceso: string;
+  refresco: string;
+  /** Cuándo caduca el de acceso, en milisegundos. */
+  expiraEn: number;
+  /** El identificador corto del proyecto. Null mientras se está creando. */
+  proyecto?: string | null;
+  /**
+   * La contraseña de Postgres que Multi generó.
+   *
+   * Se guarda porque Supabase NO la devuelve nunca: su documentación dice que
+   * no se puede recuperar por la API. Si Multi no la guardara, se perdería para
+   * siempre y la única salida sería resetearla desde su panel.
+   */
+  password?: string | null;
+  conectadoEn: number;
+}
+
 /** Una sala que alguien con cuenta visitó, para que le siga entre dispositivos. */
 export interface SalaDeUsuario {
   roomId: string;
@@ -151,6 +184,22 @@ export interface Storage {
   salasDeUsuario(usuarioId: string): Promise<SalaDeUsuario[]>;
   recordarSalaDeUsuario(usuarioId: string, roomId: string): Promise<void>;
   olvidarSalaDeUsuario(usuarioId: string, roomId: string): Promise<void>;
+
+  // ── Supabase ──────────────────────────────────────────────────────────────
+  //
+  // Opcional igual que las cuentas: si nadie conecta una base, esta tabla queda
+  // vacía y Multi funciona como siempre.
+
+  /**
+   * La conexión de esta sala, o null si no tiene.
+   *
+   * También devuelve null si lo guardado no se puede descifrar, que pasa cuando
+   * alguien cambió `MULTI_LLAVE`. Ahí la respuesta correcta es tratar la sala
+   * como no conectada y pedir la autorización otra vez.
+   */
+  conexionSupabase(roomId: string): Promise<ConexionSupabase | null>;
+  guardarConexionSupabase(conexion: ConexionSupabase): Promise<void>;
+  borrarConexionSupabase(roomId: string): Promise<void>;
 
   close(): Promise<void>;
 }

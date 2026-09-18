@@ -30,6 +30,7 @@
     "demo:variables": "tsx src/demos/variables.ts",
     "demo:publicar": "tsx src/demos/publicar.ts",
     "demo:cuentas": "tsx src/demos/cuentas.ts",
+    "demo:cripto": "tsx src/demos/cripto.ts",
     "demo:carga": "tsx src/demos/carga.ts",
     "demo:dormir": "tsx src/demos/dormir.ts"
   },

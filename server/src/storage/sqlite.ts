@@ -2,7 +2,9 @@ import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { Message } from "../agent/providers/types.js";
+import { cifrar, descifrar } from "../cripto.js";
 import type {
+  ConexionSupabase,
   SalaDeUsuario,
   Storage,
   StoredMessage,
@@ -95,6 +97,26 @@ export class SqliteStorage implements Storage {
         room_id     TEXT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
         visitada_en INTEGER NOT NULL,
         PRIMARY KEY (usuario_id, room_id)
+      );
+
+      -- La base de datos que una sala conectó en Supabase.
+      --
+      -- Los tres campos de secreto van CIFRADOS (ver cripto.ts): la llave vive
+      -- en el .env del server, así que una copia de este archivo no los revela.
+      --
+      -- El CASCADE importa: borrar una sala se lleva su conexión, y sin él
+      -- quedarían tokens de acceso a cuentas ajenas apuntando a nada.
+      CREATE TABLE IF NOT EXISTS supabase_salas (
+        room_id       TEXT PRIMARY KEY REFERENCES rooms(id) ON DELETE CASCADE,
+        acceso        TEXT NOT NULL,
+        refresco      TEXT NOT NULL,
+        expira_en     INTEGER NOT NULL,
+        -- Null mientras el proyecto se está creando: autorizar y tener base
+        -- lista son dos momentos distintos, y el segundo tarda minutos.
+        proyecto      TEXT,
+        -- Supabase no la devuelve nunca, así que si no se guarda aquí se pierde.
+        password      TEXT,
+        conectado_en  INTEGER NOT NULL
       );
     `);
 
@@ -367,6 +389,65 @@ export class SqliteStorage implements Storage {
     this.db
       .prepare(`DELETE FROM salas_de_usuario WHERE usuario_id = ? AND room_id = ?`)
       .run(usuarioId, roomId);
+  }
+
+  // ── Supabase ──────────────────────────────────────────────────────────────
+
+  async conexionSupabase(roomId: string): Promise<ConexionSupabase | null> {
+    const row = this.db.prepare(`SELECT * FROM supabase_salas WHERE room_id = ?`).get(roomId) as
+      | Record<string, unknown>
+      | undefined;
+    if (!row) return null;
+
+    const acceso = descifrar(String(row.acceso));
+    const refresco = descifrar(String(row.refresco));
+    // Si no se pueden leer, alguien cambió MULTI_LLAVE. La sala se trata como no
+    // conectada: sin los tokens no hay nada que hacer con esta fila, y pedir la
+    // autorización otra vez es la única salida.
+    if (acceso === null || refresco === null) {
+      console.error(`[supabase] la conexión de ${roomId} no se pudo descifrar`);
+      return null;
+    }
+
+    return {
+      roomId,
+      acceso,
+      refresco,
+      expiraEn: Number(row.expira_en),
+      proyecto: row.proyecto == null ? null : String(row.proyecto),
+      // La contraseña sí puede venir en null sin que sea un problema: se guarda
+      // solo cuando Multi creó el proyecto.
+      password: row.password == null ? null : descifrar(String(row.password)),
+      conectadoEn: Number(row.conectado_en),
+    };
+  }
+
+  async guardarConexionSupabase(c: ConexionSupabase): Promise<void> {
+    this.db
+      .prepare(
+        `INSERT OR REPLACE INTO supabase_salas
+           (room_id, acceso, refresco, expira_en, proyecto, password, conectado_en)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        c.roomId,
+        cifrar(c.acceso),
+        cifrar(c.refresco),
+        c.expiraEn,
+        c.proyecto ?? null,
+        c.password ? cifrar(c.password) : null,
+        c.conectadoEn,
+      );
+  }
+
+  /**
+   * Quita la conexión de la sala.
+   *
+   * Solo lo de aquí: el proyecto en Supabase sigue existiendo, porque es de la
+   * persona. Desconectar en Multi no puede borrarle una base de datos.
+   */
+  async borrarConexionSupabase(roomId: string): Promise<void> {
+    this.db.prepare(`DELETE FROM supabase_salas WHERE room_id = ?`).run(roomId);
   }
 
   async close(): Promise<void> {

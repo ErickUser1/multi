@@ -25,7 +25,38 @@ interface Variable {
   valor: string;
 }
 
-export function EnvPanel({ roomId }: { roomId: string }) {
+/** Por dónde va la conexión con Supabase, tal como la ve el panel. */
+export interface EstadoSupabase {
+  /** Quien corre este Multi configuró la integración. Si no, no se ofrece nada. */
+  configurado: boolean;
+  /** El proyecto de esta sala, o null si todavía no hay. */
+  proyecto: string | null;
+  /** Qué está pasando ahora mismo, si es que algo. */
+  etapa?: "creando" | "levantando" | "protegiendo" | null;
+  segundos?: number;
+  /**
+   * La contraseña de la base, y SOLO durante la sesión en que se creó.
+   *
+   * Supabase no la devuelve por su API, así que este es el único momento en que
+   * alguien la puede copiar. No se guarda en el navegador a propósito: si se
+   * pierde, se resetea desde el panel de Supabase, que es mejor que dejarla
+   * tirada en un localStorage.
+   */
+  password?: string | null;
+  error?: string | null;
+}
+
+export function EnvPanel({
+  roomId,
+  supabase,
+  onConectarSupabase,
+  onDesconectarSupabase,
+}: {
+  roomId: string;
+  supabase: EstadoSupabase;
+  onConectarSupabase: () => void;
+  onDesconectarSupabase: () => void;
+}) {
   const { t } = useTextos();
   const [abierto, setAbierto] = useState(false);
   const [vars, setVars] = useState<Variable[]>([]);
@@ -198,6 +229,59 @@ export function EnvPanel({ roomId }: { roomId: string }) {
               hasta que el dev server se reinicia. Decirlo evita el rato de creer
               que la variable no se guardó. */}
           {guardado && <p className="env-reinicio">{t.envReinicio}</p>}
+
+          {/* Supabase va aquí abajo y no en su propio panel: quien viene a
+              buscar cómo conectar una base entra por Variables, que es donde el
+              agente le dijo que mirara. Si quien hospeda este Multi no lo
+              configuró, no existe: igual que el botón de entrar con cuenta. */}
+          {supabase.configurado && (
+            <div className="env-supabase">
+              <div className="env-cab">{t.sbTitulo}</div>
+
+              {supabase.etapa ? (
+                <p className="env-nota">
+                  {supabase.etapa === "creando" && t.sbCreando}
+                  {supabase.etapa === "levantando" && t.sbLevantando}
+                  {supabase.etapa === "protegiendo" && t.sbProtegiendo}
+                  {/* Los segundos solo aparecen en la espera larga, que es la
+                      que hace dudar de si sigue vivo. */}
+                  {supabase.etapa === "levantando" && supabase.segundos
+                    ? ` (${supabase.segundos}s)`
+                    : ""}
+                </p>
+              ) : supabase.proyecto ? (
+                <>
+                  <p className="env-nota">{t.sbConectado(supabase.proyecto)}</p>
+                  <div className="env-acciones">
+                    <button className="env-quitar-sb" onClick={onDesconectarSupabase}>
+                      {t.sbDesconectar}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="env-nota">{t.sbNota}</p>
+                  <div className="env-acciones">
+                    <button className="env-guardar" onClick={onConectarSupabase}>
+                      {t.sbConectar}
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {/* La contraseña se enseña una vez y ya: Supabase no la devuelve
+                  nunca por su API, así que este es el único momento en que se
+                  puede copiar. */}
+              {supabase.password && (
+                <div className="env-password">
+                  <p className="env-nota">{t.sbPassword}</p>
+                  <input readOnly value={supabase.password} onFocus={(e) => e.target.select()} />
+                </div>
+              )}
+
+              {supabase.error && <p className="env-error">{supabase.error}</p>}
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -69,6 +69,22 @@ import {
 import { MAX_AGENTS_PER_ROOM, resumenDeOtros } from "./engine/agents.js";
 import { fileMutation } from "./engine/file-mutation.js";
 import { leerVariables, guardarVariables } from "./engine/env.js";
+import { hayLlave } from "./cripto.js";
+import {
+  anonKey,
+  armarRls,
+  consumirState as consumirStateSupabase,
+  credencialDeSupabase,
+  crearProyecto,
+  esperarProyecto,
+  FalloDeSupabase,
+  intercambiarCodigo as intercambiarCodigoSupabase,
+  nuevaAutorizacion,
+  nuevaPassword,
+  organizaciones,
+  urlDeAutorizacion as urlDeAutorizacionSupabase,
+  urlDelProyecto,
+} from "./supabase.js";
 import {
   publicarSala,
   credencialDeDeploy,
@@ -706,6 +722,178 @@ fastify.put<{ Params: { id: string }; Body: { variables?: unknown } }>(
     return { variables };
   },
 );
+
+/**
+ * Conectar la sala con Supabase, para que su app tenga base de datos.
+ *
+ * El recorrido completo: se aprieta un botón, la persona autoriza en Supabase,
+ * y al volver Multi crea el proyecto, saca su llave PÚBLICA y la escribe en el
+ * `.env` de la sala. El agente la encuentra ahí como cualquier otra variable.
+ *
+ * Igual que las rutas de `/env`, estas NO comprueban sesión, y por la misma
+ * razón: la conexión es de la sala, así que quien entra con el link la hereda y
+ * puede construir sobre esa base. Lo que hay que saber es la consecuencia: hoy
+ * los ids de sala se pueden adivinar, y acertar uno da acceso a la cuenta de
+ * Supabase de quien conectó. Está en el ROADMAP con los permisos de sala.
+ */
+fastify.get<{ Params: { id: string } }>("/rooms/:id/supabase", async (req) => {
+  const conexion = await (await getStorage()).conexionSupabase(req.params.id);
+  return {
+    // Dos condiciones, y las dos son del server: sin credencial de OAuth no hay
+    // a dónde mandar a nadie, y sin llave maestra no se puede guardar lo que
+    // vuelva. Si falta alguna, el panel no ofrece el botón.
+    configurado: credencialDeSupabase() !== null && hayLlave(),
+    proyecto: conexion?.proyecto ?? null,
+    url: conexion?.proyecto ? urlDelProyecto(conexion.proyecto) : null,
+  };
+});
+
+/** A dónde va la vuelta de Supabase. Se arma con los headers, como la de Google. */
+function vueltaDeSupabase(req: { headers: Record<string, unknown> }): string {
+  const proto = String(req.headers["x-forwarded-proto"] ?? "http").split(",")[0];
+  return `${proto}://${req.headers.host}/supabase/callback`;
+}
+
+fastify.get<{ Params: { id: string } }>("/rooms/:id/supabase/conectar", async (req, reply) => {
+  const cred = credencialDeSupabase();
+  if (!cred) return reply.code(503).send({ error: "este Multi no tiene configurado Supabase" });
+  if (!hayLlave()) {
+    // Sin dónde guardar el token, autorizar no serviría de nada: la persona
+    // pasaría por toda la pantalla de permisos para que se perdiera al volver.
+    return reply.code(503).send({ error: "este Multi no puede guardar la conexión (falta MULTI_LLAVE)" });
+  }
+  const room = getRoom(req.params.id) ?? (await wakeRoom(req.params.id));
+  if (!room) return reply.code(404).send({ error: "sala no encontrada" });
+
+  const { state, challenge } = nuevaAutorizacion(room.id);
+  return reply.redirect(urlDeAutorizacionSupabase(cred, state, challenge, vueltaDeSupabase(req)));
+});
+
+/**
+ * La vuelta de Supabase. Una sola para todas las salas: a cuál pertenece esta
+ * autorización sale del `state`, que es lo que se guardó al empezar.
+ */
+fastify.get<{ Querystring: { code?: string; state?: string; error?: string } }>(
+  "/supabase/callback",
+  async (req, reply) => {
+    const cred = credencialDeSupabase();
+    if (!cred) return reply.code(503).send({ error: "este Multi no tiene configurado Supabase" });
+
+    const vuelo = consumirStateSupabase(req.query.state);
+    // Sin state válido no se sabe ni a qué sala volver, así que esto va a la
+    // raíz y no a la sala: es el único caso donde no hay a dónde regresar.
+    if (!vuelo) return reply.code(400).send({ error: "la conexión caducó, vuelve a intentar" });
+
+    const aLaSala = `/#/${vuelo.roomId}`;
+    // Cancelar en la pantalla de Supabase no es un fallo: se vuelve a la sala
+    // sin conexión, que es un estado perfectamente válido.
+    if (req.query.error || !req.query.code) return reply.redirect(aLaSala);
+
+    const tokens = await intercambiarCodigoSupabase(
+      cred,
+      req.query.code,
+      vuelo.verificador,
+      vueltaDeSupabase(req),
+    );
+    if (!tokens) return reply.code(502).send({ error: "Supabase no confirmó la autorización" });
+
+    // Se guarda ANTES de crear el proyecto, a propósito: crear tarda minutos y
+    // si el server se cae en medio, la autorización no se pierde y se puede
+    // reintentar solo la parte que faltó.
+    await (await getStorage()).guardarConexionSupabase({
+      roomId: vuelo.roomId,
+      acceso: tokens.acceso,
+      refresco: tokens.refresco,
+      expiraEn: tokens.expiraEn,
+      conectadoEn: Date.now(),
+    });
+
+    // La persona se va de vuelta a su sala YA. Crear el proyecto sigue por su
+    // cuenta y la sala se entera por socket: tenerla mirando una pantalla de
+    // redirección durante tres minutos sería peor.
+    void prepararProyecto(vuelo.roomId).catch((err) => {
+      console.error(`[supabase] no se pudo preparar el proyecto de ${vuelo.roomId}:`, err);
+      io.to(vuelo.roomId).emit("supabase:fallo", { error: String(err?.message ?? err) });
+    });
+
+    return reply.redirect(aLaSala);
+  },
+);
+
+/**
+ * Crea el proyecto, lo deja protegido y escribe sus datos al `.env` de la sala.
+ *
+ * Corre en segundo plano después del callback. Cada etapa se avisa por socket
+ * porque el aprovisionamiento tarda minutos: sin eso, la sala ve un botón
+ * quieto y no sabe si sigue vivo.
+ */
+async function prepararProyecto(roomId: string): Promise<void> {
+  const conexion = await (await getStorage()).conexionSupabase(roomId);
+  if (!conexion || conexion.proyecto) return; // ya lo tiene, o se desconectó mientras tanto
+
+  const room = getRoom(roomId) ?? (await wakeRoom(roomId));
+  if (!room) return;
+
+  const avisar = (etapa: string, extra: Record<string, unknown> = {}) =>
+    io.to(roomId).emit("supabase:etapa", { etapa, ...extra });
+
+  avisar("creando");
+  const orgs = await organizaciones(conexion.acceso);
+  if (orgs.length === 0) throw new FalloDeSupabase("esa cuenta de Supabase no tiene organizaciones");
+  const org = orgs[0].slug ?? orgs[0].id;
+
+  const password = nuevaPassword();
+  const proyecto = await crearProyecto(conexion.acceso, {
+    // El nombre lleva el id de la sala para que, en un panel de Supabase con
+    // varios proyectos, se sepa cuál es de cuál sin abrirlos.
+    nombre: `multi-${roomId}`,
+    organizacion: org,
+    password,
+    region: process.env.SUPABASE_REGION ?? "us-east-1",
+  });
+  const ref = proyecto.ref ?? proyecto.id;
+
+  // Se guarda la referencia en cuanto existe, aunque el proyecto todavía esté
+  // levantándose: si el server se reinicia ahora, lo que ya se creó no se
+  // vuelve a crear. Un proyecto huérfano en la cuenta de alguien sería difícil
+  // de explicar.
+  await (await getStorage()).guardarConexionSupabase({ ...conexion, proyecto: ref, password });
+
+  avisar("levantando");
+  await esperarProyecto(conexion.acceso, ref, (s) => avisar("levantando", { segundos: s }));
+
+  avisar("protegiendo");
+  await armarRls(conexion.acceso, ref);
+
+  const llave = await anonKey(conexion.acceso, ref);
+
+  // Las variables se AÑADEN a las que ya había: guardarVariables reemplaza la
+  // lista completa, así que hay que leerlas antes o se pierde lo que alguien
+  // hubiera puesto a mano.
+  const previas = (await leerVariables(room.workspace.dir)).filter(
+    (v) => v.nombre !== "VITE_SUPABASE_URL" && v.nombre !== "VITE_SUPABASE_ANON_KEY",
+  );
+  await guardarVariables(room.workspace.dir, [
+    ...previas,
+    { nombre: "VITE_SUPABASE_URL", valor: urlDelProyecto(ref) },
+    { nombre: "VITE_SUPABASE_ANON_KEY", valor: llave },
+  ]);
+
+  // La contraseña va en el aviso y NO se vuelve a mandar nunca: Supabase no la
+  // devuelve por su API, así que esta es la única vez que alguien la puede ver
+  // y copiar. Multi la conserva cifrada, pero quien quiera entrar a su base por
+  // fuera la necesita.
+  io.to(roomId).emit("supabase:listo", { proyecto: ref, url: urlDelProyecto(ref), password });
+}
+
+fastify.delete<{ Params: { id: string } }>("/rooms/:id/supabase", async (req) => {
+  // Solo se desconecta de aquí: el proyecto en Supabase sigue existiendo porque
+  // es de la persona, y las variables se quedan en el .env porque la app las
+  // sigue necesitando para funcionar.
+  await (await getStorage()).borrarConexionSupabase(req.params.id);
+  io.to(req.params.id).emit("supabase:desconectado", {});
+  return { ok: true };
+});
 
 /**
  * Publicar la app de la sala en internet.

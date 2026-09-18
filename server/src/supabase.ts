@@ -162,7 +162,10 @@ export async function intercambiarCodigo(
       }),
     });
     if (!res.ok) {
-      console.error(`[supabase] rechazó el código: ${res.status}`);
+      // El cuerpo dice POR QUÉ (redirect_uri que no coincide, verificador que no
+      // cuadra, código ya usado), y sin él el 400 no distingue entre esos tres.
+      const detalle = await res.text().catch(() => "");
+      console.error(`[supabase] rechazó el código: ${res.status} ${detalle.slice(0, 400)}`);
       return null;
     }
     return aTokens((await res.json()) as Record<string, unknown>);
@@ -285,13 +288,26 @@ export async function esperarProyecto(
   topeMs = 10 * 60 * 1000,
 ): Promise<void> {
   const t0 = Date.now();
+  let ultimo = "";
   while (Date.now() - t0 < topeMs) {
-    const estado = await estadoDeProyecto(acceso, ref).catch(() => "UNKNOWN");
+    // El error se registra en vez de tragárselo: si la consulta de estado falla
+    // (permisos que faltan, por ejemplo), sin esto el bucle gira hasta el tope
+    // sin una sola pista de por qué. Pasó la primera vez que se probó.
+    const estado = await estadoDeProyecto(acceso, ref).catch((err) => {
+      console.error(`[supabase] no se pudo consultar el estado de ${ref}:`, err?.message ?? err);
+      return "DESCONOCIDO";
+    });
     if (estado === "ACTIVE_HEALTHY") return;
+    // Solo cuando cambia: un log cada cinco segundos durante minutos tapa
+    // cualquier otra cosa que esté pasando en la consola.
+    if (estado !== ultimo) {
+      console.log(`[supabase] ${ref} está en ${estado}`);
+      ultimo = estado;
+    }
     onEspera?.(Math.round((Date.now() - t0) / 1000));
     await new Promise((r) => setTimeout(r, 5000));
   }
-  throw new FalloDeSupabase("el proyecto tardó demasiado en levantarse");
+  throw new FalloDeSupabase(`el proyecto tardó demasiado en levantarse (se quedó en ${ultimo})`);
 }
 
 /**

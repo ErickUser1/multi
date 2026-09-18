@@ -25,6 +25,18 @@ export interface ToolContext {
   /** Se llama al empezar/terminar una espera de lock (dos relojes — ver DESIGN.md). */
   onWaitStart?: (info: { path: string; holder?: string }) => void;
   onWaitEnd?: () => void;
+  /**
+   * Corre SQL contra la base que la sala conectó, o null si no hay ninguna.
+   *
+   * Se inyecta en vez de que la tool sepa de Supabase, por la misma razón que el
+   * runner: las tools no conocen la infraestructura de afuera, reciben lo que
+   * pueden hacer. Así el motor sigue sin saber de proveedores, y quien no tenga
+   * base conectada simplemente no recibe esto y la tool dice que no hay.
+   *
+   * Y sobre todo: la credencial NUNCA entra al contenedor. El agente pide que se
+   * corra el SQL, y quien lo corre es el server con el permiso de la sala.
+   */
+  ejecutarSql?: (sql: string) => Promise<void>;
 }
 
 export type ToolEvent =

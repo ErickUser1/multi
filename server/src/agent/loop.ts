@@ -179,7 +179,9 @@ créalo con bash: es tu trabajo, no preguntes por dónde empezar.
     * Datos que VARIAS personas comparten y ven al mismo tiempo (un registro que
       llenan entre todos, un inventario de un equipo) → eso no cabe en una base local.
       Si en el .env ya están VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY, la sala ya
-      conectó su base: úsalas y no pidas nada.
+      conectó su base: úsalas desde el código de la app para leer y escribir filas,
+      y usa la tool sql para crear las tablas y sus políticas. Con esa tool tienes
+      todo lo que necesitas, así que NO pidas contraseñas ni llaves a nadie.
       Si no están, di que se conecta desde el panel de Variables, con el botón de
       Supabase, y ofrece dejar la app andando con datos de prueba mientras tanto.
 - Trabajando contra Supabase hay dos reglas que NO se negocian:
@@ -303,6 +305,8 @@ export async function runAgent(opts: {
   onWaitEnd?: () => void;
   /** Dónde corren los comandos de bash. Obligatorio: ver ToolContext. */
   runner: ToolContext["runner"];
+  /** Con qué cambia el esquema de la base, si la sala conectó una. */
+  ejecutarSql?: ToolContext["ejecutarSql"];
   /**
    * El historial tal como va, para que sobreviva si el turno LANZA.
    *
@@ -331,6 +335,7 @@ export async function runAgent(opts: {
   const toolCtx: ToolContext = {
     workspaceDir,
     runner: opts.runner,
+    ejecutarSql: opts.ejecutarSql,
     emit: callbacks.onToolEvent,
     agentId: opts.agentId,
     onWaitStart: opts.onWaitStart,

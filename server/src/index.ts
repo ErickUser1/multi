@@ -82,6 +82,8 @@ import {
   nuevaAutorizacion,
   nuevaPassword,
   organizaciones,
+  ejecutarSql,
+  refrescar as refrescarSupabase,
   urlDeAutorizacion as urlDeAutorizacionSupabase,
   urlDelProyecto,
 } from "./supabase.js";
@@ -765,6 +767,19 @@ fastify.get<{ Params: { id: string } }>("/rooms/:id/supabase/conectar", async (r
   const room = getRoom(req.params.id) ?? (await wakeRoom(req.params.id));
   if (!room) return reply.code(404).send({ error: "sala no encontrada" });
 
+  // Si la sala YA autorizó y lo que quedó a medias fue el proyecto, no se
+  // vuelve a mandar a nadie a la pantalla de permisos: se retoma. Levantar una
+  // base tarda minutos, y que eso se corte (un reinicio, el tope de espera) es
+  // normal; volver a pedir permisos por algo que ya se concedió, no.
+  const yaConectada = await (await getStorage()).conexionSupabase(room.id);
+  if (yaConectada) {
+    void prepararProyecto(room.id).catch((err) => {
+      console.error(`[supabase] no se pudo retomar ${room.id}:`, err);
+      io.to(room.id).emit("supabase:fallo", { error: String(err?.message ?? err) });
+    });
+    return reply.redirect(`/#/sala/${room.id}`);
+  }
+
   const { state, challenge } = nuevaAutorizacion(room.id);
   return reply.redirect(urlDeAutorizacionSupabase(cred, state, challenge, vueltaDeSupabase(req)));
 });
@@ -776,19 +791,31 @@ fastify.get<{ Params: { id: string } }>("/rooms/:id/supabase/conectar", async (r
 fastify.get<{ Querystring: { code?: string; state?: string; error?: string } }>(
   "/supabase/callback",
   async (req, reply) => {
+    console.log(`[supabase] vuelve de autorizar: ${JSON.stringify(req.query)}`);
+
     const cred = credencialDeSupabase();
-    if (!cred) return reply.code(503).send({ error: "este Multi no tiene configurado Supabase" });
+    if (!cred) {
+      console.error("[supabase] no hay credencial configurada");
+      return reply.code(503).send({ error: "este Multi no tiene configurado Supabase" });
+    }
 
     const vuelo = consumirStateSupabase(req.query.state);
     // Sin state válido no se sabe ni a qué sala volver, así que esto va a la
     // raíz y no a la sala: es el único caso donde no hay a dónde regresar.
-    if (!vuelo) return reply.code(400).send({ error: "la conexión caducó, vuelve a intentar" });
+    if (!vuelo) {
+      console.error(`[supabase] state desconocido o vencido: ${req.query.state}`);
+      return reply.code(400).send({ error: "la conexión caducó, vuelve a intentar" });
+    }
 
-    const aLaSala = `/#/${vuelo.roomId}`;
+    const aLaSala = `/#/sala/${vuelo.roomId}`;
     // Cancelar en la pantalla de Supabase no es un fallo: se vuelve a la sala
     // sin conexión, que es un estado perfectamente válido.
-    if (req.query.error || !req.query.code) return reply.redirect(aLaSala);
+    if (req.query.error || !req.query.code) {
+      console.log(`[supabase] sin código, de vuelta a ${aLaSala}`);
+      return reply.redirect(aLaSala);
+    }
 
+    console.log(`[supabase] cambiando el código por tokens (sala ${vuelo.roomId})`);
     const tokens = await intercambiarCodigoSupabase(
       cred,
       req.query.code,
@@ -796,6 +823,7 @@ fastify.get<{ Querystring: { code?: string; state?: string; error?: string } }>(
       vueltaDeSupabase(req),
     );
     if (!tokens) return reply.code(502).send({ error: "Supabase no confirmó la autorización" });
+    console.log(`[supabase] tokens recibidos, redirigiendo a ${aLaSala}`);
 
     // Se guarda ANTES de crear el proyecto, a propósito: crear tarda minutos y
     // si el server se cae en medio, la autorización no se pierde y se puede
@@ -827,9 +855,20 @@ fastify.get<{ Querystring: { code?: string; state?: string; error?: string } }>(
  * porque el aprovisionamiento tarda minutos: sin eso, la sala ve un botón
  * quieto y no sabe si sigue vivo.
  */
+const preparacionesDeSupabase = new KeyedMutex();
+
 async function prepararProyecto(roomId: string): Promise<void> {
+  // Serializado por sala: dos caminos llaman aquí (el callback al autorizar, y
+  // el botón de conectar cuando retoma), y si coinciden los dos leen que no hay
+  // proyecto y los dos lo crean. Supabase rechaza el segundo por nombre
+  // repetido, así que el síntoma es un error confuso en vez de una carrera
+  // evidente. Pasó la primera vez que se reconectó.
+  return preparacionesDeSupabase.run(roomId, () => prepararProyectoSerializado(roomId));
+}
+
+async function prepararProyectoSerializado(roomId: string): Promise<void> {
   const conexion = await (await getStorage()).conexionSupabase(roomId);
-  if (!conexion || conexion.proyecto) return; // ya lo tiene, o se desconectó mientras tanto
+  if (!conexion) return; // se desconectó mientras tanto
 
   const room = getRoom(roomId) ?? (await wakeRoom(roomId));
   if (!room) return;
@@ -837,27 +876,41 @@ async function prepararProyecto(roomId: string): Promise<void> {
   const avisar = (etapa: string, extra: Record<string, unknown> = {}) =>
     io.to(roomId).emit("supabase:etapa", { etapa, ...extra });
 
-  avisar("creando");
-  const orgs = await organizaciones(conexion.acceso);
-  if (orgs.length === 0) throw new FalloDeSupabase("esa cuenta de Supabase no tiene organizaciones");
-  const org = orgs[0].slug ?? orgs[0].id;
+  // Si el proyecto YA existe se retoma desde donde se quedó, en vez de crear
+  // otro. Levantar una base tarda minutos y cualquier cosa puede cortar el
+  // camino a la mitad (un reinicio, un tope de espera): sin esto, reintentar
+  // dejaría un proyecto huérfano en la cuenta de alguien por cada intento.
+  let ref = conexion.proyecto ?? null;
+  let password = conexion.password ?? null;
 
-  const password = nuevaPassword();
-  const proyecto = await crearProyecto(conexion.acceso, {
-    // El nombre lleva el id de la sala para que, en un panel de Supabase con
-    // varios proyectos, se sepa cuál es de cuál sin abrirlos.
-    nombre: `multi-${roomId}`,
-    organizacion: org,
-    password,
-    region: process.env.SUPABASE_REGION ?? "us-east-1",
-  });
-  const ref = proyecto.ref ?? proyecto.id;
+  if (!ref) {
+    avisar("creando");
+    const orgs = await organizaciones(conexion.acceso);
+    if (orgs.length === 0) {
+      throw new FalloDeSupabase("esa cuenta de Supabase no tiene organizaciones");
+    }
+    const org = orgs[0].slug ?? orgs[0].id;
+    console.log(`[supabase] creando proyecto para ${roomId} en la organización ${org}`);
 
-  // Se guarda la referencia en cuanto existe, aunque el proyecto todavía esté
-  // levantándose: si el server se reinicia ahora, lo que ya se creó no se
-  // vuelve a crear. Un proyecto huérfano en la cuenta de alguien sería difícil
-  // de explicar.
-  await (await getStorage()).guardarConexionSupabase({ ...conexion, proyecto: ref, password });
+    password = nuevaPassword();
+    const proyecto = await crearProyecto(conexion.acceso, {
+      // El nombre lleva el id de la sala para que, en un panel de Supabase con
+      // varios proyectos, se sepa cuál es de cuál sin abrirlos.
+      nombre: `multi-${roomId}`,
+      organizacion: org,
+      password,
+      region: process.env.SUPABASE_REGION ?? "us-east-1",
+    });
+    ref = proyecto.ref ?? proyecto.id;
+    console.log(`[supabase] proyecto ${ref} creado`);
+
+    // Se guarda la referencia en cuanto existe, aunque el proyecto todavía esté
+    // levantándose: si el server se reinicia ahora, lo que ya se creó no se
+    // vuelve a crear.
+    await (await getStorage()).guardarConexionSupabase({ ...conexion, proyecto: ref, password });
+  } else {
+    console.log(`[supabase] retomando el proyecto ${ref} de ${roomId}`);
+  }
 
   avisar("levantando");
   await esperarProyecto(conexion.acceso, ref, (s) => avisar("levantando", { segundos: s }));
@@ -884,6 +937,59 @@ async function prepararProyecto(roomId: string): Promise<void> {
   // y copiar. Multi la conserva cifrada, pero quien quiera entrar a su base por
   // fuera la necesita.
   io.to(roomId).emit("supabase:listo", { proyecto: ref, url: urlDelProyecto(ref), password });
+}
+
+/**
+ * Con qué corre SQL el agente de esta sala, o undefined si no tiene base.
+ *
+ * Devuelve una función y no la credencial a propósito: el token se queda en el
+ * server y lo que viaja al agente es la capacidad de pedir un cambio. Así la
+ * credencial nunca entra al contenedor, que es la misma regla que ya cumple la
+ * API key del modelo.
+ */
+async function sqlDeLaSala(roomId: string): Promise<((sql: string) => Promise<void>) | undefined> {
+  const conexion = await (await getStorage()).conexionSupabase(roomId);
+  if (!conexion?.proyecto) return undefined;
+  const ref = conexion.proyecto;
+  return async (sql: string) => {
+    // El token se relee en cada llamada en vez de capturarlo: un turno puede
+    // durar más que la hora que vive el de acceso, y renovarlo aquí evita que
+    // el agente se tope con un 401 a mitad de su trabajo.
+    const acceso = await accesoVigente(roomId);
+    if (!acceso) throw new FalloDeSupabase("la sala perdió el acceso a su base, hay que reconectar");
+    await ejecutarSql(acceso, ref, sql);
+  };
+}
+
+/**
+ * El token de acceso de una sala, renovado si hacía falta.
+ *
+ * Null cuando la persona revocó el permiso desde su panel de Supabase: ahí no
+ * hay nada que reintentar, hay que volver a autorizar.
+ */
+async function accesoVigente(roomId: string): Promise<string | null> {
+  const storage = await getStorage();
+  const conexion = await storage.conexionSupabase(roomId);
+  if (!conexion) return null;
+
+  // Un minuto de margen: si está a punto de caducar, mejor renovar ahora que a
+  // media operación.
+  if (conexion.expiraEn > Date.now() + 60_000) return conexion.acceso;
+
+  const cred = credencialDeSupabase();
+  if (!cred) return null;
+  const tokens = await refrescarSupabase(cred, conexion.refresco);
+  if (!tokens) {
+    console.error(`[supabase] ${roomId} ya no puede renovar su token`);
+    return null;
+  }
+  await storage.guardarConexionSupabase({
+    ...conexion,
+    acceso: tokens.acceso,
+    refresco: tokens.refresco,
+    expiraEn: tokens.expiraEn,
+  });
+  return tokens.acceso;
 }
 
 fastify.delete<{ Params: { id: string } }>("/rooms/:id/supabase", async (req) => {
@@ -1706,6 +1812,11 @@ async function runAgentTurn(
       // Los comandos del agente corren en el contenedor de la sala (o local si
       // no hay Docker). El agente no distingue: es la misma tool.
       runner,
+      // Cambiar el esquema de la base de la sala, si conectó una. Se pasa como
+      // capacidad y no como credencial: el token se queda aquí y el agente solo
+      // manda el SQL. Undefined cuando la sala no tiene base, y entonces la
+      // tool lo dice en vez de fallar de un modo que el agente no entienda.
+      ejecutarSql: await sqlDeLaSala(room.id),
       messages: history,
       // Qué están haciendo los demás, para que no repita su trabajo. Se calcula
       // AL EMPEZAR el turno: es una foto del momento, no una suscripción.

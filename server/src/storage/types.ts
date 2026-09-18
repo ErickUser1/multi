@@ -24,7 +24,27 @@ export interface StoredRoom {
   nombre?: string | null;
   /** Dónde quedó publicada la app, o null si la sala nunca se publicó. */
   urlPublicada?: string | null;
+  /**
+   * Si en esta sala hay que mencionar al agente para despertarlo.
+   *
+   * En "multi" sí, que es la regla de siempre: el chat sirve para hablar entre
+   * personas sin gastar tokens, y `@agente` es lo que permite lanzar varios en
+   * paralelo. En "solo" no hace falta, porque no hay con quién platicar.
+   *
+   * Null es "multi", y eso importa: las salas que ya existían se comportan
+   * exactamente igual que antes de que esto existiera.
+   */
+  modo?: ModoDeSala | null;
 }
+
+/**
+ * Cuánta gente asume una sala.
+ *
+ * Nace en "solo" porque así llega todo el mundo, y porque la mención fue lo
+ * primero con lo que se toparon las cuatro personas que llegaron por su cuenta:
+ * las cuatro escribieron sin `@agente` y las cuatro recibieron silencio.
+ */
+export type ModoDeSala = "solo" | "multi";
 
 export interface StoredMessage {
   roomId: string;
@@ -133,6 +153,8 @@ export interface Storage {
   setUrlPublicada(id: string, url: string): Promise<void>;
   /** Le pone nombre a la sala. `null` lo quita y se vuelve a ver el id. */
   renameRoom(id: string, nombre: string | null): Promise<void>;
+  /** Si en esta sala hay que mencionar al agente para despertarlo. */
+  setModo(id: string, modo: ModoDeSala): Promise<void>;
   /**
    * Borra la sala y todo lo suyo: mensajes e historiales de agentes.
    *

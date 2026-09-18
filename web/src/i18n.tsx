@@ -35,6 +35,15 @@ const TEXTOS = {
 
     // Sala
     enLaSala: (n: number) => `${n} en la sala`,
+    // El nombre del modo, no lo que hace. Se probó al revés ("sin @" / "con @")
+    // y no le dice nada a quien todavía no sabe qué significa la arroba, que es
+    // justo a quien esto viene a ayudar. Qué implica cada uno lo cuenta el
+    // texto de abajo, al pasar el cursor.
+    modo: (m: "solo" | "multi"): string => (m === "solo" ? "Solo" : "Multijugador"),
+    modoAyuda: (m: "solo" | "multi"): string =>
+      m === "solo"
+        ? "Escribir despierta al agente. Toca para pedir que haya que mencionarlo, y poder platicar sin gastar tokens."
+        : "Hay que escribir @agente para despertarlo. Toca para que responda a todo lo que escribas.",
     renombrarSala: "clic para ponerle nombre",
     ningunaSala: "ninguna sala abierta",
     eligeOCrea: "abre una de tus salas o crea una nueva con el +",
@@ -268,6 +277,11 @@ const TEXTOS = {
 
     // Sala
     enLaSala: (n: number) => `${n} in the room`,
+    modo: (m: "solo" | "multi"): string => (m === "solo" ? "Solo" : "Multiplayer"),
+    modoAyuda: (m: "solo" | "multi"): string =>
+      m === "solo"
+        ? "Anything you write wakes the agent. Tap to require mentioning it, so you can chat without spending tokens."
+        : "You need to write @agente to wake it. Tap to make it answer everything you write.",
     renombrarSala: "click to name it",
     ningunaSala: "no room open",
     eligeOCrea: "open one of your rooms or create a new one with the +",

@@ -5,6 +5,7 @@ import type { Message } from "../agent/providers/types.js";
 import { cifrar, descifrar } from "../cripto.js";
 import type {
   ConexionSupabase,
+  ModoDeSala,
   SalaDeUsuario,
   Storage,
   StoredMessage,
@@ -41,7 +42,10 @@ export class SqliteStorage implements Storage {
         -- lo que se dicta por teléfono); esto es solo la etiqueta que se ve.
         nombre         TEXT,
         -- Dónde quedó publicada la app, si es que se publicó.
-        url_publicada  TEXT
+        url_publicada  TEXT,
+        -- Si hay que mencionar al agente. Null es "multi": las salas de antes
+        -- de esta columna siguen comportándose igual que siempre.
+        modo           TEXT
       );
 
       CREATE TABLE IF NOT EXISTS messages (
@@ -146,6 +150,15 @@ export class SqliteStorage implements Storage {
       // ya la tiene
     }
 
+    // Si en la sala hay que mencionar al agente. Nullable a propósito: las 64
+    // salas que ya existían quedan en null, que se lee como "multi", y así
+    // ninguna cambia de comportamiento por debajo de quien la estaba usando.
+    try {
+      this.db.exec(`ALTER TABLE rooms ADD COLUMN modo TEXT`);
+    } catch {
+      // ya la tiene
+    }
+
     // Quién escribió el mensaje, si tenía cuenta. Sirve para pintar su foto.
     //
     // Lo de antes se queda en NULL y NO se rellena hacia atrás: atarlo por
@@ -192,6 +205,10 @@ export class SqliteStorage implements Storage {
 
   async renameRoom(id: string, nombre: string | null): Promise<void> {
     this.db.prepare(`UPDATE rooms SET nombre = ? WHERE id = ?`).run(nombre, id);
+  }
+
+  async setModo(id: string, modo: ModoDeSala): Promise<void> {
+    this.db.prepare(`UPDATE rooms SET modo = ? WHERE id = ?`).run(modo, id);
   }
 
   async setUrlPublicada(id: string, url: string): Promise<void> {
@@ -494,5 +511,8 @@ function toRoom(r: Record<string, unknown>): StoredRoom {
     // cae al id.
     nombre: r.nombre == null ? null : String(r.nombre),
     urlPublicada: r.url_publicada == null ? null : String(r.url_publicada),
+    // Solo "solo" cuenta como tal: null y cualquier cosa rara caen a multi, que
+    // es el comportamiento que ya tenían todas las salas.
+    modo: r.modo === "solo" ? "solo" : "multi",
   };
 }

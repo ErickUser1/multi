@@ -13,6 +13,7 @@ import {
 } from "./engine/container.js";
 import { containerRunner, localRunner, NoHayAislamiento, type Runner } from "./engine/runner.js";
 import type { Message } from "./agent/providers/types.js";
+import type { ModoDeSala } from "./storage/types.js";
 import { AgentRegistry } from "./engine/agents.js";
 import { KeyedMutex } from "./engine/keyed-mutex.js";
 import { RunCoordinator } from "./engine/coordinator.js";
@@ -78,6 +79,18 @@ export interface Room {
    * estaba enterrado entre los demás.
    */
   urlPublicada?: string | null;
+  /**
+   * Si en esta sala hay que mencionar al agente para despertarlo.
+   *
+   * En "multi" sí, que es la regla de siempre. En "solo" no hace falta, porque
+   * no hay con quién platicar: escribir es pedirle algo al agente, como en todo
+   * lo que la gente ya conoce.
+   *
+   * Es de la SALA y no de quien la mira, igual que el nombre: si fuera de cada
+   * quien, uno escribiría sin arroba y despertaría un agente que el otro no
+   * esperaba.
+   */
+  modo: ModoDeSala;
   /** El contenedor que aísla esta sala. null si se está corriendo sin Docker. */
   container?: Container | null;
   /** Dónde se ejecutan los comandos del agente (contenedor o local). */
@@ -181,6 +194,9 @@ export async function createRoom(): Promise<Room> {
     id,
     // Nace sin nombre: se ve el id hasta que alguien de la sala le ponga uno.
     nombre: null,
+    // Y nace de una persona, que es como llega todo el mundo. Pasa a multi sola
+    // en cuanto entra alguien más.
+    modo: "solo",
     workspace,
     preview: null,
     members: new Map(),
@@ -233,6 +249,9 @@ async function despertarSala(id: string): Promise<Room | null> {
     id,
     nombre: stored.nombre ?? null,
     urlPublicada: stored.urlPublicada ?? null,
+    // Las salas anteriores a esta columna vuelven en multi, que es como se
+    // comportaron siempre: nada cambia debajo de quien ya las usaba.
+    modo: stored.modo ?? "multi",
     // El workspace ya existe en disco: NO se re-siembra ni se limpia.
     workspace: await createWorkspace(id),
     preview: null,
@@ -512,6 +531,45 @@ export function parseIntent(text: string, hasAnchor: boolean): ChatIntent {
   return { kind: "talk" };
 }
 
+/**
+ * Lo que la SALA hace con ese intent, según cuánta gente asume.
+ *
+ * `parseIntent` decide qué dijo la persona y esto decide qué hacer con ello.
+ * Separado a propósito: la regla de qué cuenta como mención no cambia nunca, y
+ * lo que cambia es la sala.
+ *
+ * En "multi" no toca nada: la mención manda, como siempre.
+ *
+ * En "solo" un mensaje sin arroba es una orden para el agente que ya está, no
+ * plática. Y es `address` y no `spawn` a propósito: escribir dos veces mientras
+ * trabaja tiene que seguir hablándole al mismo (interrumpe y retoma), no ir
+ * sumando agentes que nadie pidió. Eso último le pasó a alguien que acabó con
+ * dos por saludar.
+ *
+ * Un mensaje ANCLADO entra igual, aunque ya viniera como orden: señalar algo y
+ * pedir un cambio es hablarle al agente que está. Sin esto, anclar con el
+ * primero ocupado hacía nacer un segundo.
+ *
+ * Lo que NO se toca es un `@agente` escrito a mano: ahí la arroba sigue
+ * queriendo decir lo de siempre, uno nuevo en paralelo. En este modo la mención
+ * no desaparece, deja de ser obligatoria.
+ */
+export function intentDeLaSala(
+  intent: ChatIntent,
+  opts: { modo: ModoDeSala; texto: string; primerAgente?: string },
+): ChatIntent {
+  if (opts.modo !== "solo") return intent;
+  // Ya va dirigido a alguien por su nombre: no hay nada que reinterpretar.
+  if (intent.kind === "address") return intent;
+  // La arroba explícita pide uno nuevo, y eso vale en los dos modos.
+  if (opts.texto.trim().startsWith("@")) return intent;
+
+  const tarea = intent.kind === "spawn" ? intent.task : opts.texto.trim();
+  return opts.primerAgente
+    ? { kind: "address", agentName: opts.primerAgente, task: tarea }
+    : { kind: "spawn", task: tarea };
+}
+
 export function getRoom(id: string): Room | undefined {
   return rooms.get(id);
 }
@@ -669,6 +727,26 @@ export async function renameRoom(room: Room, crudo: unknown): Promise<string | n
   room.nombre = nombre;
   await (await getStorage()).renameRoom(room.id, nombre);
   return nombre;
+}
+
+/**
+ * Cambia si en esta sala hay que mencionar al agente.
+ *
+ * Mismo criterio que el nombre: es un ajuste de la sala, lo puede tocar quien
+ * esté dentro, y gana el último que escribe. La diferencia es que este sí se
+ * anuncia siempre, porque cambia cómo responde la sala a lo que escribes: si
+ * cambiara en silencio, el siguiente mensaje de alguien haría algo distinto de
+ * lo que esperaba sin que nada lo explicara.
+ *
+ * Cualquier cosa que no sea exactamente "solo" cae a "multi": un valor raro no
+ * debe dejar una sala despertando agentes sin que nadie los pida.
+ */
+export async function cambiarModo(room: Room, crudo: unknown): Promise<ModoDeSala> {
+  const modo: ModoDeSala = crudo === "solo" ? "solo" : "multi";
+  if (room.modo === modo) return modo;
+  room.modo = modo;
+  await (await getStorage()).setModo(room.id, modo);
+  return modo;
 }
 
 /**

@@ -7,6 +7,7 @@ import {
   type ChatMessage,
   type Member,
   type JoinedPayload,
+  type ModoDeSala,
   type SelectedElement,
   type CursorInfo,
   type SelectionInfo,
@@ -323,6 +324,14 @@ function Sala({
    * Es de la sala, así que llega en el `joined` y cambia para todos a la vez.
    */
   const [nombre, setNombre] = useState<string | null>(null);
+  /**
+   * Si en esta sala hay que mencionar al agente para despertarlo.
+   *
+   * Arranca en "multi" porque es lo conservador: si el server tarda en decir en
+   * qué modo está, mejor prometer de menos que enseñar un botón diciendo que
+   * escribir despierta al agente cuando quizá no.
+   */
+  const [modo, setModo] = useState<ModoDeSala>("multi");
   const [editandoNombre, setEditandoNombre] = useState(false);
   const [creandoSala, setCreandoSala] = useState(false);
   /** Qué dice el botón de descargar ahora mismo. null = su texto normal. */
@@ -562,6 +571,7 @@ function Sala({
       setUnido(true);
       setMembers(p.members);
       setNombre(p.nombre ?? null);
+      setModo(p.modo ?? "multi");
       recordarNombre(roomId, p.nombre ?? null);
       setPublicando(p.publicando ?? null);
       setUrlPublicada(p.urlPublicada ?? null);
@@ -582,6 +592,10 @@ function Sala({
 
     // Alguien de la sala le cambió el nombre: se ve al momento en la cabecera
     // de todos, sin recargar. Quién fue sale en el chat.
+    // Lo manda el server cuando alguien lo cambia, y también solo, cuando entra
+    // una segunda persona y la sala deja de ser de una.
+    socket.on("room:modo", ({ modo }: { modo: ModoDeSala }) => setModo(modo));
+
     socket.on("room:renamed", ({ nombre }: { nombre: string | null }) => {
       setNombre(nombre);
       recordarNombre(roomId, nombre);
@@ -946,6 +960,17 @@ function Sala({
    * `room:renamed`, que llega igual para todos. Así el que renombra ve
    * exactamente lo mismo que sus compas, recortes y espacios incluidos.
    */
+  /**
+   * Cambia si hay que mencionar al agente en esta sala.
+   *
+   * No se pinta lo que quedó: se manda y se espera el `room:modo` del server,
+   * igual que con el nombre. Es un ajuste de la sala y lo ven todos, así que la
+   * fuente de verdad es una sola.
+   */
+  const cambiarModo = () => {
+    socketRef.current?.emit("room:modo", { modo: modo === "solo" ? "multi" : "solo" });
+  };
+
   const guardarNombre = (valor: string) => {
     setEditandoNombre(false);
     if (valor.trim() === (nombre ?? "")) return; // no cambió: nada que mandar
@@ -1106,7 +1131,18 @@ function Sala({
                 {nombre ?? roomId}
               </button>
             )}
-            {roomId && <div className="sala-meta">{t.enLaSala(members.length)}</div>}
+            {roomId && (
+              <div className="sala-meta">
+                {t.enLaSala(members.length)}
+                {/* Debajo del contador porque es lo mismo que dice: cuánta gente
+                    asume la sala. Y el texto dice qué HACE, no en qué estado
+                    está, que es lo que a alguien le sirve para decidir si lo
+                    quiere tocar. */}
+                <button className="sala-modo" onClick={cambiarModo} title={t.modoAyuda(modo)}>
+                  {t.modo(modo)}
+                </button>
+              </div>
+            )}
           </div>
           {/* Crear otra sala, a la vista. Vivía dentro del menú, donde nadie lo
               encontraba: quien ya tenía salas tampoco las veía, así que el único

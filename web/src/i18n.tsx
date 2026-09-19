@@ -66,6 +66,9 @@ const TEXTOS = {
     porEjemplo: "Por ejemplo:",
     copiarLink: "Copiar link",
     copiado: "Copiado",
+    // Los textos del .zip se quedan aunque su botón ya no se monte: la ruta del
+    // server sigue en pie, así que volver a ofrecerlo es poner el botón y nada
+    // más. Borrarlos obligaría a reescribirlos en los dos idiomas.
     descargarZip: "Descargar .zip",
     publicar: "Publicar",
     publicarTitulo: "Poner la app en internet, con un link para compartir",

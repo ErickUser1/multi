@@ -19,7 +19,9 @@ import { FiltroChat } from "./FiltroChat.js";
 import { MentionMenu } from "./MentionMenu.js";
 import { Historial } from "./Historial.js";
 import { BackCanvas, type Endpoint } from "./BackCanvas.js";
-import { KeyPanel, loadStoredCredencial, type Credencial } from "./KeyPanel.js";
+// El panel ya no se monta, pero la key guardada del navegador se sigue
+// mandando al conectar: quien la había configurado no debe quedarse fuera.
+import { loadStoredCredencial } from "./KeyPanel.js";
 import { EnvPanel, type EstadoSupabase } from "./EnvPanel.js";
 import { PublicarPanel } from "./PublicarPanel.js";
 import { useTextos } from "./i18n.js";
@@ -335,7 +337,6 @@ function Sala({
   const [editandoNombre, setEditandoNombre] = useState(false);
   const [creandoSala, setCreandoSala] = useState(false);
   /** Qué dice el botón de descargar ahora mismo. null = su texto normal. */
-  const [zipAviso, setZipAviso] = useState<string | null>(null);
   /**
    * Por dónde va la publicación, o null si no hay ninguna.
    *
@@ -483,11 +484,8 @@ function Sala({
    * Mi API key. Se lee del navegador al montar: se configura UNA vez y sirve en
    * todas las salas. null = todavía no hay (puedes entrar y platicar igual).
    */
-  const [miCred, setMiCred] = useState<Credencial | null>(() => loadStoredCredencial());
   /** El server rechazó la key o avisó que hace falta. */
-  const [keyError, setKeyError] = useState<string | null>(null);
   /** Abrir el panel solo: pasa cuando intentas invocar sin key. */
-  const [keyAbrir, setKeyAbrir] = useState(false);
 
   /**
    * Las imágenes que pegaste pero todavía no mandas.
@@ -725,12 +723,14 @@ function Sala({
       window.location.hash = "#/";
     });
 
-    // Solo a mí: mi key faltaba o el server la rechazó. Abre el panel.
+    // Falta la key o el server la rechazó. Se registra en la consola y no se
+    // le enseña a nadie: con el respaldo del .env puesto esto no pasa, y si
+    // pasara, quien lo puede resolver es quien hospeda este Multi, no quien
+    // está escribiendo. Un aviso sobre credenciales a media sala solo asusta a
+    // alguien que no puede hacer nada al respecto.
     socket.on("error:key", ({ message }: { message: string }) => {
-      setKeyError(message);
-      setKeyAbrir(true);
+      console.error("[multi] el server no pudo usar una key:", message);
     });
-    socket.on("auth:ok", () => setKeyError(null));
 
     // Solo a mí: mi imagen no se pudo guardar. El mensaje tampoco salió, así que
     // hay que decirlo o parecería que se envió.
@@ -978,17 +978,6 @@ function Sala({
   };
 
   /**
-   * Bajar el proyecto de la sala como .zip.
-   *
-   * El zip sale del último punto guardado (el último turno cerrado), no del
-   * disco. Si hay trabajo a medias se DICE antes de bajarlo, en vez de entregar
-   * en silencio algo distinto de lo que se está viendo en el preview.
-   *
-   * La descarga va por un <a> y no por fetch: así la maneja el navegador con su
-   * propia barra de progreso, y un proyecto grande no se carga entero en
-   * memoria de la pestaña.
-   */
-  /**
    * Manda a la persona a autorizar en Supabase.
    *
    * Navegación completa y no fetch, igual que entrar con Google: el ida y
@@ -1009,35 +998,6 @@ function Sala({
     });
   };
 
-  const descargarZip = async () => {
-    setZipAviso(t.preparandoZip);
-    try {
-      const r = await fetch(`${SERVER_URL}/rooms/${roomId}/export/estado`);
-      const estado = (await r.json()) as { hayCommits: boolean; cambiosSinCommitear: boolean };
-
-      if (!estado.hayCommits) {
-        setZipAviso(t.zipSalaVacia);
-        return;
-      }
-
-      const a = document.createElement("a");
-      a.href = `${SERVER_URL}/rooms/${roomId}/export`;
-      a.download = `${roomId}.zip`;
-      a.click();
-
-      setZipAviso(estado.cambiosSinCommitear ? t.zipTrabajoSinGuardar : null);
-    } catch {
-      setZipAviso(t.zipFallo);
-    }
-  };
-
-  // El aviso del botón se borra solo: es un mensaje de paso, no un estado en el
-  // que la sala se quede.
-  useEffect(() => {
-    if (!zipAviso || zipAviso === t.preparandoZip) return;
-    const id = setTimeout(() => setZipAviso(null), 4000);
-    return () => clearTimeout(id);
-  }, [zipAviso, t.preparandoZip]);
 
   /**
    * Si la sala ya tiene algo que llevarse. Se consulta al entrar y cada vez que
@@ -1476,30 +1436,20 @@ function Sala({
             />
             {/* La `key` cambia cuando el server pide la API key: remonta el
                 panel para que se abra solo en ese momento. */}
-            <KeyPanel
-              key={keyAbrir ? "abierto" : "cerrado"}
-              actual={miCred}
-              abiertoPorDefecto={keyAbrir}
-              error={keyError}
-              onGuardar={(c) => {
-                socketRef.current?.emit("auth:key", c);
-                setMiCred(c);
-                setKeyAbrir(false);
-              }}
-              onOlvidar={() => {
-                socketRef.current?.emit("auth:forget");
-                setMiCred(null);
-                setKeyError(null);
-              }}
-            />
-            <button
-              className="invitar"
-              onClick={descargarZip}
-              disabled={!sePuedeExportar || zipAviso === t.preparandoZip}
-              title={sePuedeExportar ? t.descargarZip : t.zipSalaVacia}
-            >
-              {zipAviso ?? t.descargarZip}
-            </button>
+            {/* Aquí vivían dos botones que se quitaron el mismo día, por la
+                misma razón: pedían una decisión a quien solo quiere construir.
+
+                El de la API key era de cuando cada persona traía la suya. Tenía
+                sentido para un Multi que cualquiera hospeda, pero en el que
+                está en línea la primera pantalla de alguien que llega era
+                elegir un proveedor y pegar una credencial. Todo el camino sigue
+                en pie (auth:key, el respaldo del .env, varios proveedores), así
+                que volver a ofrecerlo es montar el panel otra vez.
+
+                El de descargar .zip lo usaron cero personas de las 35 del
+                experimento. Sacar la app de la sala ya se resuelve con
+                Publicar, que da un enlace en vez de una carpeta que alguien
+                tendría que saber correr. La ruta del server sigue ahí. */}
             <PublicarPanel
               roomId={roomId}
               urlPublicada={urlPublicada}

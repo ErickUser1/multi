@@ -218,18 +218,18 @@ body {
 /* Crear otra sala. Vive aquí y no dentro del menú porque era justo lo que
    nadie encontraba: escondido, el único camino visible para llegar a una sala
    era crear otra, y así se acumulaban las vacías. */
-/* 34 y no 28: era mas chico que el boton de adjuntar un archivo, y en el
+/* 40 y no 28: era mas chico que el boton de adjuntar un archivo, y en el
    experimento alguien lo nombro ("el icono de crear una sala esta muy
    pequeño"). Crear una sala es de lo primero que hace quien llega. */
 .sala-nueva {
   flex-shrink: 0;
-  width: 34px;
-  height: 34px;
+  width: 40px;
+  height: 40px;
   border: 1px solid var(--linea);
   border-radius: 6px;
   background: transparent;
-  color: var(--dim);
-  font-size: 20px;
+  color: var(--texto);
+  font-size: 24px;
   line-height: 1;
   cursor: pointer;
   transition: color 0.15s, border-color 0.15s;

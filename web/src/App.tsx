@@ -1137,19 +1137,6 @@ function Sala({
                 {nombre ?? roomId}
               </button>
             )}
-            {roomId && (
-              /* Sin contador de gente: quién está ya se ve en los avatares de
-                 la barra de arriba, y "1 en la sala" era una línea para decir
-                 que estás solo. Queda el modo, que sí cambia lo que pasa al
-                 escribir. */
-              <div className="sala-meta">
-                {modo && (
-                  <button className="sala-modo" onClick={cambiarModo} title={t.modoAyuda(modo)}>
-                    {t.modo(modo)}
-                  </button>
-                )}
-              </div>
-            )}
           </div>
           {/* Crear otra sala, a la vista. Vivía dentro del menú, donde nadie lo
               encontraba: quien ya tenía salas tampoco las veía, así que el único
@@ -1545,6 +1532,13 @@ function Sala({
                 experimento. Sacar la app de la sala ya se resuelve con
                 Publicar, que da un enlace en vez de una carpeta que alguien
                 tendría que saber correr. La ruta del server sigue ahí. */}
+            {/* El modo sube aquí desde la cabecera del chat, donde competía por
+                ancho con el nombre de la sala y quedaba apretado. */}
+            {roomId && modo && (
+              <button className="invitar" onClick={cambiarModo} title={t.modoAyuda(modo)}>
+                {t.modo(modo)}
+              </button>
+            )}
             <PublicarPanel
               roomId={roomId}
               urlPublicada={urlPublicada}

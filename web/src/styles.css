@@ -497,38 +497,6 @@ body {
 .sala-nombre-input::placeholder {
   color: var(--dim);
 }
-.sala-meta {
-  font-size: 9px;
-  letter-spacing: 2.5px;
-  text-transform: uppercase;
-  color: var(--dim);
-  /* Separado del nombre: pegados se leían como una sola cosa, y el modo es un
-     control, no el subtítulo de la sala. */
-  margin-top: 8px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-/* Si hay que mencionar al agente. Va pegado al contador de gente porque dice lo
-   mismo desde otro lado, y se ve discreto a propósito: es un ajuste que casi
-   nadie va a tocar, no una acción de la barra. */
-.sala-modo {
-  font: inherit;
-  letter-spacing: inherit;
-  text-transform: inherit;
-  color: var(--dim);
-  background: transparent;
-  border: 1px solid var(--linea);
-  border-radius: 3px;
-  padding: 1px 6px;
-  cursor: pointer;
-}
-.sala-modo:hover {
-  color: var(--texto);
-  border-color: var(--dim);
-}
-
 /* ── Lista de agentes ─────────────────────────────────────────────────── */
 /* Tres estados con peso visual distinto: waiting es NEUTRO (está en fila,
    no es un problema); solo stuck usa color de alerta. */

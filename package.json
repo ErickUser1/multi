@@ -40,6 +40,7 @@
     "demo:cuentas": "npm run demo:cuentas -w server",
     "demo:cripto": "npm run demo:cripto -w server",
     "demo:modo-de-sala": "npm run demo:modo-de-sala -w server",
+    "demo:sala-al-escribir": "npm run demo:sala-al-escribir -w server",
     "demo:carga": "npm run demo:carga -w server --",
     "demo:dormir": "npm run demo:dormir -w server"
   },

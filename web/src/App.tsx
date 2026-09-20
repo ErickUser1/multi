@@ -25,7 +25,7 @@ import { EnvPanel, type EstadoSupabase } from "./EnvPanel.js";
 import { PublicarPanel } from "./PublicarPanel.js";
 import { useTextos } from "./i18n.js";
 import { MenuSalas } from "./MenuSalas.js";
-import { recordarSala, olvidarSala, recordarNombre, guardarSalas } from "./historial-salas.js";
+import { recordarSala, olvidarSala, recordarNombre, guardarSalas, siguienteLlave } from "./historial-salas.js";
 import { CuentaPanel } from "./CuentaPanel.js";
 import {
   quienSoy,
@@ -81,6 +81,18 @@ function readRoomFromHash(): string | null {
   return m ? m[1] : null;
 }
 
+/** La `key` de la Sala. La regla vive en `siguienteLlave`, con su porqué. */
+
+function usarLlaveDeLaSala(roomId: string | null): string {
+  const llave = useRef("sala");
+  const anterior = useRef<string | null>(roomId);
+  if (anterior.current !== roomId) {
+    llave.current = siguienteLlave(llave.current, anterior.current, roomId);
+    anterior.current = roomId;
+  }
+  return llave.current;
+}
+
 /**
  * Cómo te llamas, de este navegador.
  *
@@ -107,6 +119,7 @@ function nombreGuardado(): string {
 export function App() {
   const [roomId, setRoomId] = useState<string | null>(readRoomFromHash());
   const [name, setName] = useState<string>(nombreGuardado());
+
   /**
    * La cuenta, si es que hay una. `null` es el caso normal y mayoritario.
    *
@@ -175,6 +188,8 @@ export function App() {
     if (roomId && entered) recordarSala(roomId);
   }, [roomId, entered]);
 
+  const llave = usarLlaveDeLaSala(roomId);
+
   /**
    * Sin sala en la URL se entra igual, a la Sala vacía.
    *
@@ -186,7 +201,7 @@ export function App() {
    *
    * Ahora se cae dentro con el menú a mano, y crear es un botón más.
    */
-  if (!roomId) return <Sala key="sin-sala" roomId={null} name={name || "anónimo"} cuenta={cuenta} onCuentaCambio={onCuentaCambio} />;
+  if (!roomId) return <Sala key={llave} roomId={null} name={name || "anónimo"} cuenta={cuenta} onCuentaCambio={onCuentaCambio} />;
 
   // Hay sala pero falta decir cómo te llamas. Sigue haciendo falta para quien
   // llega por un link que le pasaron: la sala necesita saber quién entró.
@@ -210,15 +225,10 @@ export function App() {
   /**
    * Pantalla 3: la sala.
    *
-   * La `key` es lo que hace que al cambiar de sala se empiece de cero. Sin
-   * ella React ve el mismo componente en el mismo sitio, reusa la instancia y
-   * conserva su estado: los mensajes, los agentes y el preview de la sala
-   * ANTERIOR. Al entrar a una sala con historial no se notaba, porque el
-   * `joined` llegaba con mensajes y pisaba lo viejo; al crear una sala nueva sí,
-   * porque llega vacío y nada sobrescribe. Aparecías en una sala recién creada
-   * leyendo la conversación de otra.
+   * La `key` la decide `usarLlaveDeLaSala`, arriba: cambia entre una sala y otra
+   * para empezar de cero, y NO cambia al pasar de la portada a su sala.
    */
-  return <Sala key={roomId} roomId={roomId} name={name || "anónimo"} cuenta={cuenta} onCuentaCambio={onCuentaCambio} />;
+  return <Sala key={llave} roomId={roomId} name={name || "anónimo"} cuenta={cuenta} onCuentaCambio={onCuentaCambio} />;
 }
 
 
@@ -382,6 +392,18 @@ function Sala({
   const [sePuedeExportar, setSePuedeExportar] = useState(false);
 
   const socketRef = useRef<Socket | null>(null);
+  /**
+   * El primer mensaje, escrito antes de que la sala existiera.
+   *
+   * Espera aquí a que llegue el `joined`, que es la señal de que el server ya
+   * tiene la sala puesta. Antes de eso, un `chat` se descarta sin avisar a
+   * nadie: pasa cuando la sala no está en memoria (dormida, o el server recién
+   * reiniciado) y su `join` se va a esperar mientras el mensaje se cuela.
+   *
+   * Es un ref y no estado porque quien lo lee es el handler del socket, que se
+   * registra una sola vez y se quedaría con el valor de entonces.
+   */
+  const porMandar = useRef<{ text: string } | null>(null);
   // Streaming POR AGENTE: varios pueden estar hablando a la vez.
   const [streaming, setStreaming] = useState<Record<string, string>>({});
   /**
@@ -602,6 +624,16 @@ function Sala({
       // el `preview:ready` ya pasó y no vuelve: sin esta condición el spinner se
       // quedaba girando encima de un preview que sí existía.
       if (p.previewArrancando && !p.previewUrl) setArrancando("servidor");
+
+      // El mensaje con el que nació la sala. Aquí, y no en el `connect`: si la
+      // sala estaba dormida, su `join` pasa por un await antes de quedar puesta
+      // y un `chat` adelantado se pierde en silencio.
+      const primero = porMandar.current;
+      if (primero) {
+        porMandar.current = null;
+        socket.emit("chat", { text: primero.text });
+        setDraft("");
+      }
     });
     socket.on("presence", ({ members }: { members: Member[] }) => setMembers(members));
 
@@ -802,6 +834,34 @@ function Sala({
   }, [previewReady]);
 
   /**
+   * Crear la sala y entrar a ella, con lo que se haya escrito bajo el brazo.
+   *
+   * Es lo que pasa al escribir en Multi sin haber elegido sala: el mensaje es lo
+   * que la crea, y lo único que se ve es que la URL cambia. Antes la caja estaba
+   * apagada y había que adivinar que primero se creaba con el `+`.
+   *
+   * El texto viaja en un ref en vez de mandarse aquí porque el socket todavía no
+   * existe: lo levanta el efecto cuando cambia `roomId`, y el mensaje sale al
+   * llegar el `joined`.
+   */
+  const nacerConMensaje = async (text: string): Promise<string | null> => {
+    // Dos enters seguidos crearían dos salas, y la segunda se quedaría vacía.
+    if (creandoSala) return null;
+    setCreandoSala(true);
+    try {
+      const id = await createRoom();
+      if (text) porMandar.current = { text };
+      window.location.hash = `#/sala/${id}`;
+      return id;
+    } catch (e) {
+      alert(t.noSePudoCrear + String(e));
+      return null;
+    } finally {
+      setCreandoSala(false);
+    }
+  };
+
+  /**
    * Suma imágenes a las que van a salir con el próximo mensaje.
    *
    * El tope de 4 no es capricho: cada imagen cuesta tokens y los paga quien
@@ -809,7 +869,12 @@ function Sala({
    * factura aparezca después.
    */
   const agregarImagenes = async (files: File[]) => {
-    if (files.length === 0 || !roomId) return;
+    if (files.length === 0) return;
+    // Los adjuntos suben a la sala (`POST /rooms/:id/adjuntos`), así que sin
+    // sala hay que crearla primero. El id se usa de aquí en adelante y no de
+    // `roomId`, que en esta pasada sigue valiendo null.
+    const sala = roomId ?? (await nacerConMensaje(""));
+    if (!sala) return;
     setErrorAdjunto(null);
     const sitio = MAX_ADJUNTOS - pendientes.length;
     if (sitio <= 0) {
@@ -839,7 +904,7 @@ function Sala({
       void (async () => {
         try {
           const listo = await prepararParaSubir(file);
-          const subido = await subirAdjunto(SERVER_URL, roomId, listo, (pct) => {
+          const subido = await subirAdjunto(SERVER_URL, sala, listo, (pct) => {
             setPendientes((prev) =>
               prev.map((p) => (p.clave === clave ? { ...p, subiendo: pct } : p)),
             );
@@ -872,6 +937,15 @@ function Sala({
     // Mandar solo un archivo, sin escribir nada, es un mensaje legítimo.
     if (!text && pendientes.length === 0) return;
     if (subiendoAlgo) return;
+
+    // Todavía no hay sala: este mensaje la crea. Sale solo cuando el server
+    // conteste el `joined`, así que el borrador NO se limpia aquí: si la
+    // creación falla, lo escrito sigue en la caja.
+    if (!roomId) {
+      void nacerConMensaje(text);
+      return;
+    }
+
     // Anclar MI selección local al mensaje (cuidado 2/3/4).
     socketRef.current?.emit("chat", {
       text,
@@ -987,16 +1061,16 @@ function Sala({
     }
   };
 
-  /** Crear otra sala y entrar a ella. El hash es lo que cambia de sala. */
-  const crearSala = async () => {
-    setCreandoSala(true);
-    try {
-      window.location.hash = `#/sala/${await createRoom()}`;
-    } catch (e) {
-      alert(t.noSePudoCrear + String(e));
-    } finally {
-      setCreandoSala(false);
-    }
+  /**
+   * Crear una sala en blanco. El `+` de la cabecera.
+   *
+   * Lo que se llevara escrito se va con ella: el `+` es para empezar de nuevo,
+   * y arrastrar el borrador a la sala nueva sería adivinar que eso era lo que
+   * se quería. Enviar sí lo lleva, pero eso es otra cosa y la pide el enter.
+   */
+  const crearSala = () => {
+    setDraft("");
+    void nacerConMensaje("");
   };
 
   /**
@@ -1361,11 +1435,12 @@ function Sala({
               ref={inputRef}
               className="caja"
               rows={1}
-              // Sin sala no hay a dónde mandar nada: se apaga en vez de dejar
-              // escribir un mensaje que se perdería al darle enter.
-              disabled={!roomId}
               placeholder={
-                subiendoAlgo ? t.subiendoArchivo : roomId && modo ? t.hablaConLaSala(modo) : t.eligeOCrea
+                subiendoAlgo
+                  ? t.subiendoArchivo
+                  : roomId && modo
+                    ? t.hablaConLaSala(modo)
+                    : t.quieresConstruir
               }
               value={draft}
               onChange={(e) => onDraftChange(e.target.value)}
@@ -1392,7 +1467,6 @@ function Sala({
                 <button
               className="adjuntar-btn"
               onClick={() => fileInputRef.current?.click()}
-              disabled={!roomId}
               title={t.adjuntarImagen}
               aria-label={t.adjuntarImagen}
             >
@@ -1415,7 +1489,7 @@ function Sala({
                 <button
                   className="enviar-btn"
                   onClick={send}
-                  disabled={!roomId || (!draft.trim() && pendientes.length === 0) || subiendoAlgo}
+                  disabled={(!draft.trim() && pendientes.length === 0) || subiendoAlgo}
                   title={t.enviar}
                   aria-label={t.enviar}
                 >
@@ -1679,11 +1753,14 @@ function Sala({
                   <p className="preview-loading-sub">{t.etapaPreview[arrancando]}</p>
                 </>
               ) : !roomId ? (
-                // Ni siquiera hay sala: lo que falta no es pedirle algo a un
-                // agente, es elegir dónde.
+                // Todavía no hay sala, y eso ya no es un impedimento: la crea
+                // el primer mensaje. Así que aquí no se anuncia una carencia,
+                // se dice qué hacer.
                 <>
-                  <p>{t.ningunaSala}</p>
-                  <p className="preview-loading-sub">{t.eligeOCrea}</p>
+                  <p>{t.quieresConstruir}</p>
+                  <p className="preview-loading-sub">
+                    {t.porEjemplo} <code>{t.ejemploSinJerga}</code>
+                  </p>
                 </>
               ) : esperaLarga ? (
                 // Hay sala, pero su estado todavía no llega. Decir aquí que está

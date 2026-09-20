@@ -46,7 +46,14 @@ const TEXTOS = {
         : "Hay que escribir @agente para despertarlo. Toca para que responda a todo lo que escribas.",
     renombrarSala: "clic para ponerle nombre",
     ningunaSala: "ninguna sala abierta",
-    eligeOCrea: "abre una de tus salas o crea una nueva con el +",
+    /**
+     * Lo que se ve al entrar sin sala, donde antes decía "ninguna sala abierta,
+     * crea una con el +". El botón sigue ahí, pero ya no es el camino: escribir
+     * crea la sala, así que el texto invita a escribir en vez de describir lo
+     * que falta.
+     */
+    quieresConstruir: "¿Qué quieres construir?",
+    ejemploSinJerga: "una página para mi negocio",
     salaVacia: "La sala está vacía.",
     cargandoSala: "Cargando la sala…",
     reconectando: "Sin conexión. Reconectando…",
@@ -310,7 +317,8 @@ const TEXTOS = {
         : "You need to write @agente to wake it. Tap to make it answer everything you write.",
     renombrarSala: "click to name it",
     ningunaSala: "no room open",
-    eligeOCrea: "open one of your rooms or create a new one with the +",
+    quieresConstruir: "What do you want to build?",
+    ejemploSinJerga: "a page for my business",
     salaVacia: "The room is empty.",
     cargandoSala: "Loading the room…",
     reconectando: "No connection. Reconnecting…",

@@ -277,16 +277,14 @@ body {
 .menu-btn:hover {
   border-color: var(--dim);
 }
+/* Texto claro de entrada, igual que "Compartir": en --dim se leía como si el
+   botón estuviera deshabilitado. */
 .menu-btn-texto {
-  font-size: 10px;
-  letter-spacing: 2px;
+  font-size: 11px;
+  letter-spacing: 1.2px;
   text-transform: uppercase;
-  color: var(--dim);
-  white-space: nowrap;
-  transition: color 0.15s;
-}
-.menu-btn:hover .menu-btn-texto {
   color: var(--texto);
+  white-space: nowrap;
 }
 /* En el teléfono vuelve a ser solo el icono, así que el borde estorba. */
 @media (max-width: 720px) {
@@ -302,9 +300,8 @@ body {
   display: block;
   width: 15px;
   height: 1.5px;
-  background: var(--dim);
+  background: var(--texto);
   border-radius: 1px;
-  transition: background 0.15s;
 }
 .menu-icono {
   position: relative;
@@ -321,12 +318,6 @@ body {
 .menu-icono::after {
   top: 5px;
 }
-.menu-btn:hover .menu-icono,
-.menu-btn:hover .menu-icono::before,
-.menu-btn:hover .menu-icono::after {
-  background: var(--texto);
-}
-
 /* En escritorio manda el texto y el icono sobra: dos cosas diciendo lo mismo.
    En pantalla angosta se invierte, porque ahí la barra va apretada y las tres
    rayas son lo unico que cabe. */
@@ -1127,7 +1118,6 @@ img.av {
   background: transparent;
   border: 1px solid var(--linea);
   border-radius: 3px;
-  color: var(--dim);
   font-size: 11px;
   letter-spacing: 1.5px;
   text-transform: uppercase;

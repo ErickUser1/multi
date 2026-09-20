@@ -40,11 +40,16 @@ function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+/** Las que fue creando la demo, para borrarlas al final. */
+const creadas: string[] = [];
+
 /** Lo mismo que hace `createRoom()` en el front. */
 async function crearSala(): Promise<string> {
   const res = await fetch(`${SERVER}/rooms`, { method: "POST" });
   if (!res.ok) throw new Error(`POST /rooms devolvió ${res.status}`);
-  return ((await res.json()) as { id: string }).id;
+  const { id } = (await res.json()) as { id: string };
+  creadas.push(id);
+  return id;
 }
 
 interface Llegada {
@@ -111,6 +116,108 @@ async function laLlave() {
   check("de una sala al + SÍ remonta", !paso("pixel-crew-93", "taco-lab-91").igual);
   check("de una sala a otra SÍ remonta", !paso("taco-lab-91", "nube-jam-12").igual);
   check("y volver a la portada también", !paso("taco-lab-91", null).igual);
+}
+
+/**
+ * El camino del front, tal como lo hace la Sala, con un socket de verdad.
+ *
+ * No es un mock del server: es el server. Lo que se replica aquí es lo que hace
+ * `App.tsx` al darle enter sin sala, en el mismo orden y con las mismas piezas
+ * (el borrador, el ref del mensaje pendiente, el efecto que conecta al cambiar
+ * `roomId`, y el `joined` como disparador). Sin eso lo único probado sería el
+ * server, que ya funcionaba antes de este cambio.
+ */
+async function elCaminoDelFront(): Promise<void> {
+  console.log("\n5. El camino del front, de punta a punta");
+
+  // El estado de la Sala que participa en esto.
+  let draft = "";
+  let roomId: string | null = null;
+  let creandoSala = false;
+  let porMandar: { text: string } | null = null;
+  const mensajes: { role: string; text: string }[] = [];
+  let socket: Socket | null = null;
+
+  // `nacerConMensaje`: crea la sala, guarda el texto y cambia la URL.
+  const nacerConMensaje = async (text: string): Promise<string | null> => {
+    if (creandoSala) return null;
+    creandoSala = true;
+    try {
+      const id = await crearSala();
+      if (text) porMandar = { text };
+      await irALaSala(id); // el equivalente a cambiar el hash
+      return id;
+    } finally {
+      creandoSala = false;
+    }
+  };
+
+  // El efecto que corre cuando cambia `roomId`: conecta y entra.
+  const irALaSala = (id: string) =>
+    new Promise<void>((resolve, reject) => {
+      roomId = id;
+      const s = ioClient(SERVER, { transports: ["websocket"] });
+      socket = s;
+      const t = setTimeout(() => reject(new Error("timeout")), 15000);
+      s.on("chat:message", (m: any) => mensajes.push({ role: m.role, text: m.text }));
+      s.on("connect", () => s.emit("join", { roomId: id, name: "tester" }));
+      s.on("joined", () => {
+        // Lo mismo que hace la Sala en su handler de `joined`.
+        const primero = porMandar;
+        if (primero) {
+          porMandar = null;
+          s.emit("chat", { text: primero.text });
+          draft = "";
+        }
+        clearTimeout(t);
+        resolve();
+      });
+    });
+
+  // `send`: lo que pasa al darle enter.
+  const send = () => {
+    const text = draft.trim();
+    if (!text) return;
+    if (!roomId) {
+      void nacerConMensaje(text);
+      return;
+    }
+    socket?.emit("chat", { text });
+    draft = "";
+  };
+
+  // Alguien entra a Multi, escribe y le da enter. Sin haber creado nada.
+  draft = "una pagina para mi negocio";
+  send();
+  // El doble enter: el segundo no puede crear otra sala.
+  send();
+  await sleep(2500);
+
+  check("el enter creó la sala", roomId !== null, String(roomId));
+  check("y el borrador quedó limpio", draft === "", `quedó "${draft}"`);
+  check("el mensaje pendiente ya salió", porMandar === null);
+  check(
+    "llegó al chat una sola vez",
+    mensajes.filter((m) => m.text === "una pagina para mi negocio").length === 1,
+    JSON.stringify(mensajes.map((m) => `${m.role}: ${m.text}`)),
+  );
+  check(
+    "y el agente arrancó sin arroba",
+    mensajes.some((m) => m.role === "agent"),
+    JSON.stringify(mensajes.map((m) => m.role)),
+  );
+
+  // Ya dentro, escribir sigue funcionando como siempre.
+  draft = "ahora ponle un boton";
+  send();
+  await sleep(2000);
+  check(
+    "y ya dentro, el segundo mensaje va normal",
+    mensajes.some((m) => m.text === "ahora ponle un boton"),
+    JSON.stringify(mensajes.map((m) => m.text)),
+  );
+
+  (socket as Socket | null)?.disconnect();
 }
 
 async function main() {
@@ -187,6 +294,25 @@ async function main() {
   }
 
   await laLlave();
+  await elCaminoDelFront();
+
+  // Las salas que creó la demo. Se borran de verdad y se comprueba: dejarlas es
+  // llenar workspaces/ de carpetas muertas cada vez que alguien corre esto, y
+  // un borrado que falla en silencio no se nota hasta que hay cincuenta.
+  let borradas = 0;
+  for (const id of creadas) {
+    try {
+      const res = await fetch(`${SERVER}/rooms/${id}`, { method: "DELETE" });
+      if (res.ok) borradas++;
+    } catch {
+      // Se cuenta abajo: lo que importa es el total, no cuál falló.
+    }
+  }
+  check(
+    "la demo no deja salas tiradas",
+    borradas === creadas.length,
+    `borró ${borradas} de ${creadas.length}`,
+  );
 
   console.log(`\n${pass} pasaron, ${fail} fallaron\n`);
   process.exit(fail === 0 ? 0 : 1);

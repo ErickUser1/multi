@@ -1,4 +1,3 @@
-import { useState } from "react";
 import type { Agent } from "./socket.js";
 import { useTextos, type Textos } from "./i18n.js";
 
@@ -9,16 +8,17 @@ import { useTextos, type Textos } from "./i18n.js";
  *              NO es alarma; pintarlo de alerta entrenaría a ignorar las reales.
  *   stuck    → atorado de verdad: requiere atención.
  *
- * Los inactivos se pliegan (patrón de Claude Code) para no saturar la vista,
- * pero siguen siendo direccionables con @.
+ * Los inactivos no se pintan: no están haciendo nada, y siguen siendo
+ * direccionables con @ desde el menú de menciones.
  */
 export function AgentList({ agents }: { agents: Agent[] }) {
-  const [expandIdle, setExpandIdle] = useState(false);
-
   const activos = agents.filter((a) => a.state !== "idle");
-  const inactivos = agents.filter((a) => a.state === "idle");
 
-  if (agents.length === 0) return null;
+  // Sin nadie trabajando, la lista no se pinta. Antes los inactivos se plegaban
+  // detrás de "1 agente inactivo", que ocupaba una línea para decir que no
+  // estaba pasando nada. A quién se le puede hablar ya lo dice el menú de
+  // menciones al escribir @, que es donde hace falta saberlo.
+  if (activos.length === 0) return null;
 
   return (
     <div className="agent-list">
@@ -26,22 +26,6 @@ export function AgentList({ agents }: { agents: Agent[] }) {
         <AgentRow key={a.id} agent={a} />
       ))}
 
-      {inactivos.length > 0 &&
-        (expandIdle ? (
-          <>
-            {inactivos.map((a) => (
-              <AgentRow key={a.id} agent={a} />
-            ))}
-            <div className="agent-fold" onClick={() => setExpandIdle(false)}>
-              ▴ ocultar inactivos
-            </div>
-          </>
-        ) : (
-          <div className="agent-fold" onClick={() => setExpandIdle(true)}>
-            ▸ {inactivos.length} agente{inactivos.length > 1 ? "s" : ""} inactivo
-            {inactivos.length > 1 ? "s" : ""}
-          </div>
-        ))}
     </div>
   );
 }

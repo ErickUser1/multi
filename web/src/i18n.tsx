@@ -52,9 +52,24 @@ const TEXTOS = {
     reconectando: "Sin conexión. Reconectando…",
     pistaMencion:
       "Escribe @ y selecciona agente para invocarlo. Si ya hay uno trabajando, selecciona @agente-1 para seguir con él. Puedes tener varios al mismo tiempo.",
-    pideAlgo: "@agente crea un Next con Tailwind",
-    hablaConLaSala: "escribe @agente para pedir algo",
+    /* Lo que la sala vacía y la caja de escribir dicen cambia con el modo.
+     *
+     * En "solo" no se menciona la arroba: ahí escribir YA despierta al agente,
+     * y pedirla es enseñar un paso que no existe. Pasó en vivo con la primera
+     * persona de fuera de la escuela que abrió Multi: la pantalla le hablaba
+     * de "stack" y de "@agente", y acabó preguntando si tenía que mandar un
+     * archivo antes de escribir.
+     *
+     * Y el ejemplo es de lo que alguien quiere, no de con qué se construye.
+     * Quien llega no sabe qué es Next ni Tailwind, y no le hace falta. */
+    pideAlgo: (m: "solo" | "multi"): string =>
+      m === "solo"
+        ? "una página para mi negocio"
+        : "@agente una página para mi negocio",
+    hablaConLaSala: (m: "solo" | "multi"): string =>
+      m === "solo" ? "escribe lo que quieres construir" : "escribe @agente para pedir algo",
     adjuntarImagen: "Adjuntar un archivo",
+    enviar: "Enviar",
     agentesInactivos: (n: number) => `${n} agente${n === 1 ? "" : "s"} inactivo${n === 1 ? "" : "s"}`,
     seInterrumpio: (n: number) =>
       n === 1 ? "Un agente se interrumpió" : `${n} agentes se interrumpieron`,
@@ -63,8 +78,11 @@ const TEXTOS = {
     volverAlPunto: "Volver al último punto",
     seleccionando: "seleccionando…",
     seleccionarBtn: "Seleccionar elemento",
+    vistaPreview: "Vista previa",
+    vistaCodigo: "Código",
+    vistaCodigoPronto: "Todavía no se puede ver el código desde aquí",
     porEjemplo: "Por ejemplo:",
-    copiarLink: "Copiar link",
+    copiarLink: "Compartir",
     copiado: "Copiado",
     // Los textos del .zip se quedan aunque su botón ya no se monte: la ruta del
     // server sigue en pie, así que volver a ofrecerlo es poner el botón y nada
@@ -135,6 +153,8 @@ const TEXTOS = {
 
     // Presentar
     ocultarChat: "Ocultar el chat",
+    ajustarAncho: "Arrastra para ajustar el ancho",
+    tituloHistorial: "Versiones del proyecto",
 
     // Filtro del chat
     filtrarChat: "Filtrar",
@@ -247,7 +267,10 @@ const TEXTOS = {
     cambiar: "Cambiar",
     keyGuardadaNota:
       "Guardado en este navegador: sirve en todas tus salas y sigue aquí mañana. Nadie más en la sala lo ve.",
-    pideleAlAgente: "Pídele a un agente que arranque el proyecto, el stack lo eliges tú.",
+    pideleAlAgente: (m: "solo" | "multi"): string =>
+      m === "solo"
+        ? "Escribe lo que quieres construir y el agente lo arranca."
+        : "Pídele a un agente que arranque el proyecto, mencionándolo con @.",
     /** Aclaración corta junto al nombre del proveedor. Solo donde aporta algo. */
     proveedorNota: {
       anthropic: "Claude",
@@ -293,9 +316,12 @@ const TEXTOS = {
     reconectando: "No connection. Reconnecting…",
     pistaMencion:
       "Type @ and pick agente to summon one. If one is already working, pick @agente-1 to keep going with it. You can have several at once.",
-    pideAlgo: "@agente build a Next app with Tailwind",
-    hablaConLaSala: "type @agente to ask for something",
+    pideAlgo: (m: "solo" | "multi"): string =>
+      m === "solo" ? "a page for my business" : "@agente a page for my business",
+    hablaConLaSala: (m: "solo" | "multi"): string =>
+      m === "solo" ? "type what you want to build" : "type @agente to ask for something",
     adjuntarImagen: "Attach a file",
+    enviar: "Send",
     agentesInactivos: (n: number) => `${n} idle agent${n === 1 ? "" : "s"}`,
     seInterrumpio: (n: number) =>
       n === 1 ? "An agent was interrupted" : `${n} agents were interrupted`,
@@ -304,8 +330,11 @@ const TEXTOS = {
     volverAlPunto: "Go back to the last point",
     seleccionando: "selecting…",
     seleccionarBtn: "Select element",
+    vistaPreview: "Preview",
+    vistaCodigo: "Code",
+    vistaCodigoPronto: "You can't view the code from here yet",
     porEjemplo: "For example:",
-    copiarLink: "Copy link",
+    copiarLink: "Share",
     copiado: "Copied",
     descargarZip: "Download .zip",
     publicar: "Publish",
@@ -372,6 +401,8 @@ const TEXTOS = {
 
     // Presentar
     ocultarChat: "Hide the chat",
+    ajustarAncho: "Drag to resize",
+    tituloHistorial: "Project versions",
 
     // Chat filter
     filtrarChat: "Filter",
@@ -477,7 +508,10 @@ const TEXTOS = {
     cambiar: "Change",
     keyGuardadaNota:
       "Saved in this browser: works in all your rooms and it's still here tomorrow. Nobody else in the room sees it.",
-    pideleAlAgente: "Ask an agent to start the project, you pick the stack.",
+    pideleAlAgente: (m: "solo" | "multi"): string =>
+      m === "solo"
+        ? "Type what you want to build and the agent starts it."
+        : "Ask an agent to start the project, mentioning it with @.",
     /** Aclaración corta junto al nombre del proveedor. Solo donde aporta algo. */
     proveedorNota: {
       anthropic: "Claude",

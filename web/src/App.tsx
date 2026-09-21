@@ -323,6 +323,20 @@ function Sala({
   const [members, setMembers] = useState<Member[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [previewReady, setPreviewReady] = useState(false);
+  /**
+   * El agente ya tocó un archivo, y todavía no hay preview que enseñar.
+   *
+   * Es la espera más larga de la sala y la única sin nada que mirar: hasta que
+   * el preview existe, la pantalla decía "¿qué quieres construir?" aunque el
+   * agente llevara minutos trabajando. Once de las 36 respuestas del
+   * experimento lo reportaron como que se trababa.
+   *
+   * Se mira el archivo y no el estado del agente a propósito: preguntarle algo
+   * lo pone a trabajar igual que pedirle una app, así que con su estado la sala
+   * anunciaría una primera versión cada vez que alguien pregunta una duda. Que
+   * un archivo cambie es la única señal de que de verdad se está construyendo.
+   */
+  const [armando, setArmando] = useState(false);
   /** Por dónde va el arranque del preview. null = no está arrancando. */
   const [arrancando, setArrancando] = useState<"contenedor" | "dependencias" | "servidor" | null>(null);
   /**
@@ -731,7 +745,11 @@ function Sala({
     socket.on("preview:ready", () => {
       setPreviewReady(true);
       setArrancando(null);
+      // Ya hay algo que mirar: a partir de aquí lo que avisa es la barra.
+      setArmando(false);
     });
+    // Tocó un archivo: está construyendo de verdad, no solo contestando.
+    socket.on("file:changed", () => setArmando(true));
     socket.on("preview:arrancando", ({ etapa }: { etapa: "contenedor" | "dependencias" | "servidor" }) =>
       setArrancando(etapa),
     );
@@ -1787,7 +1805,21 @@ function Sala({
             </>
           ) : (
             <div className="preview-loading">
-              {arrancando ? (
+              {/* Primero que `arrancando` a propósito: el preview empieza a
+                  levantarse en cuanto hay un package.json, así que con el otro
+                  orden el "armando" duraba un parpadeo y lo tapaba el spinner
+                  de las etapas, que es justo la parte que ya se veía bien. */}
+              {armando && !previewReady ? (
+                <>
+                  <div className="preview-puntos" aria-hidden="true">
+                    <span />
+                    <span />
+                    <span />
+                  </div>
+                  <p>{t.armandoPrimera}</p>
+                  <p className="preview-loading-sub">{t.armandoNota}</p>
+                </>
+              ) : arrancando ? (
                 <>
                   <div className="preview-spinner" aria-hidden="true" />
                   <p className="preview-titulo">{t.levantandoPreview}</p>

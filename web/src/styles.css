@@ -1651,6 +1651,54 @@ img.av {
     transform: rotate(360deg);
   }
 }
+
+/* Tres puntos, no un círculo girando.
+
+   El círculo es para una espera con etapas conocidas (contenedor, deps, dev
+   server) y por eso lleva texto abajo diciendo en cuál va. Esta otra espera no
+   tiene etapas: el agente piensa y escribe, y no hay porcentaje que enseñar.
+   Tres puntos que laten dicen "sigue vivo" sin prometer un progreso que nadie
+   puede medir. */
+.preview-puntos {
+  display: flex;
+  gap: 7px;
+  justify-content: center;
+  margin-bottom: 18px;
+}
+.preview-puntos span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--acento);
+  animation: punto-late 1.4s ease-in-out infinite;
+}
+/* Desfasados: a la vez parpadean como un error, en cascada se leen como que
+   algo avanza. */
+.preview-puntos span:nth-child(2) {
+  animation-delay: 0.18s;
+}
+.preview-puntos span:nth-child(3) {
+  animation-delay: 0.36s;
+}
+@keyframes punto-late {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: scale(0.85);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+/* Quien pidió menos movimiento los ve quietos, pero encendidos: lo que importa
+   es que se vea que algo está pasando, no el baile. */
+@media (prefers-reduced-motion: reduce) {
+  .preview-puntos span {
+    animation: none;
+    opacity: 0.8;
+  }
+}
 /* Respeta a quien pidió menos movimiento: el spinner late en vez de girar. */
 @media (prefers-reduced-motion: reduce) {
   .preview-spinner {

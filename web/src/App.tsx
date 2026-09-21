@@ -1794,7 +1794,7 @@ function Sala({
               {arrancando ? (
                 <>
                   <div className="preview-spinner" aria-hidden="true" />
-                  <p>{t.levantandoPreview}</p>
+                  <p className="preview-titulo">{t.levantandoPreview}</p>
                   <p className="preview-loading-sub">{t.etapaPreview[arrancando]}</p>
                 </>
               ) : !roomId ? (
@@ -1802,7 +1802,7 @@ function Sala({
                 // el primer mensaje. Así que aquí no se anuncia una carencia,
                 // se dice qué hacer.
                 <>
-                  <p>{t.quieresConstruir}</p>
+                  <p className="preview-titulo">{t.quieresConstruir}</p>
                   <p className="preview-loading-sub">
                     {t.porEjemplo} <code>{t.ejemploSinJerga}</code>
                   </p>
@@ -1812,11 +1812,11 @@ function Sala({
                 // vacía sería inventar: no se sabe.
                 <>
                   <div className="preview-spinner" aria-hidden="true" />
-                  <p>{t.cargandoSala}</p>
+                  <p className="preview-titulo">{t.cargandoSala}</p>
                 </>
               ) : (
                 <>
-                  <p>{t.salaVacia}</p>
+                  <p className="preview-titulo">{t.salaVacia}</p>
                   {/* Sin saber el modo no se dice nada: enseñar la arroba a
                       quien no la necesita es peor que esperar medio segundo. */}
                   {modo && <Ejemplos modo={modo} />}

@@ -1605,14 +1605,14 @@ img.av {
   color: var(--dim);
   font-size: 13px;
   text-align: center;
-  max-width: 420px;
+  max-width: 480px;
 }
 /* Por clase y no por `p:first-child`: con spinner el titulo no es el primer
    hijo, y ese estado se habria quedado chico mientras los demas crecian. */
 .preview-titulo {
   color: var(--texto);
-  font-size: 24px;
-  line-height: 1.3;
+  font-size: 30px;
+  line-height: 1.25;
   margin: 0;
 }
 
@@ -1823,14 +1823,14 @@ img.av {
 }
 
 .preview-loading-sub {
-  font-size: 13px;
+  font-size: 15px;
   opacity: 0.75;
-  margin-top: 14px;
+  margin-top: 16px;
   line-height: 1.7;
 }
 .preview-loading code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 11.5px;
+  font-size: 14px;
   background: rgba(255, 255, 255, 0.06);
   padding: 2px 6px;
   border-radius: 3px;
@@ -1862,14 +1862,6 @@ img.av {
   }
 }
 
-.preview-loading code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 11.5px;
-  background: rgba(255, 255, 255, 0.06);
-  padding: 2px 6px;
-  border-radius: 3px;
-  color: var(--lavanda);
-}
 
 /* El ejemplo que rota. Entra con un desvanecido corto para que se note que
    cambió: sin él parpadea un texto distinto en el mismo sitio y se lee como un

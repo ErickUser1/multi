@@ -47,14 +47,17 @@ const TEXTOS = {
     renombrarSala: "clic para ponerle nombre",
     ningunaSala: "ninguna sala abierta",
     /**
-     * Lo que se ve al entrar sin sala, donde antes decía "ninguna sala abierta,
-     * crea una con el +". El botón sigue ahí, pero ya no es el camino: escribir
-     * crea la sala, así que el texto invita a escribir en vez de describir lo
-     * que falta.
+     * El preview cuando todavía no hay nada, con o sin sala.
+     *
+     * Es el mismo texto en los dos casos a propósito: es la misma pantalla y el
+     * mismo momento, y que cambiara al mandar el primer mensaje se leía como
+     * haber llegado a otro lado.
+     *
+     * Antes decía "ninguna sala abierta, crea una con el +" y "la sala está
+     * vacía". Las dos describían lo que falta; esta dice qué hacer, que es lo
+     * que hacía falta desde que escribir es lo que crea la sala.
      */
     quieresConstruir: "¿Qué quieres construir?",
-    ejemploSinJerga: "una página para mi negocio",
-    salaVacia: "La sala está vacía.",
     cargandoSala: "Cargando la sala…",
     reconectando: "Sin conexión. Reconectando…",
     pistaMencion:
@@ -103,7 +106,6 @@ const TEXTOS = {
     vistaPreview: "Vista previa",
     vistaCodigo: "Código",
     vistaCodigoPronto: "Todavía no se puede ver el código desde aquí",
-    porEjemplo: "Por ejemplo:",
     copiarLink: "Compartir",
     copiado: "Copiado",
     // Los textos del .zip se quedan aunque su botón ya no se monte: la ruta del
@@ -329,8 +331,6 @@ const TEXTOS = {
     renombrarSala: "click to name it",
     ningunaSala: "no room open",
     quieresConstruir: "What do you want to build?",
-    ejemploSinJerga: "a page for my business",
-    salaVacia: "The room is empty.",
     cargandoSala: "Loading the room…",
     reconectando: "No connection. Reconnecting…",
     pistaMencion:
@@ -358,7 +358,6 @@ const TEXTOS = {
     vistaPreview: "Preview",
     vistaCodigo: "Code",
     vistaCodigoPronto: "You can't view the code from here yet",
-    porEjemplo: "For example:",
     copiarLink: "Share",
     copiado: "Copied",
     descargarZip: "Download .zip",

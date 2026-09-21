@@ -1795,13 +1795,15 @@ function Sala({
                 </>
               ) : !roomId ? (
                 // Todavía no hay sala, y eso ya no es un impedimento: la crea
-                // el primer mensaje. Así que aquí no se anuncia una carencia,
-                // se dice qué hacer.
+                // el primer mensaje.
+                //
+                // Dice lo MISMO que una sala recién creada, y a propósito: es la
+                // misma pantalla y el mismo momento, y que cambiara el texto al
+                // mandar el primer mensaje se leía como haber llegado a otro
+                // lado. El modo se da por "solo" porque así nace toda sala.
                 <>
                   <p className="preview-titulo">{t.quieresConstruir}</p>
-                  <p className="preview-loading-sub">
-                    {t.porEjemplo} <code>{t.ejemploSinJerga}</code>
-                  </p>
+                  <Ejemplos modo="solo" />
                 </>
               ) : esperaLarga ? (
                 // Hay sala, pero su estado todavía no llega. Decir aquí que está
@@ -1812,7 +1814,10 @@ function Sala({
                 </>
               ) : (
                 <>
-                  <p className="preview-titulo">{t.salaVacia}</p>
+                  {/* El mismo texto que sin sala: es el mismo momento y la
+                      misma pantalla. "La sala está vacía" describía lo que
+                      falta; esto dice qué hacer. */}
+                  <p className="preview-titulo">{t.quieresConstruir}</p>
                   {/* Sin saber el modo no se dice nada: enseñar la arroba a
                       quien no la necesita es peor que esperar medio segundo. */}
                   {modo && <Ejemplos modo={modo} />}

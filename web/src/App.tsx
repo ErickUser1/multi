@@ -1702,11 +1702,7 @@ function Sala({
             más en una pantalla que ya tenía de sobra. Lo que sí pidieron tres
             personas del experimento es VER EL CÓDIGO, y eso es otra cosa y va
             en otro lado. BackCanvas se queda en el repo para entonces. */}
-        {/* Sin preview el marco sobra: encuadra un vacío, y lo que se lee como
-            un cuadro grande y vacío parece que algo falló. Con contenido
-            dentro sí separa las dos zonas, así que solo se quita mientras no
-            hay nada que enmarcar. */}
-        <div className={`lienzo ${previewReady ? "" : "sin-marco"}`}>
+        <div className="lienzo">
           {/* Señalar un elemento es una herramienta del preview, no una acción
               de la barra: ahí arriba se veía igual que "compartir" o
               "variables", que son otra cosa. Flotando encima de lo que señala

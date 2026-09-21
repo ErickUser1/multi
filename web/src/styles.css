@@ -1281,13 +1281,6 @@ img.av {
   position: relative; /* para posicionar cursores/selecciones encima */
 }
 
-/* Vacío: el texto va suelto sobre el fondo, sin caja que lo encuadre. El borde
-   vuelve en cuanto hay preview, que es cuando de verdad separa dos zonas. */
-.lienzo.sin-marco {
-  background: transparent;
-  border-color: transparent;
-}
-
 /* botón de inspect en la barra superior */
 .barra-sup {
   justify-content: space-between;

@@ -1594,11 +1594,26 @@ img.av {
   border: none;
   background: #fff;
 }
+/* Dos niveles, no uno.
+
+   Los dos renglones venian del mismo gris con un punto de diferencia de
+   tamaño, asi que la pantalla no decia por donde empezar a leer. El de arriba
+   es la pregunta y el de abajo la ayuda, y eso tiene que verse antes de leer.
+   La medida va en la primera linea: blanca y del doble de tamaño. */
 .preview-loading {
   margin: auto;
   color: var(--dim);
   font-size: 13px;
   text-align: center;
+  max-width: 480px;
+}
+/* Por clase y no por `p:first-child`: con spinner el titulo no es el primer
+   hijo, y ese estado se habria quedado chico mientras los demas crecian. */
+.preview-titulo {
+  color: var(--texto);
+  font-size: 30px;
+  line-height: 1.25;
+  margin: 0;
 }
 
 /* Barra de carga del iframe.
@@ -1808,35 +1823,44 @@ img.av {
 }
 
 .preview-loading-sub {
-  font-size: 12px;
+  font-size: 15px;
   opacity: 0.75;
-  margin-top: 10px;
+  margin-top: 16px;
   line-height: 1.7;
 }
 .preview-loading code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 11.5px;
+  font-size: 14px;
   background: rgba(255, 255, 255, 0.06);
   padding: 2px 6px;
   border-radius: 3px;
   color: var(--lavanda);
 }
 
-.preview-loading-sub {
-  font-size: 12px;
-  opacity: 0.75;
-  margin-top: 10px;
-  line-height: 1.7;
+/* El ejemplo que rota. Entra con un desvanecido corto para que se note que
+   cambió: sin él parpadea un texto distinto en el mismo sitio y se lee como un
+   glitch. Se declara en bloque para que el ancho no salte entre uno y otro. */
+.ejemplo-rotando {
+  display: inline-block;
+  margin-top: 6px;
+  animation: ejemplo-entra 0.35s ease;
 }
-.preview-loading code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 11.5px;
-  background: rgba(255, 255, 255, 0.06);
-  padding: 2px 6px;
-  border-radius: 3px;
-  color: var(--lavanda);
+@keyframes ejemplo-entra {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
-
+/* Quien pidió menos movimiento no quiere que esto se mueva cada 3 segundos. */
+@media (prefers-reduced-motion: reduce) {
+  .ejemplo-rotando {
+    animation: none;
+  }
+}
 /* ── Tu API key (por persona, solo esta sesión) ──────────────────────────── */
 
 /* Con foto adentro, el chip necesita mas aire del que pide un boton de solo

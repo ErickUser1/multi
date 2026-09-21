@@ -112,6 +112,14 @@ export interface JoinedPayload {
   previewUrl: string | null;
   /** El preview se está levantando ahora mismo (llegaste a media cuesta). */
   previewArrancando?: boolean;
+  /**
+   * El proyecto ya tiene algo escrito, aunque todavía no haya preview.
+   *
+   * Es lo que distingue "nadie ha pedido nada" de "el agente está construyendo",
+   * y hace falta en el `joined` porque `file:changed` es una noticia: quien
+   * recarga o entra tarde no la recibió.
+   */
+  tieneProyecto?: boolean;
   /** Se está publicando la app ahora mismo, y por dónde va. */
   publicando?: "compilando" | "subiendo" | null;
   /** Dónde está publicada la app, o null si la sala nunca se publicó. */

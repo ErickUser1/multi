@@ -67,6 +67,9 @@ const TEXTOS = {
      * y lo que avisa es la barra de arriba.
      */
     armandoPrimera: "El agente está armando la primera versión",
+    falloArmando: "Algo falló al armar la versión",
+    falloArmandoNota:
+      "Pídele al agente en el chat que lo revise, o cuéntale qué querías y lo intenta de otra forma.",
     armandoNota:
       "Cuando esté lista aparece aquí. Mientras tanto pueden seguir pidiendo cosas en el chat.",
     cargandoSala: "Cargando la sala…",
@@ -343,6 +346,9 @@ const TEXTOS = {
     ningunaSala: "no room open",
     quieresConstruir: "What do you want to build?",
     armandoPrimera: "The agent is building the first version",
+    falloArmando: "Something failed while building the version",
+    falloArmandoNota:
+      "Ask the agent in the chat to take a look, or tell it what you wanted and it will try another way.",
     armandoNota:
       "It shows up here when it is ready. Meanwhile you can keep asking for things in the chat.",
     cargandoSala: "Loading the room…",

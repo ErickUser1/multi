@@ -29,6 +29,7 @@ import {
   type SelectedElement,
   dormirSalasOciosas,
 } from "./rooms.js";
+import { detectLaunch } from "./engine/preview.js";
 import { getStorage } from "./storage/index.js";
 import { KeyedMutex } from "./engine/keyed-mutex.js";
 import { setCredential, getCredential, clearCredential } from "./keys.js";
@@ -1217,6 +1218,12 @@ io.on("connection", (socket) => {
       // Quien llega a media cuesta no recibió el "preview:arrancando" (ya pasó),
       // y sin esto vería "la sala está vacía" mientras el proyecto se levanta.
       previewArrancando: room.previewBooting === true,
+      // Si el proyecto ya tiene algo escrito. Por lo mismo que la línea de
+      // arriba: `file:changed` es una noticia y quien recarga no la recibió, así
+      // que sin esto vería la sala como si nadie hubiera pedido nada mientras el
+      // agente lleva rato construyendo. Y recargar es lo primero que hace la
+      // gente cuando algo se ve raro.
+      tieneProyecto: (await detectLaunch(room.workspace.dir)) !== null,
       // Igual que el preview: quien llega a media publicación no recibió el
       // evento de progreso (ya pasó) y vería el botón como si no hubiera nada.
       publicando: room.publicando ?? null,

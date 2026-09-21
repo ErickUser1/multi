@@ -337,6 +337,13 @@ function Sala({
    * un archivo cambie es la única señal de que de verdad se está construyendo.
    */
   const [armando, setArmando] = useState(false);
+  /**
+   * Había proyecto y el arranque no dio preview: algo se rompió.
+   *
+   * Decirlo importa más que callarlo. Quien ve volver "¿qué quieres construir?"
+   * después de pedir una app cree que su mensaje se perdió, y vuelve a pedirlo.
+   */
+  const [falloElArranque, setFalloElArranque] = useState(false);
   /** Por dónde va el arranque del preview. null = no está arrancando. */
   const [arrancando, setArrancando] = useState<"contenedor" | "dependencias" | "servidor" | null>(null);
   /**
@@ -679,6 +686,9 @@ function Sala({
       // el `preview:ready` ya pasó y no vuelve: sin esta condición el spinner se
       // quedaba girando encima de un preview que sí existía.
       if (p.previewArrancando && !p.previewUrl) setArrancando("servidor");
+      // Y si ya hay proyecto pero todavía no preview, es que se está armando.
+      // Va del `joined` y no del evento porque quien recarga no lo recibió.
+      if (p.tieneProyecto && !p.previewUrl) setArmando(true);
 
       // El mensaje con el que nació la sala. Aquí, y no en el `connect`: si la
       // sala estaba dormida, su `join` pasa por un await antes de quedar puesta
@@ -747,16 +757,35 @@ function Sala({
       setArrancando(null);
       // Ya hay algo que mirar: a partir de aquí lo que avisa es la barra.
       setArmando(false);
+      setFalloElArranque(false);
     });
     // Tocó un archivo: está construyendo de verdad, no solo contestando.
-    socket.on("file:changed", () => setArmando(true));
+    socket.on("file:changed", () => {
+      setArmando(true);
+      // Volvió a escribir: lo está arreglando, así que el aviso de fallo sobra.
+      setFalloElArranque(false);
+    });
     socket.on("preview:arrancando", ({ etapa }: { etapa: "contenedor" | "dependencias" | "servidor" }) =>
       setArrancando(etapa),
     );
     // El arranque terminó sin preview: la sala sigue vacía o algo falló. Se quita
     // el spinner y vuelve el mensaje de "pídele a un agente que arranque el
     // proyecto", que es lo accionable.
-    socket.on("preview:sin-arranque", () => setArrancando(null));
+    // El arranque terminó sin preview. Es la salida de las bolitas: sin esto,
+    // un build que truena las deja latiendo para siempre prometiendo una
+    // versión que no va a llegar.
+    //
+    // El server manda lo mismo en los dos casos (la sala estaba vacía, o el
+    // arranque falló), pero aquí se distinguen: si estábamos armando es que ya
+    // había proyecto, así que no arrancar significa que algo se rompió. Sin la
+    // sala vacía, simplemente no había nada que levantar.
+    socket.on("preview:sin-arranque", () => {
+      setArrancando(null);
+      setArmando((estaba) => {
+        if (estaba) setFalloElArranque(true);
+        return false;
+      });
+    });
     socket.on("agents", ({ agents }: { agents: Agent[] }) => setAgents(agents));
     // Hay un punto nuevo en la línea de tiempo (commit, revert o bookmark).
     socket.on("history:new", () => setHistVersion((v) => v + 1));
@@ -1809,14 +1838,21 @@ function Sala({
                   levantarse en cuanto hay un package.json, así que con el otro
                   orden el "armando" duraba un parpadeo y lo tapaba el spinner
                   de las etapas, que es justo la parte que ya se veía bien. */}
-              {armando && !previewReady ? (
+              {falloElArranque ? (
+                // Se rompió al levantar. Decirlo y no volver a "¿qué quieres
+                // construir?": quien ve eso cree que su mensaje se perdió.
+                <>
+                  <p className="preview-titulo">{t.falloArmando}</p>
+                  <p className="preview-loading-sub">{t.falloArmandoNota}</p>
+                </>
+              ) : armando && !previewReady ? (
                 <>
                   <div className="preview-puntos" aria-hidden="true">
                     <span />
                     <span />
                     <span />
                   </div>
-                  <p>{t.armandoPrimera}</p>
+                  <p className="preview-titulo">{t.armandoPrimera}</p>
                   <p className="preview-loading-sub">{t.armandoNota}</p>
                 </>
               ) : arrancando ? (

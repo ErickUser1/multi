@@ -267,6 +267,47 @@ function NamePrompt(props: {
  * al entrar a Multi sin haber elegido sala, con el menú y el botón de crear a
  * la mano.
  */
+/**
+ * Lo que se puede pedir, uno a la vez y rotando.
+ *
+ * La sala vacía enseñaba un solo ejemplo, siempre el mismo y siempre una
+ * página. Quien llegaba no tenía forma de saber que también puede pedir una
+ * presentación o un juego, y de los cuatro primeros que llegaron solos, tres
+ * venían justo a hacer presentaciones.
+ *
+ * Rota en vez de listar los cinco: leer una lista es trabajo, y lo que hace
+ * falta aquí es una idea, no un menú.
+ */
+function Ejemplos({ modo }: { modo: ModoDeSala }) {
+  const { t } = useTextos();
+  const [i, setI] = useState(0);
+
+  useEffect(() => {
+    // Quien pidió menos movimiento no quiere un texto cambiando solo cada tres
+    // segundos. Se queda con el primero, que es el que más gente necesita ver.
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    const cada = setInterval(() => setI((n) => (n + 1) % t.ejemplos.length), 3200);
+    return () => clearInterval(cada);
+  }, [t.ejemplos.length]);
+
+  // En multi la arroba va pegada al ejemplo: ahí SÍ hace falta, y enseñarla
+  // dentro de algo que se puede copiar tal cual es lo que la explica.
+  const arroba = modo === "multi" ? "@agente " : "";
+
+  return (
+    <p className="preview-loading-sub">
+      {t.construyeAlgoComo}
+      <br />
+      {/* La key fuerza el remonte, y con él la animación de entrada: sin ella
+          React reusa el nodo, cambia el texto y el cambio pasa desapercibido. */}
+      <code key={i} className="ejemplo-rotando">
+        {arroba}
+        {t.ejemplos[i]}
+      </code>
+    </p>
+  );
+}
+
 function Sala({
   roomId,
   name,
@@ -1774,13 +1815,7 @@ function Sala({
                   <p>{t.salaVacia}</p>
                   {/* Sin saber el modo no se dice nada: enseñar la arroba a
                       quien no la necesita es peor que esperar medio segundo. */}
-                  {modo && (
-                    <p className="preview-loading-sub">
-                      {t.pideleAlAgente(modo)}
-                      <br />
-                      {t.porEjemplo} <code>{t.pideAlgo(modo)}</code>
-                    </p>
-                  )}
+                  {modo && <Ejemplos modo={modo} />}
                 </>
               )}
             </div>

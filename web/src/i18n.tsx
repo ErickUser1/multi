@@ -69,12 +69,27 @@ const TEXTOS = {
      *
      * Y el ejemplo es de lo que alguien quiere, no de con qué se construye.
      * Quien llega no sabe qué es Next ni Tailwind, y no le hace falta. */
-    pideAlgo: (m: "solo" | "multi"): string =>
-      m === "solo"
-        ? "una página para mi negocio"
-        : "@agente una página para mi negocio",
     hablaConLaSala: (m: "solo" | "multi"): string =>
       m === "solo" ? "escribe lo que quieres construir" : "escribe @agente para pedir algo",
+    /**
+     * Lo que se puede pedir, rotando. Es la sala vacía enseñando de qué va.
+     *
+     * Tres de los cuatro primeros usuarios que llegaron solos vinieron a hacer
+     * presentaciones, no apps, y la pantalla solo hablaba de páginas: quien no
+     * lo sabía de antemano no tenía cómo enterarse. Por eso el primero es una
+     * presentación y no una landing.
+     *
+     * Van sin jerga a propósito, que es lo mismo que se aprendió del
+     * experimento: nadie sabe qué es un stack, y no le hace falta.
+     */
+    ejemplos: [
+      "una presentación para mi clase",
+      "un juego sencillo",
+      "una app para mi negocio",
+      "una página para mi evento",
+      "una calculadora de gastos",
+    ],
+    construyeAlgoComo: "Construye algo como",
     adjuntarImagen: "Adjuntar un archivo",
     enviar: "Enviar",
     agentesInactivos: (n: number) => `${n} agente${n === 1 ? "" : "s"} inactivo${n === 1 ? "" : "s"}`,
@@ -274,10 +289,6 @@ const TEXTOS = {
     cambiar: "Cambiar",
     keyGuardadaNota:
       "Guardado en este navegador: sirve en todas tus salas y sigue aquí mañana. Nadie más en la sala lo ve.",
-    pideleAlAgente: (m: "solo" | "multi"): string =>
-      m === "solo"
-        ? "Escribe lo que quieres construir y el agente lo arranca."
-        : "Pídele a un agente que arranque el proyecto, mencionándolo con @.",
     /** Aclaración corta junto al nombre del proveedor. Solo donde aporta algo. */
     proveedorNota: {
       anthropic: "Claude",
@@ -324,10 +335,16 @@ const TEXTOS = {
     reconectando: "No connection. Reconnecting…",
     pistaMencion:
       "Type @ and pick agente to summon one. If one is already working, pick @agente-1 to keep going with it. You can have several at once.",
-    pideAlgo: (m: "solo" | "multi"): string =>
-      m === "solo" ? "a page for my business" : "@agente a page for my business",
     hablaConLaSala: (m: "solo" | "multi"): string =>
       m === "solo" ? "type what you want to build" : "type @agente to ask for something",
+    ejemplos: [
+      "a deck for my class",
+      "a simple game",
+      "an app for my business",
+      "a page for my event",
+      "an expense calculator",
+    ],
+    construyeAlgoComo: "Build something like",
     adjuntarImagen: "Attach a file",
     enviar: "Send",
     agentesInactivos: (n: number) => `${n} idle agent${n === 1 ? "" : "s"}`,
@@ -516,10 +533,6 @@ const TEXTOS = {
     cambiar: "Change",
     keyGuardadaNota:
       "Saved in this browser: works in all your rooms and it's still here tomorrow. Nobody else in the room sees it.",
-    pideleAlAgente: (m: "solo" | "multi"): string =>
-      m === "solo"
-        ? "Type what you want to build and the agent starts it."
-        : "Ask an agent to start the project, mentioning it with @.",
     /** Aclaración corta junto al nombre del proveedor. Solo donde aporta algo. */
     proveedorNota: {
       anthropic: "Claude",

@@ -210,7 +210,15 @@ export async function createRoom(): Promise<Room> {
   rooms.set(id, room);
 
   const now = Date.now();
-  await storage.createRoom({ id, workspaceDir: workspace.dir, createdAt: now, lastActiveAt: now });
+  // El modo va desde el INSERT y sale de `room`, no de una constante: si un dia
+  // cambia con que modo nace una sala, esto lo sigue sin que nadie se acuerde.
+  await storage.createRoom({
+    id,
+    workspaceDir: workspace.dir,
+    createdAt: now,
+    lastActiveAt: now,
+    modo: room.modo,
+  });
 
   // Instalar deps + arrancar preview en background (no bloquea la creación).
   void bootPreview(room);

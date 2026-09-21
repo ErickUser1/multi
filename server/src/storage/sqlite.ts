@@ -176,13 +176,31 @@ export class SqliteStorage implements Storage {
     }
   }
 
+  /**
+   * El `modo` se escribe al nacer, no se deja para despues.
+   *
+   * Antes esta columna se quedaba en NULL, porque la sala solo la guardaba
+   * cuando alguien la cambiaba, o sea cuando entraba una segunda persona. Para
+   * quien se quedaba solo no se escribia nunca, y al leerla de vuelta el NULL
+   * cae a "multi" (ver `toRoom`): la sala nacia en solo, funcionaba en solo
+   * mientras viviera en memoria, y al reiniciar el server o al despertar de
+   * dormida volvia pidiendo la arroba sin que nadie hubiera tocado el boton.
+   *
+   * Le pegaba justo a quien el modo de una persona venia a servir, y ahora mas,
+   * porque desde que escribir crea la sala todas nacen en solo.
+   *
+   * Ojo con el `INSERT OR REPLACE`: si algun dia se llama con un id que ya
+   * existe, REPLACE borra la fila entera y la reescribe solo con estas
+   * columnas, tirando el nombre y la url publicada. Hoy no pasa porque solo se
+   * llama al crear, con un id que se acaba de comprobar que es nuevo.
+   */
   async createRoom(room: StoredRoom): Promise<void> {
     this.db
       .prepare(
-        `INSERT OR REPLACE INTO rooms (id, workspace_dir, created_at, last_active_at)
-         VALUES (?, ?, ?, ?)`,
+        `INSERT OR REPLACE INTO rooms (id, workspace_dir, created_at, last_active_at, modo)
+         VALUES (?, ?, ?, ?, ?)`,
       )
-      .run(room.id, room.workspaceDir, room.createdAt, room.lastActiveAt);
+      .run(room.id, room.workspaceDir, room.createdAt, room.lastActiveAt, room.modo ?? null);
   }
 
   async getRoom(id: string): Promise<StoredRoom | null> {

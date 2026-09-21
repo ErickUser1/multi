@@ -1,16 +1,34 @@
-/* Multi — la sala. Paleta crepúsculo (Gengar), chat estilo Discord.
-   Traducido de app/sala.html. */
+/* Multi — la sala. Escala de grises con un acento, chat estilo Discord. */
 :root {
-  /* Un solo negro para toda la sala. Tres tonos de gris oscuro compitiendo se
-     leen como suciedad, no como jerarquia: sobre negro las diferencias de
-     luminosidad chicas no se perciben como planos sino como manchas. La
-     separacion entre zonas la hacen las lineas y el espacio, no el fondo. */
+  /* DOS capas, no una ni tres.
+   *
+   * Antes eran tres negros idénticos, con el argumento de que varios grises
+   * compitiendo se leen como suciedad y no como jerarquía, y que la separación
+   * entre zonas la hicieran las líneas y el espacio.
+   *
+   * La mitad del argumento se sostiene: tres capas sí compiten. La otra mitad
+   * no aguantó el contacto con gente. De 36 respuestas de un experimento, once
+   * dijeron que no sabían dónde estaba cada cosa, que el chat se perdía y que
+   * los colores confundían. Una persona no encontró la caja de escribir. Y la
+   * línea que cargaba con toda la separación (#333 sobre negro) da 1.4:1 de
+   * contraste, que es casi nada.
+   *
+   * Así que el lienzo se queda negro y las superficies suben un escalón: el
+   * chat, el preview, los popovers y la caja de escribir. Un solo escalón, no
+   * dos, para que sigan sin competir entre sí.
+   */
   --fondo: #000000;
-  --fondo2: #000000;
-  --panel: #000000;
+  --fondo2: #1a1a1a;
+  --panel: #1a1a1a;
   --texto: #f5f5f5;
-  --dim: #8a8a8a;
-  --linea: #333333;
+  /* El gris de lo secundario. Subió de #8a8a8a: a ese valor el texto de los
+     botones pasaba el contraste mínimo pero se leía apagado, sobre todo a 11px
+     en mayúsculas. No llega a blanco a propósito: el blanco es lo que
+     distingue a la acción principal. */
+  --dim: #b0b0b0;
+  /* Las líneas suben con el fondo: #333 se eligió contra negro, y sobre el gris
+     de las superficies los bordes de los botones se perdían. */
+  --linea: #3d3d3d;
 
   /* Un solo acento, y caro: entre mas aparece, menos dice. Se reserva para lo
      que exige atencion (menciones, publicar, errores). */
@@ -27,6 +45,20 @@
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+}
+
+/* Que se vea donde esta parado el teclado.
+ *
+ * Habia 52 reglas de hover y dos de focus-visible: la sala se podia usar con
+ * mouse y era practicamente invisible con teclado. Y seis inputs quitaban el
+ * outline del navegador sin poner nada en su lugar.
+ *
+ * `:focus-visible` y no `:focus` a proposito: el navegador solo lo aplica
+ * cuando el foco llego por teclado, asi que un click no deja el borde puesto.
+ */
+:focus-visible {
+  outline: 2px solid var(--acento);
+  outline-offset: 2px;
 }
 
 body {
@@ -60,7 +92,7 @@ body {
 .card {
   text-align: center;
   padding: 48px 56px;
-  background: #000000;
+  background: var(--panel);
   border: 1px solid var(--linea);
   border-radius: 10px;
   max-width: 420px;
@@ -138,51 +170,44 @@ body {
 
 /* Chat izquierda — una sola línea vertical, sin cruces (estilo Discord) */
 .chat {
-  width: 340px;
+  /* El ancho lo pone el JS (se arrastra y se recuerda). Aquí solo el valor de
+     arranque, por si el estilo carga antes que React. */
+  width: 460px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  border-right: 1px solid var(--linea);
-  background: #000000;
-  transition: width 0.22s ease, opacity 0.16s ease;
+  background: var(--panel);
 }
 
-/* Colapsado: el preview se queda con toda la pantalla.
-   Se anima el ancho en vez de quitar el nodo para que el iframe NO se
-   desmonte: recargarlo costaría segundos y perdería el estado de la app. */
-.sala.chat-colapsado .chat {
-  width: 0;
-  opacity: 0;
-  overflow: hidden;
-  border-right: none;
-  pointer-events: none;
-}
-
-/* El botón de colapsar, primero en la barra. Discreto: es un control de vista,
-   no una acción de la sala. */
-.colapsar-btn {
-  background: none;
-  border: 1px solid var(--linea);
-  border-radius: 3px;
-  color: var(--dim);
-  cursor: pointer;
-  font-size: 12px;
-  line-height: 1;
-  padding: 8px 10px;
-  flex-shrink: 0;
-  transition: color 0.15s, border-color 0.15s;
-}
-.colapsar-btn:hover {
-  color: var(--texto);
-  border-color: var(--dim);
-}
-
+/* Con el chat a 460 hay ancho de sobra, así que la cabecera deja de apretar:
+   más aire a los lados y más separación entre el menú, el nombre y el botón de
+   crear. Sin línea abajo: el espacio ya separa, y cada raya que se agrega
+   vuelve la columna una lista de cajas. */
 .sala-cab {
-  padding: 16px 18px 12px;
-  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.18);
+  padding: 18px 20px 14px;
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
+  align-items: center;
+  gap: 14px;
+}
+/* Los tres hijos de la cabecera a la misma altura.
+ *
+ * Centrarlos verticalmente no bastaba: el nombre es serif de 19px con un
+ * subrayado reservado abajo, y los botones son sans de 10px con borde, así que
+ * cada uno tiene su propia altura y sus líneas de texto caían en sitios
+ * distintos. Con una altura común para los tres, quedan en línea recta. */
+.sala-cab > * {
+  height: 34px;
+}
+.sala-cab .sala-titulo {
+  display: flex;
+  align-items: center;
+}
+/* El nombre lleva un subrayado reservado abajo (para que no brinque al pasar
+   el mouse), y ese píxel lo empujaba hacia abajo respecto de los botones, que
+   no lo tienen. Se compensa con la misma medida arriba. */
+.sala-cab .sala-nombre,
+.sala-cab .sala-nombre-input {
+  padding-top: 1px;
 }
 .sala-titulo {
   min-width: 0;
@@ -193,15 +218,18 @@ body {
 /* Crear otra sala. Vive aquí y no dentro del menú porque era justo lo que
    nadie encontraba: escondido, el único camino visible para llegar a una sala
    era crear otra, y así se acumulaban las vacías. */
+/* 40 y no 28: era mas chico que el boton de adjuntar un archivo, y en el
+   experimento alguien lo nombro ("el icono de crear una sala esta muy
+   pequeño"). Crear una sala es de lo primero que hace quien llega. */
 .sala-nueva {
   flex-shrink: 0;
-  width: 28px;
-  height: 28px;
+  width: 40px;
+  height: 40px;
   border: 1px solid var(--linea);
   border-radius: 6px;
   background: transparent;
-  color: var(--dim);
-  font-size: 18px;
+  color: var(--texto);
+  font-size: 24px;
   line-height: 1;
   cursor: pointer;
   transition: color 0.15s, border-color 0.15s;
@@ -236,6 +264,7 @@ body {
    texto suelto no se lee como algo que se pueda tocar. */
 .menu-btn {
   background: transparent;
+  color: var(--texto);
   border: 1px solid var(--linea);
   border-radius: 3px;
   cursor: pointer;
@@ -248,16 +277,14 @@ body {
 .menu-btn:hover {
   border-color: var(--dim);
 }
+/* Texto claro de entrada, igual que "Compartir": en --dim se leía como si el
+   botón estuviera deshabilitado. */
 .menu-btn-texto {
-  font-size: 10px;
-  letter-spacing: 2px;
+  font-size: 11px;
+  letter-spacing: 1.2px;
   text-transform: uppercase;
-  color: var(--dim);
-  white-space: nowrap;
-  transition: color 0.15s;
-}
-.menu-btn:hover .menu-btn-texto {
   color: var(--texto);
+  white-space: nowrap;
 }
 /* En el teléfono vuelve a ser solo el icono, así que el borde estorba. */
 @media (max-width: 720px) {
@@ -273,9 +300,8 @@ body {
   display: block;
   width: 15px;
   height: 1.5px;
-  background: var(--dim);
+  background: var(--texto);
   border-radius: 1px;
-  transition: background 0.15s;
 }
 .menu-icono {
   position: relative;
@@ -292,12 +318,6 @@ body {
 .menu-icono::after {
   top: 5px;
 }
-.menu-btn:hover .menu-icono,
-.menu-btn:hover .menu-icono::before,
-.menu-btn:hover .menu-icono::after {
-  background: var(--texto);
-}
-
 /* En escritorio manda el texto y el icono sobra: dos cosas diciendo lo mismo.
    En pantalla angosta se invierte, porque ahí la barra va apretada y las tres
    rayas son lo unico que cabe. */
@@ -477,36 +497,6 @@ body {
 .sala-nombre-input::placeholder {
   color: var(--dim);
 }
-.sala-meta {
-  font-size: 9px;
-  letter-spacing: 2.5px;
-  text-transform: uppercase;
-  color: var(--dim);
-  margin-top: 3px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-/* Si hay que mencionar al agente. Va pegado al contador de gente porque dice lo
-   mismo desde otro lado, y se ve discreto a propósito: es un ajuste que casi
-   nadie va a tocar, no una acción de la barra. */
-.sala-modo {
-  font: inherit;
-  letter-spacing: inherit;
-  text-transform: inherit;
-  color: var(--dim);
-  background: transparent;
-  border: 1px solid var(--linea);
-  border-radius: 3px;
-  padding: 1px 6px;
-  cursor: pointer;
-}
-.sala-modo:hover {
-  color: var(--texto);
-  border-color: var(--dim);
-}
-
 /* ── Lista de agentes ─────────────────────────────────────────────────── */
 /* Tres estados con peso visual distinto: waiting es NEUTRO (está en fila,
    no es un problema); solo stuck usa color de alerta. */
@@ -743,16 +733,7 @@ body {
 /* ── Menú de menciones (@) ────────────────────────────────────────────── */
 .input-wrap {
   position: relative;
-  display: flex;
-  align-items: center;
-  gap: 6px;
 }
-/* La caja se lleva el espacio que sobre; el botón se queda de su tamaño. */
-.input-wrap .caja {
-  flex: 1;
-  min-width: 0;
-}
-
 /* Adjuntar una imagen. Arrastrar y pegar ya servían, pero no se ven, y en el
    teléfono no existe ninguna de las dos. */
 .adjuntar-btn {
@@ -902,12 +883,11 @@ img.av {
 
 /* La foto dentro del chip de la barra, más chica que un avatar de mensaje. */
 .cuenta-foto {
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
   object-fit: cover;
-  margin-right: 6px;
-  vertical-align: middle;
+  flex-shrink: 0;
 }
 
 .cuenta-foto-grande {
@@ -945,12 +925,64 @@ img.av {
 .chat-input {
   padding: 6px 14px 16px;
 }
+/* La caja de escribir.
+ *
+ * Tiene borde y un fondo MÁS OSCURO que el chat, al revés de lo normal, porque
+ * así es como se lee un hueco donde meter texto en vez de una tarjeta más.
+ *
+ * Y se ve siempre, aunque esté vacía. Antes no: era del mismo negro que el
+ * chat, sin borde y sin foco, así que literalmente no había un píxel que dijera
+ * dónde escribir. En un experimento con 36 personas alguien lo dijo con todas
+ * sus letras — "donde escribimos las instrucciones no sabía que era ahí" — y es
+ * lo más caro que puede pasar aquí: quien no encuentra la caja no puede hacer
+ * absolutamente nada.
+ */
+/* El marco es lo que se ve como caja: borde, fondo y esquinas. El textarea va
+   desnudo adentro, y debajo la fila de acciones. */
+.caja-marco {
+  background: var(--fondo);
+  border: 1px solid var(--linea);
+  border-radius: 10px;
+  padding: 14px 14px 10px;
+  transition: border-color 0.15s;
+}
+.caja-marco:focus-within {
+  border-color: var(--dim);
+}
+.caja-acciones {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 6px;
+}
+.enviar-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 0;
+  background: var(--texto);
+  color: var(--fondo);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: opacity 0.15s;
+}
+.enviar-btn:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+
 .caja {
   width: 100%;
-  background: var(--panel);
+  background: transparent;
   border: none;
-  border-radius: 6px;
-  padding: 12px 14px;
+  padding: 2px 0;
+  /* Arranca con sitio para dos renglones aunque esté vacía: una caja alta se
+     lee como "aquí se escribe" mejor que una franja de una línea, y el JS que
+     la hace crecer parte de aquí. */
+  min-height: 44px;
   font-size: 13px;
   color: var(--texto);
   /* Un textarea trae fuente de formulario y se ve distinto al resto del chat. */
@@ -962,7 +994,9 @@ img.av {
   /* Mientras crece no debe verse barra: aparece sola al topar el máximo. */
   overflow-y: auto;
   display: block;
+  transition: border-color 0.15s;
 }
+/* El foco lo pinta el marco (`.caja-marco:focus-within`), no el textarea. */
 .caja:focus {
   outline: none;
 }
@@ -976,18 +1010,27 @@ img.av {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  /* El mismo gris que el chat: son las dos mitades de la misma sala, y el
+     negro del lienzo de fondo las hacía ver como dos aplicaciones pegadas. */
+  background: var(--panel);
 }
 
+/* Dos grupos: a la izquierda la herramienta del preview, a la derecha quien
+   esta en la sala y las acciones. Antes era una fila de botones sueltos, todos
+   iguales, y no se leia que unos fueran de una cosa y otros de otra. */
 .barra-sup {
   display: flex;
   align-items: center;
-  padding: 12px 24px 0;
+  gap: 10px;
+  padding: 10px 24px 0;
 }
 .presencia {
   margin-left: auto;
   display: flex;
   align-items: center;
   gap: 8px;
+  /* Aire antes de las acciones, que empiezan aqui. */
+  padding-right: 6px;
 }
 .presencia .av {
   width: 28px;
@@ -1023,17 +1066,26 @@ img.av {
 /* El botón que abre el filtro, arriba del chat. Los avatares de la presencia
    hacen lo mismo, pero nada en ellos anuncia que se puede: este es el que hace
    descubrible la función. */
+/* Con aire arriba: el espacio lo daba la lista de agentes, que ahora solo se
+   pinta cuando alguno trabaja, así que el filtro quedaba pegado a la línea de
+   la cabecera. */
 .filtro-caja {
   position: relative;
-  padding: 0 16px 8px;
+  padding: 12px 16px 8px;
+  display: flex;
+  justify-content: center;
 }
+/* De su tamaño y centrado, no una barra de ancho completo: es un botón que se
+   toca de vez en cuando, y ocupando toda la columna pesaba como si fuera el
+   control principal del chat. */
 .filtro-abrir {
-  width: 100%;
-  text-align: left;
+  text-align: center;
+  /* Texto claro, igual que los botones de la barra: apagado se leía como
+     deshabilitado. */
+  color: var(--texto);
   background: transparent;
   border: 1px solid var(--linea);
   border-radius: 3px;
-  color: var(--dim);
   font-size: 11px;
   letter-spacing: 1.5px;
   text-transform: uppercase;
@@ -1137,16 +1189,32 @@ img.av {
 .filtro-aviso button:hover {
   text-decoration: underline;
 }
+/* 11px con menos espaciado. A 10px, en mayusculas y con 2px entre letras, el
+   texto pasa el contraste pero igual cuesta leerlo, y eso fue parte de lo que
+   la gente llamo "los colores confunden". */
+/* Los botones de la barra van en texto claro y no en el gris de lo secundario:
+   ahí arriba compiten con el botón sólido de publicar, y apagados se leían como
+   deshabilitados. */
 .invitar {
-  font-size: 10px;
-  letter-spacing: 2px;
+  font-size: 11px;
+  letter-spacing: 1.2px;
   text-transform: uppercase;
-  color: var(--dim);
+  color: var(--texto);
   border: 1px solid var(--linea);
   padding: 7px 14px;
   border-radius: 3px;
   cursor: pointer;
   background: transparent;
+}
+/* Un instante en claro al copiar: el cambio de texto solo no se nota si no
+   estabas mirando el botón. Con los colores que ya hay y no uno nuevo: la
+   paleta es una escala de grises más UN acento, y ese está reservado para lo
+   que exige atención. Copiar un link no la exige. */
+.invitar.copiado,
+.invitar.copiado:hover {
+  color: var(--fondo);
+  background: var(--texto);
+  border-color: var(--texto);
 }
 .invitar:hover {
   color: var(--texto);
@@ -1162,10 +1230,13 @@ img.av {
   border-color: var(--linea);
 }
 
+/* En escritorio esta fila no tiene nada que mostrar: su única pestaña es la
+   del chat, que es de móvil, y el botón de ancho bajó a las herramientas del
+   preview. Ocupaba altura justo encima de lo que todos miran. */
 .tabs {
-  display: flex;
+  display: none;
   gap: 4px;
-  padding: 12px 24px 0;
+  padding: 8px 24px 0;
 }
 .tab {
   font-size: 10px;
@@ -1194,9 +1265,17 @@ img.av {
 
 .lienzo {
   flex: 1;
-  margin: 0 24px 24px;
+  /* El preview es lo que todos miran, así que se le da todo lo que se le pueda
+     quitar al aire de alrededor. Sin margen del lado del divisor: con él, la
+     línea de arrastrar quedaba a veinte píxeles del borde del preview y se leía
+     como parte del chat, no como la frontera entre los dos. */
+  margin: 12px 20px 12px 0;
   background: var(--panel);
-  border-radius: 0 3px 3px 3px;
+  /* El borde del preview es lo que separa las dos zonas, así que va más claro
+     que el resto de las líneas: --linea (#333) se eligió contra negro, y sobre
+     el gris de las superficies se pierde justo donde más tiene que leerse. */
+  border: 1px solid #3d3d3d;
+  border-radius: 0 6px 6px 6px;
   overflow: hidden;
   display: flex;
   position: relative; /* para posicionar cursores/selecciones encima */
@@ -1206,9 +1285,118 @@ img.av {
 .barra-sup {
   justify-content: space-between;
 }
+/* El divisor entre el chat y el preview.
+ *
+ * Tres píxeles de ancho y un área de agarre más grande por los lados: a tres
+ * píxeles exactos hay que apuntar, y apuntar para algo que se usa seguido
+ * cansa. El `::before` extiende la zona sensible sin engordar la línea. */
+.divisor {
+  flex-shrink: 0;
+  width: 3px;
+  /* Del color de las dos zonas que separa, no transparente: transparente
+     dejaba ver el negro del body por esos tres píxeles, y se leía como una
+     línea que nadie puso. La división la hace el borde del preview. */
+  background: var(--panel);
+  cursor: col-resize;
+  position: relative;
+  transition: background 0.15s;
+}
+.divisor::before {
+  content: "";
+  position: absolute;
+  inset: 0 -5px;
+}
+.divisor:hover {
+  background: var(--dim);
+}
+
+/* Dos botones pegados dentro de un marco: se leen como un interruptor de una
+   sola cosa, no como dos acciones sueltas. */
+.switch-vista {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--linea);
+  border-radius: 8px;
+  gap: 2px;
+}
+.switch-op {
+  font-size: 11px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  padding: 6px 13px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dim);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.switch-op:hover:not(:disabled):not(.activa) {
+  color: var(--texto);
+}
+.switch-op.activa {
+  background: var(--panel);
+  color: var(--texto);
+}
+.switch-op:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Flotante sobre el preview, abajo al centro, como la barra de herramientas de
+   Lovable. Píldora oscura para que se lea encima de cualquier app: el preview
+   sirve lo que sea, y muchas son de fondo blanco. */
+.herramientas-preview {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.vista-btn.flotante {
+  border-radius: 999px;
+  padding: 11px 15px;
+  background: rgba(10, 10, 10, 0.92);
+  backdrop-filter: blur(8px);
+}
+/* Abierto: se marca para que se vea de dónde salió el panel. */
+.vista-btn.flotante.on {
+  color: var(--texto);
+  border-color: var(--dim);
+}
+.inspect-flotante {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 19px;
+  border-radius: 999px;
+  border: 1px solid var(--linea);
+  background: rgba(10, 10, 10, 0.92);
+  backdrop-filter: blur(8px);
+  color: var(--texto);
+  font-size: 12px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.inspect-flotante:hover {
+  color: var(--texto);
+  border-color: var(--dim);
+}
+/* Seleccionando: el acento, porque a partir de aquí cada click de la persona
+   hace algo distinto de lo normal y eso sí exige atención. */
+.inspect-flotante.on {
+  color: var(--acento);
+  border-color: var(--acento);
+}
+
 .inspect-btn {
-  font-size: 10px;
-  letter-spacing: 2px;
+  font-size: 11px;
+  letter-spacing: 1.2px;
   text-transform: uppercase;
   color: var(--dim);
   border: 1px solid var(--linea);
@@ -1651,17 +1839,29 @@ img.av {
 
 /* ── Tu API key (por persona, solo esta sesión) ──────────────────────────── */
 
+/* Con foto adentro, el chip necesita mas aire del que pide un boton de solo
+   texto: a 6px de padding la imagen queda pegada a los bordes y se ve
+   apachurrada. Y flex en vez de vertical-align, que con una imagen y texto de
+   distinto tamaño nunca centra bien. */
 .key-chip {
-  font-size: 10px;
-  letter-spacing: 1px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  letter-spacing: 0.6px;
   text-transform: uppercase;
-  padding: 6px 11px;
-  border-radius: 3px;
+  padding: 5px 12px 5px 6px;
+  border-radius: 999px;
   border: 1px solid var(--linea);
   background: transparent;
   color: var(--dim);
   cursor: pointer;
+  line-height: 1;
   font-family: inherit;
+}
+/* Sin cuenta no hay foto, así que el hueco de la izquierda sobra. */
+.key-chip:not(.listo) {
+  padding-left: 12px;
 }
 .key-chip:hover {
   color: var(--texto);
@@ -2173,10 +2373,36 @@ img.av {
 .publicar-panel {
   position: relative;
 }
+
+/* El unico boton con peso de la barra.
+ *
+ * Todos los demas son fantasma (borde gris, texto gris) y esta bien que lo
+ * sean; el problema era que NINGUNO destacaba, asi que trece botones se veian
+ * exactamente igual y ninguno decia "esto es lo que vienes a hacer".
+ *
+ * Le toca a publicar porque es lo que mejor califico la gente del experimento
+ * (4.11 de 5, lo mas alto de los cinco aspectos) y porque es el final del
+ * camino: la app deja de ser un preview y se vuelve un link que se comparte.
+ */
+.publicar-panel .invitar {
+  background: var(--texto);
+  border-color: var(--texto);
+  color: var(--fondo);
+}
+.publicar-panel .invitar:hover {
+  background: #ffffff;
+  border-color: #ffffff;
+  color: var(--fondo);
+}
 /* Cuando está en vivo, el botón lo dice de un vistazo, sin abrir nada. */
 .invitar.publicada {
-  color: var(--lavanda);
-  border-color: var(--lavanda);
+  background: var(--acento);
+  border-color: var(--acento);
+  color: var(--fondo);
+}
+.publicar-panel .invitar.publicada:hover {
+  background: var(--acento);
+  border-color: var(--acento);
 }
 .publicar-caja {
   position: absolute;
@@ -2414,18 +2640,19 @@ img.av {
     padding: 7px 9px;
     min-width: 0;
   }
-  /* Colapsar el chat es un control de escritorio: en móvil las pestañas ya
-     hacen ese trabajo. */
-  .colapsar-btn {
-    display: none;
+  /* En móvil sí hay pestañas: ahí el chat y el preview no caben juntos. */
+  .tabs {
+    display: flex;
   }
-  /* Y si alguien colapsó en la compu y luego achicó la ventana, ese estado no
-     debe dejar el chat en cero: aquí manda la pestaña. */
-  .sala.chat-colapsado .chat {
-    width: 100%;
-    opacity: 1;
-    overflow: visible;
-    pointer-events: auto;
+
+  /* El ancho arrastrado es de escritorio. En móvil el chat es una pestaña y
+     ocupa todo, así que gana sobre el estilo inline que pone el JS. */
+  .chat {
+    width: 100% !important;
+  }
+  /* Y el divisor no tiene nada que dividir: las dos vistas no conviven. */
+  .divisor {
+    display: none;
   }
 
   /* Los paneles flotantes medían más que la pantalla: se ajustan a lo que hay

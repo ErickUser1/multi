@@ -143,3 +143,29 @@ export function guardarSalas(salas: SalaVisitada[]): void {
     // Igual que arriba: el historial no vale romper nada.
   }
 }
+
+/**
+ * Si al ir de una sala a otra hay que empezar de cero, o conservar lo que hay.
+ *
+ * Cambiar de sala tiene que remontar la Sala. Sin eso React reusa la instancia y
+ * con ella los mensajes, los agentes y el preview de la sala ANTERIOR: al entrar
+ * a una con historial no se notaba porque el `joined` llegaba con mensajes y
+ * pisaba lo viejo, pero al crear una nueva sí, porque llega vacío y nada
+ * sobrescribe. Aparecías en una sala recién creada leyendo la de otra.
+ *
+ * La excepción es venir de la portada, donde el primer mensaje es el que crea la
+ * sala: ahí remontar tiraría justo lo que se acaba de escribir. Y no hay nada de
+ * lo que protegerse, porque sin sala nunca hubo socket y no existe una sala
+ * anterior de la que se filtre nada.
+ *
+ * Vive aquí, y no en App.tsx, para poder probarla desde una demo: es pura y no
+ * sabe de React a propósito.
+ */
+export function siguienteLlave(
+  llave: string,
+  anterior: string | null,
+  roomId: string | null,
+): string {
+  if (anterior === roomId) return llave;
+  return anterior === null ? llave : roomId ?? "sin-sala";
+}

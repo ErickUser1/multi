@@ -18,7 +18,6 @@ import { AgentList, textoDeEstado } from "./AgentList.js";
 import { FiltroChat } from "./FiltroChat.js";
 import { MentionMenu } from "./MentionMenu.js";
 import { Historial } from "./Historial.js";
-import { BackCanvas, type Endpoint } from "./BackCanvas.js";
 // El panel ya no se monta, pero la key guardada del navegador se sigue
 // mandando al conectar: quien la había configurado no debe quedarse fuera.
 import { loadStoredCredencial } from "./KeyPanel.js";
@@ -26,7 +25,7 @@ import { EnvPanel, type EstadoSupabase } from "./EnvPanel.js";
 import { PublicarPanel } from "./PublicarPanel.js";
 import { useTextos } from "./i18n.js";
 import { MenuSalas } from "./MenuSalas.js";
-import { recordarSala, olvidarSala, recordarNombre, guardarSalas } from "./historial-salas.js";
+import { recordarSala, olvidarSala, recordarNombre, guardarSalas, siguienteLlave } from "./historial-salas.js";
 import { CuentaPanel } from "./CuentaPanel.js";
 import {
   quienSoy,
@@ -82,6 +81,18 @@ function readRoomFromHash(): string | null {
   return m ? m[1] : null;
 }
 
+/** La `key` de la Sala. La regla vive en `siguienteLlave`, con su porqué. */
+
+function usarLlaveDeLaSala(roomId: string | null): string {
+  const llave = useRef("sala");
+  const anterior = useRef<string | null>(roomId);
+  if (anterior.current !== roomId) {
+    llave.current = siguienteLlave(llave.current, anterior.current, roomId);
+    anterior.current = roomId;
+  }
+  return llave.current;
+}
+
 /**
  * Cómo te llamas, de este navegador.
  *
@@ -108,6 +119,7 @@ function nombreGuardado(): string {
 export function App() {
   const [roomId, setRoomId] = useState<string | null>(readRoomFromHash());
   const [name, setName] = useState<string>(nombreGuardado());
+
   /**
    * La cuenta, si es que hay una. `null` es el caso normal y mayoritario.
    *
@@ -176,6 +188,8 @@ export function App() {
     if (roomId && entered) recordarSala(roomId);
   }, [roomId, entered]);
 
+  const llave = usarLlaveDeLaSala(roomId);
+
   /**
    * Sin sala en la URL se entra igual, a la Sala vacía.
    *
@@ -187,7 +201,7 @@ export function App() {
    *
    * Ahora se cae dentro con el menú a mano, y crear es un botón más.
    */
-  if (!roomId) return <Sala key="sin-sala" roomId={null} name={name || "anónimo"} cuenta={cuenta} onCuentaCambio={onCuentaCambio} />;
+  if (!roomId) return <Sala key={llave} roomId={null} name={name || "anónimo"} cuenta={cuenta} onCuentaCambio={onCuentaCambio} />;
 
   // Hay sala pero falta decir cómo te llamas. Sigue haciendo falta para quien
   // llega por un link que le pasaron: la sala necesita saber quién entró.
@@ -211,15 +225,10 @@ export function App() {
   /**
    * Pantalla 3: la sala.
    *
-   * La `key` es lo que hace que al cambiar de sala se empiece de cero. Sin
-   * ella React ve el mismo componente en el mismo sitio, reusa la instancia y
-   * conserva su estado: los mensajes, los agentes y el preview de la sala
-   * ANTERIOR. Al entrar a una sala con historial no se notaba, porque el
-   * `joined` llegaba con mensajes y pisaba lo viejo; al crear una sala nueva sí,
-   * porque llega vacío y nada sobrescribe. Aparecías en una sala recién creada
-   * leyendo la conversación de otra.
+   * La `key` la decide `usarLlaveDeLaSala`, arriba: cambia entre una sala y otra
+   * para empezar de cero, y NO cambia al pasar de la portada a su sala.
    */
-  return <Sala key={roomId} roomId={roomId} name={name || "anónimo"} cuenta={cuenta} onCuentaCambio={onCuentaCambio} />;
+  return <Sala key={llave} roomId={roomId} name={name || "anónimo"} cuenta={cuenta} onCuentaCambio={onCuentaCambio} />;
 }
 
 
@@ -329,13 +338,22 @@ function Sala({
   /**
    * Si en esta sala hay que mencionar al agente para despertarlo.
    *
-   * Arranca en "multi" porque es lo conservador: si el server tarda en decir en
-   * qué modo está, mejor prometer de menos que enseñar un botón diciendo que
-   * escribir despierta al agente cuando quizá no.
+   * Null mientras el server no lo ha dicho, y esa distinción importa: antes
+   * arrancaba en "multi" por prudencia, y como el `joined` tarda un par de
+   * segundos en llegar, lo PRIMERO que leía quien abría una sala nueva era que
+   * escribiera @agente. Justo lo que el modo de una persona vino a quitar, y
+   * encima en el único momento en que alguien lee esa pantalla.
+   *
+   * Con null, los textos que dependen del modo no se pintan hasta saberlo.
    */
-  const [modo, setModo] = useState<ModoDeSala>("multi");
+  const [modo, setModo] = useState<ModoDeSala | null>(null);
   const [editandoNombre, setEditandoNombre] = useState(false);
   const [creandoSala, setCreandoSala] = useState(false);
+  /** El botón de compartir acaba de copiar. Se apaga solo. */
+  const [copiado, setCopiado] = useState(false);
+  /** Si el historial está abierto. Cerrado por defecto: se consulta de vez en
+      cuando, y abajo del preview se llevaba una franja de la pantalla siempre. */
+  const [histAbierto, setHistAbierto] = useState(false);
   /** Qué dice el botón de descargar ahora mismo. null = su texto normal. */
   /**
    * Por dónde va la publicación, o null si no hay ninguna.
@@ -374,6 +392,18 @@ function Sala({
   const [sePuedeExportar, setSePuedeExportar] = useState(false);
 
   const socketRef = useRef<Socket | null>(null);
+  /**
+   * El primer mensaje, escrito antes de que la sala existiera.
+   *
+   * Espera aquí a que llegue el `joined`, que es la señal de que el server ya
+   * tiene la sala puesta. Antes de eso, un `chat` se descarta sin avisar a
+   * nadie: pasa cuando la sala no está en memoria (dormida, o el server recién
+   * reiniciado) y su `join` se va a esperar mientras el mensaje se cuela.
+   *
+   * Es un ref y no estado porque quien lo lee es el handler del socket, que se
+   * registra una sola vez y se quedaría con el valor de entonces.
+   */
+  const porMandar = useRef<{ text: string } | null>(null);
   // Streaming POR AGENTE: varios pueden estar hablando a la vez.
   const [streaming, setStreaming] = useState<Record<string, string>>({});
   /**
@@ -457,14 +487,12 @@ function Sala({
   const [mention, setMention] = useState<string | null>(null);
   /** Se incrementa cuando el historial cambia, para que el scrubber recargue. */
   const [histVersion, setHistVersion] = useState(0);
-  /** Se incrementa cuando cambia un archivo, para que el mapa del back recargue. */
-  const [apiVersion, setApiVersion] = useState(0);
   /** Qué tab del escenario se ve. */
   /**
    * Qué se está viendo. "chat" solo existe en pantallas chicas, donde el chat
    * no cabe al lado del preview y pasa a ser una vista más.
    */
-  const [tab, setTab] = useState<"chat" | "app" | "back">("app");
+  const [tab, setTab] = useState<"chat" | "app">("app");
   /**
    * A qué ancho se está viendo el preview.
    *
@@ -479,7 +507,18 @@ function Sala({
    * cuando enseñas el resultado el chat estorba. La barra de arriba se queda,
    * asi que volver es un click.
    */
-  const [chatColapsado, setChatColapsado] = useState(false);
+  /**
+   * Qué tan ancho está el chat, en píxeles.
+   *
+   * Arrastrable en vez de un botón de colapsar: el reparto bueno entre chat y
+   * preview depende de lo que estés haciendo y de tu pantalla, y un botón solo
+   * ofrecía todo o nada. Se recuerda en este navegador, que es donde importa.
+   */
+  const [anchoChat, setAnchoChat] = useState<number>(() => {
+    const guardado = Number(localStorage.getItem("multi.ancho-chat"));
+    return guardado >= 280 && guardado <= 900 ? guardado : 460;
+  });
+  const moviendoDivisor = useRef(false);
   /**
    * Mi API key. Se lee del navegador al montar: se configura UNA vez y sirve en
    * todas las salas. null = todavía no hay (puedes entrar y platicar igual).
@@ -585,6 +624,16 @@ function Sala({
       // el `preview:ready` ya pasó y no vuelve: sin esta condición el spinner se
       // quedaba girando encima de un preview que sí existía.
       if (p.previewArrancando && !p.previewUrl) setArrancando("servidor");
+
+      // El mensaje con el que nació la sala. Aquí, y no en el `connect`: si la
+      // sala estaba dormida, su `join` pasa por un await antes de quedar puesta
+      // y un `chat` adelantado se pierde en silencio.
+      const primero = porMandar.current;
+      if (primero) {
+        porMandar.current = null;
+        socket.emit("chat", { text: primero.text });
+        setDraft("");
+      }
     });
     socket.on("presence", ({ members }: { members: Member[] }) => setMembers(members));
 
@@ -654,10 +703,6 @@ function Sala({
     socket.on("history:new", () => setHistVersion((v) => v + 1));
     socket.on("history:changed", () => setHistVersion((v) => v + 1));
     socket.on("orphans", ({ turns }: { turns: OrphanTurn[] }) => setOrphans(turns));
-    // Un archivo cambió: el contrato front/back pudo haberse movido. El mismo
-    // canal de tiempo real que alimenta el preview alimenta el semáforo.
-    socket.on("file:changed", () => setApiVersion((v) => v + 1));
-
     socket.on("chat:message", (m: ChatMessage) => {
       setMessages((prev) => [...prev, m]);
       // Al llegar el mensaje final de UN agente, limpiar SU streaming (no el de otros).
@@ -789,6 +834,34 @@ function Sala({
   }, [previewReady]);
 
   /**
+   * Crear la sala y entrar a ella, con lo que se haya escrito bajo el brazo.
+   *
+   * Es lo que pasa al escribir en Multi sin haber elegido sala: el mensaje es lo
+   * que la crea, y lo único que se ve es que la URL cambia. Antes la caja estaba
+   * apagada y había que adivinar que primero se creaba con el `+`.
+   *
+   * El texto viaja en un ref en vez de mandarse aquí porque el socket todavía no
+   * existe: lo levanta el efecto cuando cambia `roomId`, y el mensaje sale al
+   * llegar el `joined`.
+   */
+  const nacerConMensaje = async (text: string): Promise<string | null> => {
+    // Dos enters seguidos crearían dos salas, y la segunda se quedaría vacía.
+    if (creandoSala) return null;
+    setCreandoSala(true);
+    try {
+      const id = await createRoom();
+      if (text) porMandar.current = { text };
+      window.location.hash = `#/sala/${id}`;
+      return id;
+    } catch (e) {
+      alert(t.noSePudoCrear + String(e));
+      return null;
+    } finally {
+      setCreandoSala(false);
+    }
+  };
+
+  /**
    * Suma imágenes a las que van a salir con el próximo mensaje.
    *
    * El tope de 4 no es capricho: cada imagen cuesta tokens y los paga quien
@@ -796,7 +869,12 @@ function Sala({
    * factura aparezca después.
    */
   const agregarImagenes = async (files: File[]) => {
-    if (files.length === 0 || !roomId) return;
+    if (files.length === 0) return;
+    // Los adjuntos suben a la sala (`POST /rooms/:id/adjuntos`), así que sin
+    // sala hay que crearla primero. El id se usa de aquí en adelante y no de
+    // `roomId`, que en esta pasada sigue valiendo null.
+    const sala = roomId ?? (await nacerConMensaje(""));
+    if (!sala) return;
     setErrorAdjunto(null);
     const sitio = MAX_ADJUNTOS - pendientes.length;
     if (sitio <= 0) {
@@ -826,7 +904,7 @@ function Sala({
       void (async () => {
         try {
           const listo = await prepararParaSubir(file);
-          const subido = await subirAdjunto(SERVER_URL, roomId, listo, (pct) => {
+          const subido = await subirAdjunto(SERVER_URL, sala, listo, (pct) => {
             setPendientes((prev) =>
               prev.map((p) => (p.clave === clave ? { ...p, subiendo: pct } : p)),
             );
@@ -859,6 +937,15 @@ function Sala({
     // Mandar solo un archivo, sin escribir nada, es un mensaje legítimo.
     if (!text && pendientes.length === 0) return;
     if (subiendoAlgo) return;
+
+    // Todavía no hay sala: este mensaje la crea. Sale solo cuando el server
+    // conteste el `joined`, así que el borrador NO se limpia aquí: si la
+    // creación falla, lo escrito sigue en la caja.
+    if (!roomId) {
+      void nacerConMensaje(text);
+      return;
+    }
+
     // Anclar MI selección local al mensaje (cuidado 2/3/4).
     socketRef.current?.emit("chat", {
       text,
@@ -882,21 +969,6 @@ function Sala({
     }
   };
 
-  /**
-   * Anclar un endpoint al chat. A diferencia del anclaje del preview (que manda
-   * un SelectedElement del DOM), aquí se redacta el pedido en el borrador: el
-   * usuario lo lee, lo edita si quiere, y decide cuándo mandarlo.
-   */
-  const anclarEndpoint = (e: Endpoint) => {
-    const donde = e.calls[0] ? ` (el front lo llama desde ${e.calls[0].file})` : "";
-    const texto =
-      e.status === "faltante"
-        ? `@agente crea el endpoint ${e.method} ${e.path}${donde}`
-        : `@agente sobre el endpoint ${e.method} ${e.path}: `;
-    setDraft(texto);
-    setTab("app");
-    inputRef.current?.focus();
-  };
 
   // Menú de menciones: se abre al escribir "@" al inicio de una palabra.
   const onDraftChange = (value: string) => {
@@ -916,7 +988,55 @@ function Sala({
     setOrphans([]);
   };
 
-  const copyLink = () => navigator.clipboard.writeText(window.location.href);
+  /**
+   * Copiar el link de la sala.
+   *
+   * Con aviso: copiar no se ve ni se oye, así que sin esto el botón no daba
+   * ninguna señal de haber hecho algo y la gente le daba dos y tres veces. El
+   * texto del botón ya existía en el i18n y no lo usaba nadie.
+   */
+  // El arrastre del divisor. Los listeners van en window y no en el divisor
+  // porque el cursor se sale de él en cuanto te mueves rápido.
+  useEffect(() => {
+    const mover = (e: MouseEvent) => {
+      if (!moviendoDivisor.current) return;
+      // Topes para que ninguno de los dos desaparezca del todo.
+      const ancho = Math.min(900, Math.max(280, e.clientX));
+      setAnchoChat(ancho);
+    };
+    const soltar = () => {
+      if (!moviendoDivisor.current) return;
+      moviendoDivisor.current = false;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+    window.addEventListener("mousemove", mover);
+    window.addEventListener("mouseup", soltar);
+    return () => {
+      window.removeEventListener("mousemove", mover);
+      window.removeEventListener("mouseup", soltar);
+    };
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("multi.ancho-chat", String(anchoChat));
+    } catch {
+      // Modo incógnito: se pierde la preferencia, no la sala.
+    }
+  }, [anchoChat]);
+
+  const copyLink = async () => {
+    await navigator.clipboard.writeText(window.location.href);
+    setCopiado(true);
+  };
+
+  // El aviso de copiado es de paso, no un estado en el que la barra se quede.
+  useEffect(() => {
+    if (!copiado) return;
+    const id = setTimeout(() => setCopiado(false), 2000);
+    return () => clearTimeout(id);
+  }, [copiado]);
 
   /**
    * Publicar la app de la sala.
@@ -941,16 +1061,16 @@ function Sala({
     }
   };
 
-  /** Crear otra sala y entrar a ella. El hash es lo que cambia de sala. */
-  const crearSala = async () => {
-    setCreandoSala(true);
-    try {
-      window.location.hash = `#/sala/${await createRoom()}`;
-    } catch (e) {
-      alert(t.noSePudoCrear + String(e));
-    } finally {
-      setCreandoSala(false);
-    }
+  /**
+   * Crear una sala en blanco. El `+` de la cabecera.
+   *
+   * Lo que se llevara escrito se va con ella: el `+` es para empezar de nuevo,
+   * y arrastrar el borrador a la sala nueva sería adivinar que eso era lo que
+   * se quería. Enviar sí lo lleva, pero eso es otra cosa y la pide el enter.
+   */
+  const crearSala = () => {
+    setDraft("");
+    void nacerConMensaje("");
   };
 
   /**
@@ -1049,9 +1169,9 @@ function Sala({
   return (
     // `ver-*` es lo que el CSS usa en móvil para decidir qué se muestra. En
     // escritorio se ignora: ahí el chat y el preview conviven en dos columnas.
-    <div className={`sala ver-${tab} ${chatColapsado ? "chat-colapsado" : ""}`}>
+    <div className={`sala ver-${tab}`}>
       {/* Chat izquierda */}
-      <aside className="chat">
+      <aside className="chat" style={{ width: anchoChat }}>
         {/* Con mensajes ya en pantalla, el chat se ve normal aunque no llegue
             nada. Esta barra es lo único que distingue "nadie ha escrito" de
             "se cayó el wifi". */}
@@ -1090,18 +1210,6 @@ function Sala({
               >
                 {nombre ?? roomId}
               </button>
-            )}
-            {roomId && (
-              <div className="sala-meta">
-                {t.enLaSala(members.length)}
-                {/* Debajo del contador porque es lo mismo que dice: cuánta gente
-                    asume la sala. Y el texto dice qué HACE, no en qué estado
-                    está, que es lo que a alguien le sirve para decidir si lo
-                    quiere tocar. */}
-                <button className="sala-modo" onClick={cambiarModo} title={t.modoAyuda(modo)}>
-                  {t.modo(modo)}
-                </button>
-              </div>
             )}
           </div>
           {/* Crear otra sala, a la vista. Vivía dentro del menú, donde nadie lo
@@ -1316,35 +1424,23 @@ function Sala({
                 e.target.value = "";
               }}
             />
-            <button
-              className="adjuntar-btn"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={!roomId}
-              title={t.adjuntarImagen}
-              aria-label={t.adjuntarImagen}
-            >
-              {/* Un clip, no un "+": el más ya es crear sala, ahí arriba, y dos
-                  botones con el mismo símbolo en la misma pantalla se confunden.
-                  Va en SVG y no como emoji para que se vea igual en todos lados. */}
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path
-                  d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </button>
+            {/* El textarea arriba y las acciones abajo, todo dentro de la
+                misma caja. Antes el clip iba FUERA, a un lado, y el textarea
+                era una franja de una línea: tenía borde el clip y no la caja
+                de escribir, que es lo que alguien del experimento no encontró.
+                Así la caja ocupa lo que merece y lo que se hace con ella vive
+                dentro. */}
+            <div className="caja-marco">
             <textarea
               ref={inputRef}
               className="caja"
               rows={1}
-              // Sin sala no hay a dónde mandar nada: se apaga en vez de dejar
-              // escribir un mensaje que se perdería al darle enter.
-              disabled={!roomId}
               placeholder={
-                subiendoAlgo ? t.subiendoArchivo : roomId ? t.hablaConLaSala : t.eligeOCrea
+                subiendoAlgo
+                  ? t.subiendoArchivo
+                  : roomId && modo
+                    ? t.hablaConLaSala(modo)
+                    : t.quieresConstruir
               }
               value={draft}
               onChange={(e) => onDraftChange(e.target.value)}
@@ -1367,29 +1463,89 @@ function Sala({
                 if (e.key === "Escape") setMention(null);
               }}
             />
+              <div className="caja-acciones">
+                <button
+              className="adjuntar-btn"
+              onClick={() => fileInputRef.current?.click()}
+              title={t.adjuntarImagen}
+              aria-label={t.adjuntarImagen}
+            >
+              {/* Un clip, no un "+": el más ya es crear sala, ahí arriba, y dos
+                  botones con el mismo símbolo en la misma pantalla se confunden.
+                  Va en SVG y no como emoji para que se vea igual en todos lados. */}
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path
+                  d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+                </button>
+                {/* Enviar también con botón: enter ya funcionaba, pero en el
+                    teléfono no hay enter que mande, y quien llega de WhatsApp
+                    busca la flecha antes que el teclado. */}
+                <button
+                  className="enviar-btn"
+                  onClick={send}
+                  disabled={(!draft.trim() && pendientes.length === 0) || subiendoAlgo}
+                  title={t.enviar}
+                  aria-label={t.enviar}
+                >
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path
+                      d="M12 19V5M5 12l7-7 7 7"
+                      stroke="currentColor"
+                      strokeWidth="2.2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </aside>
 
+      {/* El divisor. Reemplaza al botón de ocultar el chat, que solo ofrecía
+          todo o nada: aquí cada quien reparte el ancho como le sirva. */}
+      <div
+        className="divisor"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label={t.ajustarAncho}
+        title={t.ajustarAncho}
+        onMouseDown={() => {
+          moviendoDivisor.current = true;
+          // En el body y no en el divisor: mientras arrastras el cursor se sale
+          // de él, y sin esto parpadea y se selecciona texto de la página.
+          document.body.style.cursor = "col-resize";
+          document.body.style.userSelect = "none";
+        }}
+      />
+
       {/* Escenario derecha */}
       <section className="escenario" ref={escenarioRef}>
         <div className="barra-sup">
-          <button
-            className="colapsar-btn"
-            onClick={() => setChatColapsado((v) => !v)}
-            title={chatColapsado ? t.mostrarChat : t.ocultarChat}
-            aria-label={chatColapsado ? t.mostrarChat : t.ocultarChat}
-          >
-            {chatColapsado ? "⟩" : "⟨"}
-          </button>
-          <button
-            className={`inspect-btn ${inspect ? "on" : ""}`}
-            onClick={() => setInspect((v) => !v)}
-            disabled={!roomId}
-            title={t.tituloSelector}
-          >
-            {inspect ? t.seleccionando : t.seleccionarBtn}
-          </button>
+
+          {/* Qué se está mirando del proyecto. Dos botones pegados y no dos
+              sueltos: juntos se leen como un interruptor de una cosa, que es lo
+              que son, y se ve cuál está puesto sin tener que compararlos.
+
+              El del código todavía no lleva a ningún lado y por eso va
+              apagado. Se pone ahora porque tres personas del experimento
+              pidieron "ver o modificar el código", y sin el hueco en pantalla
+              esa petición no tiene dónde aterrizar. */}
+          <div className="switch-vista" role="group">
+            <button className="switch-op activa" type="button">
+              {t.vistaPreview}
+            </button>
+            <button className="switch-op" type="button" disabled title={t.vistaCodigoPronto}>
+              {t.vistaCodigo}
+            </button>
+          </div>
           {/* Los mismos avatares que ya decían quién está, ahora también filtran
               el chat. Se reutilizan en vez de meter una fila de chips aparte:
               en una columna de 340px cada control nuevo se paga caro, y aquí el
@@ -1450,6 +1606,13 @@ function Sala({
                 experimento. Sacar la app de la sala ya se resuelve con
                 Publicar, que da un enlace en vez de una carpeta que alguien
                 tendría que saber correr. La ruta del server sigue ahí. */}
+            {/* El modo sube aquí desde la cabecera del chat, donde competía por
+                ancho con el nombre de la sala y quedaba apretado. */}
+            {roomId && modo && (
+              <button className="invitar" onClick={cambiarModo} title={t.modoAyuda(modo)}>
+                {t.modo(modo)}
+              </button>
+            )}
             <PublicarPanel
               roomId={roomId}
               urlPublicada={urlPublicada}
@@ -1468,8 +1631,12 @@ function Sala({
               />
             )}
             {/* Sin sala no hay link que compartir: copiaría la URL pelada. */}
-            <button className="invitar" onClick={copyLink} disabled={!roomId}>
-              {t.copiarLink}
+            <button
+              className={`invitar ${copiado ? "copiado" : ""}`}
+              onClick={copyLink}
+              disabled={!roomId}
+            >
+              {copiado ? t.copiado : t.copiarLink}
             </button>
           </div>
         </div>
@@ -1484,35 +1651,71 @@ function Sala({
           >
             {t.elChat}
           </button>
-          <button className={`tab ${tab === "app" ? "activa" : ""}`} onClick={() => setTab("app")}>
-            {t.laApp}
-          </button>
-          <button className={`tab ${tab === "back" ? "activa" : ""}`} onClick={() => setTab("back")}>
-            {t.elBack}
-          </button>
+          {/* "La app" ya no se pinta: al quitarse la pestaña del back quedaba
+              sola, y una pestaña única no ofrece nada que elegir. La del chat
+              sí se queda, que en móvil es la que cambia de vista. */}
+        </div>
 
-          {/* A qué ancho se ve el preview. Un solo botón que cicla, y no tres,
-              porque se toca poco y la barra de arriba ya va llena. Solo aparece
-              con la app a la vista: en el back no hay nada que redimensionar. */}
-          {tab === "app" && (
+        {/* La pestaña del back se quitó: enseñaba un mapa de endpoints a gente
+            que viene a hacer una presentación o una página, y era una decisión
+            más en una pantalla que ya tenía de sobra. Lo que sí pidieron tres
+            personas del experimento es VER EL CÓDIGO, y eso es otra cosa y va
+            en otro lado. BackCanvas se queda en el repo para entonces. */}
+        <div className="lienzo">
+          {/* Señalar un elemento es una herramienta del preview, no una acción
+              de la barra: ahí arriba se veía igual que "compartir" o
+              "variables", que son otra cosa. Flotando encima de lo que señala
+              se entiende sin leerlo. */}
+          {roomId && previewReady && (
+            <div className="herramientas-preview">
             <button
-              className="vista-btn"
+              className={`inspect-flotante ${inspect ? "on" : ""}`}
+              onClick={() => setInspect((v) => !v)}
+              title={t.tituloSelector}
+              aria-label={t.tituloSelector}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path
+                  d="M4 4l6.5 16 2.2-6.3 6.3-2.2L4 4z"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              <span>{inspect ? t.seleccionando : t.seleccionarBtn}</span>
+            </button>
+            {/* A qué ancho se ve el preview. Baja aquí desde la barra de
+                pestañas, que en escritorio existía solo para sostenerlo y
+                robaba altura justo a lo que todos miran. */}
+            <button
+              className="vista-btn flotante"
               onClick={() => setVista(VISTAS[(VISTAS.indexOf(vista) + 1) % VISTAS.length])}
               title={t.verEn[vista]}
               aria-label={t.verEn[vista]}
             >
               <IconoDeVista vista={vista} />
             </button>
+            {/* El historial, detrás de un icono. Antes vivía siempre abierto
+                debajo del preview, y eso son unos cincuenta píxeles de alto
+                para algo que se consulta de vez en cuando. */}
+            <button
+              className={`vista-btn flotante ${histAbierto ? "on" : ""}`}
+              onClick={() => setHistAbierto((v) => !v)}
+              title={t.tituloHistorial}
+              aria-label={t.tituloHistorial}
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path
+                  d="M12 8v4l3 2M3 12a9 9 0 1 0 2.6-6.4M3 4v4h4"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </button>
+            </div>
           )}
-        </div>
-
-        {tab === "back" && roomId && (
-          <div className="lienzo">
-            <BackCanvas roomId={roomId} version={apiVersion} onAnclar={anclarEndpoint} />
-          </div>
-        )}
-
-        <div className="lienzo" style={tab === "back" ? { display: "none" } : undefined}>
           {previewReady ? (
             <>
               {/* El ancho va en el marco, no en el iframe, y el iframe NUNCA se
@@ -1550,11 +1753,14 @@ function Sala({
                   <p className="preview-loading-sub">{t.etapaPreview[arrancando]}</p>
                 </>
               ) : !roomId ? (
-                // Ni siquiera hay sala: lo que falta no es pedirle algo a un
-                // agente, es elegir dónde.
+                // Todavía no hay sala, y eso ya no es un impedimento: la crea
+                // el primer mensaje. Así que aquí no se anuncia una carencia,
+                // se dice qué hacer.
                 <>
-                  <p>{t.ningunaSala}</p>
-                  <p className="preview-loading-sub">{t.eligeOCrea}</p>
+                  <p>{t.quieresConstruir}</p>
+                  <p className="preview-loading-sub">
+                    {t.porEjemplo} <code>{t.ejemploSinJerga}</code>
+                  </p>
                 </>
               ) : esperaLarga ? (
                 // Hay sala, pero su estado todavía no llega. Decir aquí que está
@@ -1566,11 +1772,15 @@ function Sala({
               ) : (
                 <>
                   <p>{t.salaVacia}</p>
-                  <p className="preview-loading-sub">
-                    {t.pideleAlAgente}
-                    <br />
-                    {t.porEjemplo} <code>{t.pideAlgo}</code>
-                  </p>
+                  {/* Sin saber el modo no se dice nada: enseñar la arroba a
+                      quien no la necesita es peor que esperar medio segundo. */}
+                  {modo && (
+                    <p className="preview-loading-sub">
+                      {t.pideleAlAgente(modo)}
+                      <br />
+                      {t.porEjemplo} <code>{t.pideAlgo(modo)}</code>
+                    </p>
+                  )}
                 </>
               )}
             </div>
@@ -1593,8 +1803,9 @@ function Sala({
           ))}
         </div>
 
-        {/* La línea de tiempo de la sala. Sin sala no hay historial que pintar. */}
-        {roomId && (
+        {/* La línea de tiempo de la sala. Solo cuando se pide: vivía siempre
+            abierta bajo el preview y le comía altura a lo que todos miran. */}
+        {roomId && histAbierto && (
           <Historial
             roomId={roomId}
             version={histVersion}

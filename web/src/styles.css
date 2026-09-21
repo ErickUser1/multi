@@ -1861,33 +1861,6 @@ img.av {
     animation: none;
   }
 }
-
-
-/* El ejemplo que rota. Entra con un desvanecido corto para que se note que
-   cambió: sin él parpadea un texto distinto en el mismo sitio y se lee como un
-   glitch. Se declara en bloque para que el ancho no salte entre uno y otro. */
-.ejemplo-rotando {
-  display: inline-block;
-  margin-top: 6px;
-  animation: ejemplo-entra 0.35s ease;
-}
-@keyframes ejemplo-entra {
-  from {
-    opacity: 0;
-    transform: translateY(3px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-/* Quien pidió menos movimiento no quiere que esto se mueva cada 3 segundos. */
-@media (prefers-reduced-motion: reduce) {
-  .ejemplo-rotando {
-    animation: none;
-  }
-}
-
 /* ── Tu API key (por persona, solo esta sesión) ──────────────────────────── */
 
 /* Con foto adentro, el chip necesita mas aire del que pide un boton de solo

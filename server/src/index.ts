@@ -71,7 +71,7 @@ import {
 } from "./engine/adjuntos.js";
 import { MAX_AGENTS_PER_ROOM, resumenDeOtros } from "./engine/agents.js";
 import { fileMutation } from "./engine/file-mutation.js";
-import { leerVariables, guardarVariables } from "./engine/env.js";
+import { leerVariables, modificarVariables, type Variable } from "./engine/env.js";
 import { hayLlave } from "./cripto.js";
 import {
   anonKey,
@@ -720,9 +720,9 @@ fastify.put<{ Params: { id: string }; Body: { variables?: unknown } }>(
     const room = getRoom(req.params.id) ?? (await wakeRoom(req.params.id));
     if (!room) return reply.code(404).send({ error: "sala no encontrada" });
 
-    const variables = await guardarVariables(
-      room.workspace.dir,
-      await conVariablesDeSupabase(room.id, room.workspace.dir, req.body?.variables),
+    const conexion = await (await getStorage()).conexionSupabase(room.id);
+    const variables = await modificarVariables(room.workspace.dir, (actuales) =>
+      conVariablesDeSupabase(!!conexion?.proyecto, actuales, req.body?.variables),
     );
     // Solo nombres, nunca valores. Sin esta línea no había forma de saber quién
     // dejó un `.env` vacío: el panel y la conexión con Supabase escriben con la
@@ -749,21 +749,17 @@ fastify.put<{ Params: { id: string }; Body: { variables?: unknown } }>(
  * Mientras la sala tenga proyecto, esas dos variables son de la conexión y no
  * del panel. Quien ya no las quiera, desconecta.
  */
-async function conVariablesDeSupabase(
-  roomId: string,
-  workspaceDir: string,
+function conVariablesDeSupabase(
+  conectada: boolean,
+  actuales: Variable[],
   crudas: unknown,
-): Promise<unknown> {
-  const conexion = await (await getStorage()).conexionSupabase(roomId);
-  if (!conexion?.proyecto || !Array.isArray(crudas)) return crudas;
+): unknown {
+  if (!conectada || !Array.isArray(crudas)) return crudas;
   const DE_LA_CONEXION = ["VITE_SUPABASE_URL", "VITE_SUPABASE_ANON_KEY"];
-  const actuales = (await leerVariables(workspaceDir)).filter((v) =>
-    DE_LA_CONEXION.includes(v.nombre),
-  );
   const resto = crudas.filter(
     (v) => !DE_LA_CONEXION.includes(String((v as { nombre?: unknown })?.nombre ?? "").trim()),
   );
-  return [...resto, ...actuales];
+  return [...resto, ...actuales.filter((v) => DE_LA_CONEXION.includes(v.nombre))];
 }
 
 /**
@@ -974,18 +970,17 @@ async function prepararProyectoSerializado(roomId: string): Promise<void> {
 
   const llave = await anonKey(acceso, ref);
 
-  // Las variables se AÑADEN a las que ya había: guardarVariables reemplaza la
-  // lista completa, así que hay que leerlas antes o se pierde lo que alguien
-  // hubiera puesto a mano.
-  const previas = (await leerVariables(room.workspace.dir)).filter(
-    (v) => v.nombre !== "VITE_SUPABASE_URL" && v.nombre !== "VITE_SUPABASE_ANON_KEY",
-  );
-  await guardarVariables(room.workspace.dir, [
-    ...previas,
+  // Las variables se AÑADEN a las que ya había, leídas dentro del turno del
+  // `.env`: si alguien guarda desde el panel en ese mismo instante, lo suyo
+  // entra antes o después, pero no se pierde.
+  const variables = await modificarVariables(room.workspace.dir, (actuales) => [
+    ...actuales.filter(
+      (v) => v.nombre !== "VITE_SUPABASE_URL" && v.nombre !== "VITE_SUPABASE_ANON_KEY",
+    ),
     { nombre: "VITE_SUPABASE_URL", valor: urlDelProyecto(ref) },
     { nombre: "VITE_SUPABASE_ANON_KEY", valor: llave },
   ]);
-  io.to(roomId).emit("env:changed", { cuantas: previas.length + 2 });
+  io.to(roomId).emit("env:changed", { cuantas: variables.length });
   // El camino feliz tampoco dejaba línea: tras "proyecto X creado" el log se
   // quedaba mudo, igual que si la preparación se hubiera colgado.
   console.log(`[supabase] ${roomId} lista: ${ref} con sus variables en el .env`);

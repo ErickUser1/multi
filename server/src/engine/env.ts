@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { KeyedMutex } from "./keyed-mutex.js";
 
 /**
  * Las variables de entorno del proyecto de una sala: su `.env`.
@@ -66,6 +67,34 @@ export async function leerVariables(workspaceDir: string): Promise<Variable[]> {
 }
 
 /**
+ * Un turno por `.env`.
+ *
+ * Dos caminos escriben el archivo leyéndolo antes: el panel (que conserva las
+ * variables de Supabase) y la conexión con Supabase (que conserva las que
+ * alguien puso a mano). Sin turno, si coincidían, el segundo en escribir no
+ * veía lo del primero y lo borraba: la variable manual o las de la base,
+ * según quién llegara último.
+ */
+const candados = new KeyedMutex();
+
+/**
+ * Lee las variables, deja que `cambio` arme la lista nueva y la escribe, todo
+ * sin que nadie más escriba el `.env` en medio.
+ *
+ * Es la forma de escribir cuando lo nuevo depende de lo que ya hay. Si solo se
+ * leyera y luego se llamara a `guardarVariables`, lo que otro escribiera entre
+ * las dos cosas se perdería.
+ */
+export async function modificarVariables(
+  workspaceDir: string,
+  cambio: (actuales: Variable[]) => unknown | Promise<unknown>,
+): Promise<Variable[]> {
+  return candados.run(rutaEnv(workspaceDir), async () =>
+    escribir(workspaceDir, await cambio(await leerVariables(workspaceDir))),
+  );
+}
+
+/**
  * Escribe la lista completa de variables, pisando el `.env` anterior.
  *
  * Se escribe entero y no línea por línea porque el panel manda siempre la lista
@@ -76,6 +105,10 @@ export async function guardarVariables(
   workspaceDir: string,
   crudas: unknown,
 ): Promise<Variable[]> {
+  return candados.run(rutaEnv(workspaceDir), () => escribir(workspaceDir, crudas));
+}
+
+async function escribir(workspaceDir: string, crudas: unknown): Promise<Variable[]> {
   const lista = Array.isArray(crudas) ? crudas : [];
   const vistos = new Set<string>();
   const vars: Variable[] = [];

@@ -725,6 +725,7 @@ function Sala({
         setSupabase((s) => ({
           ...s,
           proyecto: d.proyecto,
+          pendiente: false,
           etapa: null,
           // La contraseña vive SOLO en este estado de React: al recargar se va, y
           // eso es lo correcto. Supabase no la devuelve nunca, así que guardarla
@@ -739,7 +740,14 @@ function Sala({
     });
 
     socket.on("supabase:desconectado", () => {
-      setSupabase((s) => ({ ...s, proyecto: null, etapa: null, password: null, error: null }));
+      setSupabase((s) => ({
+        ...s,
+        proyecto: null,
+        pendiente: false,
+        etapa: null,
+        password: null,
+        error: null,
+      }));
     });
 
     // La publicación la ve toda la sala. El link y los fallos llegan además al
@@ -1242,7 +1250,7 @@ function Sala({
     let cancelado = false;
     fetch(`${SERVER_URL}/rooms/${roomId}/supabase`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((d: { configurado: boolean; proyecto: string | null } | null) => {
+      .then((d: { configurado: boolean; proyecto: string | null; pendiente?: boolean } | null) => {
         if (!cancelado && d) setSupabase((s) => ({ ...s, ...d }));
       })
       .catch(() => {

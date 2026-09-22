@@ -182,6 +182,9 @@ const TEXTOS = {
     sbLevantando: "Levantando la base, esto tarda unos minutos…",
     sbProtegiendo: "Dejándola protegida…",
     sbConectado: (proyecto: string) => `Conectada al proyecto ${proyecto}.`,
+    sbPendiente: (proyecto: string) =>
+      `El proyecto ${proyecto} existe, pero sus variables no llegaron al .env y el agente no lo ve.`,
+    sbTerminar: "Terminar de conectar",
     sbDesconectar: "Desconectar",
     sbPassword:
       "Esta es la contraseña de tu base. Cópiala ahora: Supabase no la vuelve a mostrar y Multi no la va a enseñar otra vez.",
@@ -436,6 +439,9 @@ const TEXTOS = {
     sbLevantando: "Bringing the database up, this takes a few minutes…",
     sbProtegiendo: "Locking it down…",
     sbConectado: (proyecto: string) => `Connected to project ${proyecto}.`,
+    sbPendiente: (proyecto: string) =>
+      `Project ${proyecto} exists, but its variables never reached the .env, so the agent can't see it.`,
+    sbTerminar: "Finish connecting",
     sbDesconectar: "Disconnect",
     sbPassword:
       "This is your database password. Copy it now: Supabase never shows it again, and neither will Multi.",

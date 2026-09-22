@@ -743,6 +743,7 @@ fastify.put<{ Params: { id: string }; Body: { variables?: unknown } }>(
  */
 fastify.get<{ Params: { id: string } }>("/rooms/:id/supabase", async (req) => {
   const conexion = await (await getStorage()).conexionSupabase(req.params.id);
+  const room = conexion?.proyecto ? getRoom(req.params.id) ?? (await wakeRoom(req.params.id)) : null;
   return {
     // Dos condiciones, y las dos son del server: sin credencial de OAuth no hay
     // a dónde mandar a nadie, y sin llave maestra no se puede guardar lo que
@@ -750,6 +751,12 @@ fastify.get<{ Params: { id: string } }>("/rooms/:id/supabase", async (req) => {
     configurado: credencialDeSupabase() !== null && hayLlave(),
     proyecto: conexion?.proyecto ?? null,
     url: conexion?.proyecto ? urlDelProyecto(conexion.proyecto) : null,
+    // Tener proyecto no es lo mismo que tener las variables en el `.env`, que
+    // es lo único que el agente ve. El panel decía "conectada" en cuanto el
+    // proyecto existía, y si la preparación se cortaba después (el tope de
+    // espera, un reinicio) la sala se quedaba así para siempre: conectada en
+    // pantalla, sin variables en disco, y sin botón para terminar.
+    pendiente: room ? await faltanVariablesSupabase(room.workspace.dir) : false,
   };
 });
 
@@ -870,8 +877,14 @@ async function prepararProyecto(roomId: string): Promise<void> {
 }
 
 async function prepararProyectoSerializado(roomId: string): Promise<void> {
+  // El token se renueva ANTES de leer la conexión: retomar puede pasar horas o
+  // días después de autorizar, y el de acceso dura una hora. Usar el guardado
+  // tal cual da un 401 justo al retomar una sala que se quedó a medias. Y se
+  // lee después para que el guardado de abajo no pise el token recién renovado.
+  const acceso = await accesoVigente(roomId);
   const conexion = await (await getStorage()).conexionSupabase(roomId);
   if (!conexion) return; // se desconectó mientras tanto
+  if (!acceso) throw new FalloDeSupabase("la sala perdió el acceso a su base, hay que reconectar");
 
   const room = getRoom(roomId) ?? (await wakeRoom(roomId));
   if (!room) return;
@@ -888,7 +901,7 @@ async function prepararProyectoSerializado(roomId: string): Promise<void> {
 
   if (!ref) {
     avisar("creando");
-    const orgs = await organizaciones(conexion.acceso);
+    const orgs = await organizaciones(acceso);
     if (orgs.length === 0) {
       throw new FalloDeSupabase("esa cuenta de Supabase no tiene organizaciones");
     }
@@ -896,7 +909,7 @@ async function prepararProyectoSerializado(roomId: string): Promise<void> {
     console.log(`[supabase] creando proyecto para ${roomId} en la organización ${org}`);
 
     password = nuevaPassword();
-    const proyecto = await crearProyecto(conexion.acceso, {
+    const proyecto = await crearProyecto(acceso, {
       // El nombre lleva el id de la sala para que, en un panel de Supabase con
       // varios proyectos, se sepa cuál es de cuál sin abrirlos.
       nombre: `multi-${roomId}`,
@@ -916,12 +929,12 @@ async function prepararProyectoSerializado(roomId: string): Promise<void> {
   }
 
   avisar("levantando");
-  await esperarProyecto(conexion.acceso, ref, (s) => avisar("levantando", { segundos: s }));
+  await esperarProyecto(acceso, ref, (s) => avisar("levantando", { segundos: s }));
 
   avisar("protegiendo");
-  await armarRls(conexion.acceso, ref);
+  await armarRls(acceso, ref);
 
-  const llave = await anonKey(conexion.acceso, ref);
+  const llave = await anonKey(acceso, ref);
 
   // Las variables se AÑADEN a las que ya había: guardarVariables reemplaza la
   // lista completa, así que hay que leerlas antes o se pierde lo que alguien
@@ -934,12 +947,51 @@ async function prepararProyectoSerializado(roomId: string): Promise<void> {
     { nombre: "VITE_SUPABASE_URL", valor: urlDelProyecto(ref) },
     { nombre: "VITE_SUPABASE_ANON_KEY", valor: llave },
   ]);
+  io.to(roomId).emit("env:changed", { cuantas: previas.length + 2 });
 
   // La contraseña va en el aviso y NO se vuelve a mandar nunca: Supabase no la
   // devuelve por su API, así que esta es la única vez que alguien la puede ver
   // y copiar. Multi la conserva cifrada, pero quien quiera entrar a su base por
   // fuera la necesita.
   io.to(roomId).emit("supabase:listo", { proyecto: ref, url: urlDelProyecto(ref), password });
+}
+
+/** ¿Le faltan al `.env` de la sala las variables de su base? */
+async function faltanVariablesSupabase(workspaceDir: string): Promise<boolean> {
+  const nombres = new Set((await leerVariables(workspaceDir)).map((v) => v.nombre));
+  return !nombres.has("VITE_SUPABASE_URL") || !nombres.has("VITE_SUPABASE_ANON_KEY");
+}
+
+/** Cuánto espera un turno a que la base termine de prepararse antes de arrancar sin ella. */
+const ESPERA_SUPABASE_EN_TURNO_MS = 30_000;
+
+/**
+ * Antes de un turno: si la sala tiene proyecto pero su `.env` no tiene las
+ * variables, se reescriben.
+ *
+ * Hay más de un camino para llegar ahí, y por eso se repara en el turno y no en
+ * uno solo de ellos: la preparación pudo cortarse después de crear el proyecto
+ * (y nadie la retomaba), y el `.env` es un archivo del proyecto que un generador
+ * o el propio agente pueden pisar. El agente solo ve el `.env`, así que es ahí
+ * donde tiene que estar la verdad cuando empieza a trabajar.
+ *
+ * Con tope: si la base todavía se está levantando, el turno no se queda
+ * minutos esperando. La preparación sigue sola y el agente verá las variables
+ * en su siguiente turno.
+ */
+async function repararVariablesSupabase(roomId: string, workspaceDir: string): Promise<void> {
+  const conexion = await (await getStorage()).conexionSupabase(roomId);
+  if (!conexion?.proyecto || !(await faltanVariablesSupabase(workspaceDir))) return;
+
+  console.warn(`[supabase] ${roomId} tiene proyecto pero no sus variables en el .env, se reponen`);
+  const preparacion = prepararProyecto(roomId).catch((err) => {
+    console.error(`[supabase] no se pudieron reponer las variables de ${roomId}:`, err);
+    io.to(roomId).emit("supabase:fallo", { error: String(err?.message ?? err) });
+  });
+  await Promise.race([
+    preparacion,
+    new Promise((r) => setTimeout(r, ESPERA_SUPABASE_EN_TURNO_MS)),
+  ]);
 }
 
 /**
@@ -1875,6 +1927,7 @@ async function runAgentTurn(
   let historialVivo: Message[] | null = null;
 
   try {
+    await repararVariablesSupabase(room.id, room.workspace.dir);
     const result = await runAgent({
       provider,
       workspaceDir: room.workspace.dir,

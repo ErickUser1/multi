@@ -31,6 +31,11 @@ export interface EstadoSupabase {
   configurado: boolean;
   /** El proyecto de esta sala, o null si todavía no hay. */
   proyecto: string | null;
+  /**
+   * Hay proyecto pero sus variables no están en el `.env`: la preparación se
+   * cortó a medias. El agente no ve la base hasta que se termina.
+   */
+  pendiente?: boolean;
   /** Qué está pasando ahora mismo, si es que algo. */
   etapa?: "creando" | "levantando" | "protegiendo" | null;
   segundos?: number;
@@ -249,6 +254,18 @@ export function EnvPanel({
                     ? ` (${supabase.segundos}s)`
                     : ""}
                 </p>
+              ) : supabase.proyecto && supabase.pendiente ? (
+                <>
+                  <p className="env-nota">{t.sbPendiente(supabase.proyecto)}</p>
+                  <div className="env-acciones">
+                    <button className="env-guardar" onClick={onConectarSupabase}>
+                      {t.sbTerminar}
+                    </button>
+                    <button className="env-quitar-sb" onClick={onDesconectarSupabase}>
+                      {t.sbDesconectar}
+                    </button>
+                  </div>
+                </>
               ) : supabase.proyecto ? (
                 <>
                   <p className="env-nota">{t.sbConectado(supabase.proyecto)}</p>

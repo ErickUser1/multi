@@ -56,9 +56,12 @@ export function EnvPanel({
   supabase,
   onConectarSupabase,
   onDesconectarSupabase,
+  versionVariables,
 }: {
   roomId: string;
   supabase: EstadoSupabase;
+  /** Sube cada vez que el `.env` de la sala cambia en el server. */
+  versionVariables: number;
   onConectarSupabase: () => void;
   onDesconectarSupabase: () => void;
 }) {
@@ -76,6 +79,8 @@ export function EnvPanel({
    */
   const [visibles, setVisibles] = useState<Set<number>>(new Set());
   const cajaRef = useRef<HTMLDivElement>(null);
+  /** Hay cambios en el panel que todavía no se guardaron. */
+  const sucio = useRef(false);
 
   // Se leen al abrir y no al montar: son de la sala, así que pueden haber
   // cambiado por otra persona desde la última vez.
@@ -83,6 +88,7 @@ export function EnvPanel({
     if (!abierto) return;
     // Cada apertura empieza tapada, aunque la vez pasada se hubiera revelado.
     setVisibles(new Set());
+    sucio.current = false;
     fetch(`${SERVER_URL}/rooms/${roomId}/env`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d: { variables: Variable[] } | null) => d && setVars(d.variables))
@@ -91,6 +97,22 @@ export function EnvPanel({
         // si el server no está.
       });
   }, [abierto, roomId]);
+
+  // Y se vuelven a leer si cambian con el panel abierto. Sin esto el panel se
+  // quedaba con la lista de cuando se abrió, y "Guardar" la escribía encima de
+  // lo que otra persona, o la conexión con Supabase, hubiera puesto mientras.
+  // Si alguien está editando no se le pisa lo que lleva escrito: su guardado
+  // ya conserva lo de Supabase del lado del server.
+  useEffect(() => {
+    if (!abierto || versionVariables === 0 || sucio.current) return;
+    fetch(`${SERVER_URL}/rooms/${roomId}/env`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { variables: Variable[] } | null) => {
+        if (d && !sucio.current) setVars(d.variables);
+      })
+      .catch(() => {});
+    // `abierto` fuera a propósito: la lectura al abrir ya la hace el efecto de arriba.
+  }, [versionVariables, roomId]);
 
   // Cerrar al hacer click fuera o con Escape, como cualquier panel.
   useEffect(() => {
@@ -110,6 +132,7 @@ export function EnvPanel({
   const cambiar = (i: number, campo: keyof Variable, valor: string) => {
     setVars((prev) => prev.map((v, j) => (j === i ? { ...v, [campo]: valor } : v)));
     setGuardado(false);
+    sucio.current = true;
   };
 
   const quitar = (i: number) => {
@@ -125,6 +148,7 @@ export function EnvPanel({
       return s;
     });
     setGuardado(false);
+    sucio.current = true;
   };
 
   const agregar = () => {
@@ -134,6 +158,7 @@ export function EnvPanel({
       return [...prev, { nombre: "", valor: "" }];
     });
     setGuardado(false);
+    sucio.current = true;
   };
 
   const alternarVisible = (i: number) => {
@@ -160,6 +185,7 @@ export function EnvPanel({
       // Se pinta lo que el server dejó, no lo que se escribió: si descartó un
       // nombre inválido, hay que verlo aquí y no descubrirlo cuando la app falle.
       setVars(d.variables);
+      sucio.current = false;
       // Ya guardadas, se tapan: dejarlas a la vista es lo que acaba en una
       // pantalla compartida un rato después.
       setVisibles(new Set());

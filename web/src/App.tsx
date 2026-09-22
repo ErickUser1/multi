@@ -438,6 +438,8 @@ function Sala({
    * Multi no puso la integración, el bloque no aparece nunca y nadie descubre
    * un botón que no lleva a ningún lado.
    */
+  /** Sube con cada `env:changed`, para que el panel de Variables se relea. */
+  const [versionVariables, setVersionVariables] = useState(0);
   const [supabase, setSupabase] = useState<EstadoSupabase>({
     configurado: false,
     proyecto: null,
@@ -715,6 +717,8 @@ function Sala({
 
     // Crear una base tarda minutos, así que el server va contando por dónde va.
     // Lo ve toda la sala a propósito: es del proyecto, no de quien apretó.
+    socket.on("env:changed", () => setVersionVariables((v) => v + 1));
+
     socket.on("supabase:etapa", (d: { etapa: EstadoSupabase["etapa"]; segundos?: number }) => {
       setSupabase((s) => ({ ...s, etapa: d.etapa, segundos: d.segundos, error: null }));
     });
@@ -1724,6 +1728,7 @@ function Sala({
                 supabase={supabase}
                 onConectarSupabase={conectarSupabase}
                 onDesconectarSupabase={desconectarSupabase}
+                versionVariables={versionVariables}
               />
             )}
             {/* Sin sala no hay link que compartir: copiaría la URL pelada. */}

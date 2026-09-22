@@ -720,13 +720,45 @@ fastify.put<{ Params: { id: string }; Body: { variables?: unknown } }>(
     const room = getRoom(req.params.id) ?? (await wakeRoom(req.params.id));
     if (!room) return reply.code(404).send({ error: "sala no encontrada" });
 
-    const variables = await guardarVariables(room.workspace.dir, req.body?.variables);
+    const variables = await guardarVariables(
+      room.workspace.dir,
+      await conVariablesDeSupabase(room.id, room.workspace.dir, req.body?.variables),
+    );
     // A la sala se le dice CUÁNTAS quedaron, nunca sus valores: el aviso es para
     // que nadie se pregunte por qué el proyecto cambió de comportamiento solo.
     io.to(room.id).emit("env:changed", { cuantas: variables.length });
     return { variables };
   },
 );
+
+/**
+ * Lo que manda el panel, sin perder las variables de la base conectada.
+ *
+ * El panel manda la lista completa tal como la cargó al abrirse, y la
+ * preparación de Supabase escribe sus variables minutos después de que alguien
+ * pudo haberlo abierto. Guardar desde ese panel viejo borraba las dos
+ * variables sin que nadie las hubiera tocado: pasó en una sala real, con la
+ * base creada y el agente mirando un `.env` vacío.
+ *
+ * Mientras la sala tenga proyecto, esas dos variables son de la conexión y no
+ * del panel. Quien ya no las quiera, desconecta.
+ */
+async function conVariablesDeSupabase(
+  roomId: string,
+  workspaceDir: string,
+  crudas: unknown,
+): Promise<unknown> {
+  const conexion = await (await getStorage()).conexionSupabase(roomId);
+  if (!conexion?.proyecto || !Array.isArray(crudas)) return crudas;
+  const DE_LA_CONEXION = ["VITE_SUPABASE_URL", "VITE_SUPABASE_ANON_KEY"];
+  const actuales = (await leerVariables(workspaceDir)).filter((v) =>
+    DE_LA_CONEXION.includes(v.nombre),
+  );
+  const resto = crudas.filter(
+    (v) => !DE_LA_CONEXION.includes(String((v as { nombre?: unknown })?.nombre ?? "").trim()),
+  );
+  return [...resto, ...actuales];
+}
 
 /**
  * Conectar la sala con Supabase, para que su app tenga base de datos.

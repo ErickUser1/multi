@@ -724,6 +724,12 @@ fastify.put<{ Params: { id: string }; Body: { variables?: unknown } }>(
       room.workspace.dir,
       await conVariablesDeSupabase(room.id, room.workspace.dir, req.body?.variables),
     );
+    // Solo nombres, nunca valores. Sin esta línea no había forma de saber quién
+    // dejó un `.env` vacío: el panel y la conexión con Supabase escriben con la
+    // misma función, y en el log no quedaba rastro de ninguno de los dos.
+    console.log(
+      `[env] ${room.id} guardó desde el panel: ${variables.map((v) => v.nombre).join(", ") || "(ninguna)"}`,
+    );
     // A la sala se le dice CUÁNTAS quedaron, nunca sus valores: el aviso es para
     // que nadie se pregunte por qué el proyecto cambió de comportamiento solo.
     io.to(room.id).emit("env:changed", { cuantas: variables.length });
@@ -980,6 +986,9 @@ async function prepararProyectoSerializado(roomId: string): Promise<void> {
     { nombre: "VITE_SUPABASE_ANON_KEY", valor: llave },
   ]);
   io.to(roomId).emit("env:changed", { cuantas: previas.length + 2 });
+  // El camino feliz tampoco dejaba línea: tras "proyecto X creado" el log se
+  // quedaba mudo, igual que si la preparación se hubiera colgado.
+  console.log(`[supabase] ${roomId} lista: ${ref} con sus variables en el .env`);
 
   // La contraseña va en el aviso y NO se vuelve a mandar nunca: Supabase no la
   // devuelve por su API, así que esta es la única vez que alguien la puede ver

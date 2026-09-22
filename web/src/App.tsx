@@ -438,6 +438,8 @@ function Sala({
    * Multi no puso la integración, el bloque no aparece nunca y nadie descubre
    * un botón que no lleva a ningún lado.
    */
+  /** Sube con cada `env:changed`, para que el panel de Variables se relea. */
+  const [versionVariables, setVersionVariables] = useState(0);
   const [supabase, setSupabase] = useState<EstadoSupabase>({
     configurado: false,
     proyecto: null,
@@ -715,6 +717,8 @@ function Sala({
 
     // Crear una base tarda minutos, así que el server va contando por dónde va.
     // Lo ve toda la sala a propósito: es del proyecto, no de quien apretó.
+    socket.on("env:changed", () => setVersionVariables((v) => v + 1));
+
     socket.on("supabase:etapa", (d: { etapa: EstadoSupabase["etapa"]; segundos?: number }) => {
       setSupabase((s) => ({ ...s, etapa: d.etapa, segundos: d.segundos, error: null }));
     });
@@ -725,6 +729,7 @@ function Sala({
         setSupabase((s) => ({
           ...s,
           proyecto: d.proyecto,
+          pendiente: false,
           etapa: null,
           // La contraseña vive SOLO en este estado de React: al recargar se va, y
           // eso es lo correcto. Supabase no la devuelve nunca, así que guardarla
@@ -739,7 +744,14 @@ function Sala({
     });
 
     socket.on("supabase:desconectado", () => {
-      setSupabase((s) => ({ ...s, proyecto: null, etapa: null, password: null, error: null }));
+      setSupabase((s) => ({
+        ...s,
+        proyecto: null,
+        pendiente: false,
+        etapa: null,
+        password: null,
+        error: null,
+      }));
     });
 
     // La publicación la ve toda la sala. El link y los fallos llegan además al
@@ -1242,7 +1254,7 @@ function Sala({
     let cancelado = false;
     fetch(`${SERVER_URL}/rooms/${roomId}/supabase`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((d: { configurado: boolean; proyecto: string | null } | null) => {
+      .then((d: { configurado: boolean; proyecto: string | null; pendiente?: boolean } | null) => {
         if (!cancelado && d) setSupabase((s) => ({ ...s, ...d }));
       })
       .catch(() => {
@@ -1716,6 +1728,7 @@ function Sala({
                 supabase={supabase}
                 onConectarSupabase={conectarSupabase}
                 onDesconectarSupabase={desconectarSupabase}
+                versionVariables={versionVariables}
               />
             )}
             {/* Sin sala no hay link que compartir: copiaría la URL pelada. */}

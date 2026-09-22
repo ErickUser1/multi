@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { createWorkspace } from "../engine/workspace.js";
-import { guardarVariables, leerVariables } from "../engine/env.js";
+import { guardarVariables, leerVariables, modificarVariables } from "../engine/env.js";
 
 /**
  * Demo: las variables del proyecto de una sala (su `.env`).
@@ -81,6 +81,39 @@ async function main() {
   // proyecto se planten a preguntar, y que el primero en correr lo pise con el
   // suyo. Las dos cosas pasaron antes de mover las reglas a .git/info/exclude.
   check("no hay .gitignore en la raíz", !existsSync(join(ws.dir, ".gitignore")));
+
+  console.log("\n7. Dos que escriben a la vez no se borran entre sí");
+  // El caso real: alguien guarda una variable desde el panel justo cuando la
+  // conexión con Supabase escribe las suyas. Los dos leen lo que hay y escriben
+  // la lista entera.
+  const sumar = (nombre: string) => async (actuales: { nombre: string; valor: string }[]) => {
+    // Una pausa entre leer y escribir: es la ventana donde el otro se colaba.
+    await new Promise((r) => setTimeout(r, 30));
+    return [...actuales, { nombre, valor: "1" }];
+  };
+
+  // Así se perdía: leer por un lado y escribir por otro deja una ventana.
+  await guardarVariables(ws.dir, []);
+  const [a, b] = await Promise.all([leerVariables(ws.dir), leerVariables(ws.dir)]);
+  await Promise.all([
+    guardarVariables(ws.dir, [...a, { nombre: "DEL_PANEL", valor: "1" }]),
+    guardarVariables(ws.dir, [...b, { nombre: "DE_SUPABASE", valor: "1" }]),
+  ]);
+  const sinTurno = (await leerVariables(ws.dir)).map((v) => v.nombre);
+  check("leyendo y escribiendo por separado, una se pierde", sinTurno.length === 1, sinTurno.join(","));
+
+  // Con el turno del `.env`, las dos quedan.
+  await guardarVariables(ws.dir, []);
+  await Promise.all([
+    modificarVariables(ws.dir, sumar("DEL_PANEL")),
+    modificarVariables(ws.dir, sumar("DE_SUPABASE")),
+  ]);
+  const conTurno = (await leerVariables(ws.dir)).map((v) => v.nombre).sort();
+  check(
+    "con modificarVariables quedan las dos",
+    conTurno.join(",") === "DEL_PANEL,DE_SUPABASE",
+    conTurno.join(","),
+  );
 
   console.log(`\n${pass} pasaron, ${fail} fallaron\n`);
   process.exit(fail > 0 ? 1 : 0);

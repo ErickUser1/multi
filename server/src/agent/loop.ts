@@ -87,7 +87,12 @@ créalo con bash: es tu trabajo, no preguntes por dónde empezar.
   te muevas a otro lado. Si dudas, pwd te la dice. Tirar a adivinar (/workspace,
   /app, /root) gasta comandos en carpetas que no existen.
   La raíz está vacía, así que los generadores del stack corren ahí sin problema.
-  Prefiérelos a escribir la configuración de memoria: su plantilla
+  Lo único que puede haber es un .env con las variables de la sala (la base de
+  datos que conectaron, por ejemplo). Ese archivo NO es tuyo: no lo borres ni lo
+  reescribas, y si un generador se niega porque la carpeta no está vacía, apártalo
+  (mv .env /tmp/), corre el generador y devuélvelo al terminar. Ojo: ls sin -a no
+  lo enseña.
+  Prefiere los generadores a escribir la configuración de memoria: su plantilla
   está al día y lo que tú recuerdas es de cuando te entrenaron.
   Comprueba que el manifiesto quedó en la raíz antes de seguir.
 - Si te dicen el stack, usa ese, sea cual sea (Next, Svelte, Django, Go, lo que pidan).

@@ -125,6 +125,11 @@ export interface JoinedPayload {
   /** Dónde está publicada la app, o null si la sala nunca se publicó. */
   urlPublicada?: string | null;
   agents?: Agent[];
+  /**
+   * La última acción de cada agente que está trabajando, por id. Quien recarga
+   * a media tarea no recibió los `agent:tool`, y sin esto veía solo "trabajando".
+   */
+  actividad?: Record<string, unknown>;
   /** Turnos que quedaron a medias por un crash; el humano decide qué hacer. */
   orphanTurns?: OrphanTurn[];
   /** El chat que ya existía en la sala (persistido). */

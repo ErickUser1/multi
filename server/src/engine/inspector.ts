@@ -84,6 +84,18 @@ export const INSPECTOR_SCRIPT = String.raw`
   }
 
   // ── eventos de mouse ────────────────────────────────────────────────────
+  // El mouse encima del preview, para el cursor que ven los demás. Sin esto el
+  // iframe se quedaba con el movimiento y la Sala solo sabía del cursor cuando
+  // pasaba por la barra: justo encima de la app, que es donde importa, nadie
+  // veía a nadie. La Sala lo traduce a sus coordenadas.
+  var ultimoCursor = 0;
+  document.addEventListener('mousemove', function (e) {
+    var ahora = Date.now();
+    if (ahora - ultimoCursor < 40) return;
+    ultimoCursor = ahora;
+    send('cursor', { x: e.clientX, y: e.clientY });
+  }, true);
+
   document.addEventListener('mousemove', function (e) {
     if (!inspectMode) return;
     var el = e.target;

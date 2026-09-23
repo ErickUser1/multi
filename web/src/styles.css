@@ -1309,6 +1309,9 @@ img.av {
 .divisor:hover {
   background: var(--dim);
 }
+.escenario.moviendo-divisor iframe {
+  pointer-events: none;
+}
 
 /* Dos botones pegados dentro de un marco: se leen como un interruptor de una
    sola cosa, no como dos acciones sueltas. */
@@ -2967,4 +2970,52 @@ img.av {
   color: var(--dim);
   font-size: 12px;
   line-height: 1.5;
+}
+
+/* Lo que se escribió sin conexión: se ve, atenuado, hasta que sale. */
+.msg-en-cola {
+  opacity: 0.6;
+}
+.en-cola-nota {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--dim);
+}
+
+/* Qué hace el agente, encima de la app. Arriba y al centro, chico: se lee sin
+   tapar lo que está construyendo. */
+.preview-trabajando {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100% - 24px);
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(20, 20, 20, 0.88);
+  color: var(--texto);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  z-index: 3;
+}
+.preview-trabajando-punto {
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  animation: latido 1.2s ease-in-out infinite;
+}
+.preview-trabajando-quien {
+  font-weight: 600;
+}
+@keyframes latido {
+  50% {
+    opacity: 0.35;
+  }
 }

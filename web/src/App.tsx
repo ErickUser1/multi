@@ -213,7 +213,11 @@ export function App() {
         name={name}
         setName={setName}
         onEnter={() => {
-          localStorage.setItem("multi.nombre", name || "anónimo");
+          try {
+            localStorage.setItem("multi.nombre", name || "anónimo");
+          } catch {
+            // Sin storage se entra igual; solo se volverá a preguntar el nombre.
+          }
           // La sala se anota en el efecto de arriba, en cuanto `entered` es
           // cierto. Aquí solo se guarda el nombre y se entra.
           setEntered(true);
@@ -468,6 +472,35 @@ function Sala({
    * registra una sola vez y se quedaría con el valor de entonces.
    */
   const porMandar = useRef<{ text: string } | null>(null);
+  /**
+   * Si el server ya nos tiene en la sala, visto desde los handlers del socket.
+   *
+   * `unido` es estado y los handlers se registran una vez, así que se quedarían
+   * con el valor de entonces. Hace falta aquí para decidir si un mensaje sale
+   * ya o espera.
+   */
+  const unidoRef = useRef(false);
+  /**
+   * Lo que se mandó con la conexión caída.
+   *
+   * Socket.io guarda lo que se emite desconectado y lo manda al reconectar,
+   * pero ANTES que el `join`: el server lo recibía de un socket que todavía no
+   * estaba en ninguna sala y lo tiraba sin avisar. La caja ya se había vaciado,
+   * así que el mensaje simplemente desaparecía. Ahora espera aquí al `joined`.
+   */
+  const cola = useRef<Record<string, unknown>[]>([]);
+  /** Lo que está en la cola, para pintarlo en el chat como "enviando". */
+  const [enCola, setEnCola] = useState<string[]>([]);
+  /**
+   * Cuántas veces ha llegado el `joined`. Cero es "todavía no sabemos nada de
+   * esta sala"; más de cero y sin estar unido es una reconexión.
+   */
+  const [vecesUnido, setVecesUnido] = useState(0);
+  /**
+   * Al entrar ya había proyecto pero no preview. Si luego el arranque falla, es
+   * un fallo y no una sala vacía, aunque ningún agente estuviera trabajando.
+   */
+  const habiaProyecto = useRef(false);
   // Streaming POR AGENTE: varios pueden estar hablando a la vez.
   const [streaming, setStreaming] = useState<Record<string, string>>({});
   /**
@@ -508,6 +541,13 @@ function Sala({
     () => Object.fromEntries(agents.filter((a) => a.state !== "idle").map((a) => [a.id, true])),
     [agents],
   );
+  /** El agente cuyo trabajo se anuncia encima del preview: el primero que esté en algo. */
+  const agenteActivo = agents.find((a) => a.state !== "idle") ?? null;
+  /** Qué está haciendo, en palabras: su última acción, o su estado si aún no hay. */
+  const ultimaLineaDe = (a: Agent): string => {
+    const lineas = toolLines[a.id];
+    return lineas?.length ? fraseDeAccion(lineas[lineas.length - 1], t) : textoDeEstado(a, t, false);
+  };
 
   /**
    * Quiénes se pueden filtrar: los que están conectados MÁS los que hablaron.
@@ -579,10 +619,22 @@ function Sala({
    * ofrecía todo o nada. Se recuerda en este navegador, que es donde importa.
    */
   const [anchoChat, setAnchoChat] = useState<number>(() => {
-    const guardado = Number(localStorage.getItem("multi.ancho-chat"));
+    let guardado = 0;
+    try {
+      guardado = Number(localStorage.getItem("multi.ancho-chat"));
+    } catch {
+      // Con el storage bloqueado, leerlo lanza: la sala no puede caerse por eso.
+    }
     return guardado >= 280 && guardado <= 900 ? guardado : 460;
   });
-  const moviendoDivisor = useRef(false);
+  /**
+   * Se está arrastrando el divisor.
+   *
+   * Es estado y no ref porque mientras dura el iframe deja de recibir el mouse:
+   * si lo recibe, se queda con el movimiento y con el soltar, y la Sala nunca
+   * se entera de que ya soltaste. El divisor se quedaba pegado al cursor.
+   */
+  const [moviendoDivisor, setMoviendoDivisor] = useState(false);
   /**
    * Mi API key. Se lee del navegador al montar: se configura UNA vez y sirve en
    * todas las salas. null = todavía no hay (puedes entrar y platicar igual).
@@ -656,7 +708,10 @@ function Sala({
 
     // Se cayó la conexión. Socket.io reconecta solo, así que esto no arregla
     // nada: solo evita que la sala se vea normal mientras ya no llega nada.
-    socket.on("disconnect", () => setUnido(false));
+    socket.on("disconnect", () => {
+      setUnido(false);
+      unidoRef.current = false;
+    });
 
     // Le habló al vacío. La pista llega solo a quien escribió y no se guarda.
     socket.on("pista:mencion", () => setPistaMencion(true));
@@ -670,6 +725,8 @@ function Sala({
 
     socket.on("joined", (p: JoinedPayload) => {
       setUnido(true);
+      unidoRef.current = true;
+      setVecesUnido((n) => n + 1);
       setMembers(p.members);
       setNombre(p.nombre ?? null);
       setModo(p.modo ?? "multi");
@@ -678,6 +735,28 @@ function Sala({
       setUrlPublicada(p.urlPublicada ?? null);
       if (p.previewUrl) setPreviewReady(true);
       if (p.agents) setAgents(p.agents);
+      // Lo que se pintó en vivo antes de este `joined` puede haber caducado: en
+      // una reconexión, el agente pudo terminar mientras no escuchábamos, y su
+      // burbuja se quedaba colgada para siempre (su mensaje final sí llega, en
+      // `messages`). Se deja solo lo de quien sigue trabajando, y a quien no
+      // tenía nada pintado (acabas de recargar) se le pone su última acción.
+      const trabajandoAhora = new Set((p.agents ?? []).filter((a) => a.state !== "idle").map((a) => a.id));
+      const soloActivos = <T,>(prev: Record<string, T>) =>
+        Object.fromEntries(Object.entries(prev).filter(([id]) => trabajandoAhora.has(id)));
+      setStreaming(soloActivos);
+      setToolsAbiertas(soloActivos);
+      setToolLines((prev) => {
+        const n = soloActivos(prev);
+        for (const [id, accion] of Object.entries(p.actividad ?? {})) {
+          if (trabajandoAhora.has(id) && !n[id]?.length) n[id] = [accion as AccionAgente];
+        }
+        return n;
+      });
+      // Cursores y selecciones son de sockets que quizá ya no existen: quien se
+      // fue durante el corte no mandó su `cursor:gone` a nadie. Vuelven solos en
+      // cuanto cada quien mueva el mouse.
+      setCursors({});
+      setSelections({});
       if (p.orphanTurns?.length) setOrphans(p.orphanTurns);
       // El chat que ya existía en la sala (sobrevivió al reinicio).
       if (p.messages?.length) setMessages(p.messages);
@@ -688,9 +767,15 @@ function Sala({
       // el `preview:ready` ya pasó y no vuelve: sin esta condición el spinner se
       // quedaba girando encima de un preview que sí existía.
       if (p.previewArrancando && !p.previewUrl) setArrancando("servidor");
-      // Y si ya hay proyecto pero todavía no preview, es que se está armando.
-      // Va del `joined` y no del evento porque quien recarga no lo recibió.
-      if (p.tieneProyecto && !p.previewUrl) setArmando(true);
+      // Hay proyecto pero no preview. Es "el agente está armando" SOLO si hay un
+      // agente trabajando: si no, lo que pasa es que la app se está levantando
+      // (una sala que despertó, un recargar a media subida), y decir que el
+      // agente construye hacía esperar a la gente algo que nadie estaba haciendo.
+      habiaProyecto.current = !!p.tieneProyecto && !p.previewUrl;
+      if (habiaProyecto.current) {
+        if (trabajandoAhora.size > 0) setArmando(true);
+        else setArrancando((a) => a ?? "servidor");
+      }
 
       // El mensaje con el que nació la sala. Aquí, y no en el `connect`: si la
       // sala estaba dormida, su `join` pasa por un await antes de quedar puesta
@@ -701,6 +786,9 @@ function Sala({
         socket.emit("chat", { text: primero.text });
         setDraft("");
       }
+      // Lo que se escribió con la conexión caída, en el orden en que se mandó.
+      for (const payload of cola.current.splice(0)) socket.emit("chat", payload);
+      setEnCola([]);
     });
     socket.on("presence", ({ members }: { members: Member[] }) => setMembers(members));
 
@@ -765,6 +853,7 @@ function Sala({
     });
     socket.on("deploy:fallo", () => setPublicando(null));
     socket.on("preview:ready", () => {
+      habiaProyecto.current = false;
       setPreviewReady(true);
       setArrancando(null);
       // Ya hay algo que mirar: a partir de aquí lo que avisa es la barra.
@@ -794,11 +883,25 @@ function Sala({
     socket.on("preview:sin-arranque", () => {
       setArrancando(null);
       setArmando((estaba) => {
-        if (estaba) setFalloElArranque(true);
+        if (estaba || habiaProyecto.current) setFalloElArranque(true);
         return false;
       });
     });
-    socket.on("agents", ({ agents }: { agents: Agent[] }) => setAgents(agents));
+    socket.on("agents", ({ agents }: { agents: Agent[] }) => {
+      setAgents(agents);
+      // Quien quedó inactivo ya no está haciendo nada: su burbuja se quita aquí
+      // también, y no solo con su mensaje final. Al recargar a media tarea, el
+      // mensaje final puede llegar ANTES que el `joined` que pinta su última
+      // acción, y esa línea se quedaba colgada para siempre.
+      const activos = new Set(agents.filter((a) => a.state !== "idle").map((a) => a.id));
+      const soloActivos = <T,>(prev: Record<string, T>) => {
+        const n = Object.fromEntries(Object.entries(prev).filter(([id]) => activos.has(id)));
+        return Object.keys(n).length === Object.keys(prev).length ? prev : n;
+      };
+      setStreaming(soloActivos);
+      setToolLines(soloActivos);
+      setToolsAbiertas(soloActivos);
+    });
     // Hay un punto nuevo en la línea de tiempo (commit, revert o bookmark).
     socket.on("history:new", () => setHistVersion((v) => v + 1));
     socket.on("history:changed", () => setHistVersion((v) => v + 1));
@@ -903,6 +1006,15 @@ function Sala({
         const el = m.data as SelectedElement;
         setMySelection(el);
         socketRef.current?.emit("select", el);
+      } else if (m.type === "cursor") {
+        // Viene en coordenadas del iframe: se pasan a las del escenario, que es
+        // contra lo que se dibujan los cursores de los demás. El iframe puede
+        // estar angostado y centrado (vista de celular), así que se mide.
+        const marco = iframeRef.current?.getBoundingClientRect();
+        const esc = escenarioRef.current?.getBoundingClientRect();
+        if (!marco || !esc) return;
+        const { x, y } = m.data as { x: number; y: number };
+        socketRef.current?.emit("cursor", { x: marco.left - esc.left + x, y: marco.top - esc.top + y });
       } else if (m.type === "element:gone") {
         // El elemento que tenía seleccionado desapareció (HMR) — cuidado edge case.
         setMySelection(null);
@@ -1052,7 +1164,7 @@ function Sala({
     }
 
     // Anclar MI selección local al mensaje (cuidado 2/3/4).
-    socketRef.current?.emit("chat", {
+    const payload = {
       text,
       anchor: mySelection,
       // Solo los que ya subieron. `send` no llega aquí si falta alguno, pero
@@ -1062,7 +1174,14 @@ function Sala({
             .filter((p) => p.id)
             .map((p) => ({ id: p.id, nombre: p.nombre, mediaType: p.mediaType }))
         : undefined,
-    });
+    };
+    if (unidoRef.current) {
+      socketRef.current?.emit("chat", payload);
+    } else {
+      // Sin conexión, o reconectando: espera al `joined` (ver `cola`).
+      cola.current.push(payload);
+      setEnCola((prev) => [...prev, text]);
+    }
     setDraft("");
     setPistaMencion(false);
     setPendientes([]);
@@ -1100,28 +1219,19 @@ function Sala({
    * ninguna señal de haber hecho algo y la gente le daba dos y tres veces. El
    * texto del botón ya existía en el i18n y no lo usaba nadie.
    */
-  // El arrastre del divisor. Los listeners van en window y no en el divisor
-  // porque el cursor se sale de él en cuanto te mueves rápido.
+  // El arrastre del divisor: ver los handlers de puntero en el propio divisor.
+  // Mientras dura, el cursor y la selección se fijan en el body: el cursor se
+  // sale del divisor en cuanto te mueves rápido, y sin esto parpadea y se
+  // selecciona texto de la página.
   useEffect(() => {
-    const mover = (e: MouseEvent) => {
-      if (!moviendoDivisor.current) return;
-      // Topes para que ninguno de los dos desaparezca del todo.
-      const ancho = Math.min(900, Math.max(280, e.clientX));
-      setAnchoChat(ancho);
-    };
-    const soltar = () => {
-      if (!moviendoDivisor.current) return;
-      moviendoDivisor.current = false;
+    if (!moviendoDivisor) return;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    return () => {
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
     };
-    window.addEventListener("mousemove", mover);
-    window.addEventListener("mouseup", soltar);
-    return () => {
-      window.removeEventListener("mousemove", mover);
-      window.removeEventListener("mouseup", soltar);
-    };
-  }, []);
+  }, [moviendoDivisor]);
 
   useEffect(() => {
     try {
@@ -1253,9 +1363,11 @@ function Sala({
     };
   }, [roomId, histVersion]);
 
-  // Si esta sala ya tiene base, y si este Multi siquiera ofrece conectarla.
+  // Si esta sala ya tiene base, y si este Multi siquiera ofrece conectarla. Se
+  // relee en cada `joined`: los avisos de Supabase que llegaron con la conexión
+  // caída no se repiten, y el panel se quedaba en "levantando" para siempre.
   useEffect(() => {
-    if (!roomId) return;
+    if (!roomId || vecesUnido === 0) return;
     let cancelado = false;
     fetch(`${SERVER_URL}/rooms/${roomId}/supabase`)
       .then((r) => (r.ok ? r.json() : null))
@@ -1269,7 +1381,7 @@ function Sala({
     return () => {
       cancelado = true;
     };
-  }, [roomId]);
+  }, [roomId, vecesUnido]);
 
   return (
     // `ver-*` es lo que el CSS usa en móvil para decidir qué se muestra. En
@@ -1280,7 +1392,10 @@ function Sala({
         {/* Con mensajes ya en pantalla, el chat se ve normal aunque no llegue
             nada. Esta barra es lo único que distingue "nadie ha escrito" de
             "se cayó el wifi". */}
-        {esperaLarga && messages.length > 0 && (
+        {/* También con el chat vacío si ya habíamos entrado: sin mensajes no
+            había ningún aviso de que se cayó, y la sala se veía normal mientras
+            nada llegaba. */}
+        {esperaLarga && (messages.length > 0 || vecesUnido > 0) && (
           <div className="chat-desconectado">{t.reconectando}</div>
         )}
         <div className="sala-cab">
@@ -1377,7 +1492,7 @@ function Sala({
           {/* Solo mientras no sabemos qué hay: en cuanto llega el `joined`, un
               chat vacío SÍ significa que nadie ha hablado. Y si ya hay mensajes
               pintados (una reconexión), taparlos sería peor que el vacío. */}
-          {esperaLarga && messages.length === 0 && (
+          {esperaLarga && messages.length === 0 && vecesUnido === 0 && (
             <div className="chat-cargando">
               <div className="preview-barra" aria-hidden="true" />
               <p>{t.cargandoSala}</p>
@@ -1393,6 +1508,16 @@ function Sala({
             // completo, dos mensajes que quedan contiguos tras filtrar se
             // pintarían como no-seguidos y repetirían avatar y nombre.
             <ChatRow key={i} msg={m} seguido={esSeguido(mensajesVisibles, i)} roomId={roomId!} />
+          ))}
+          {/* Lo que se mandó con la conexión caída: sale en cuanto vuelva. Se
+              pinta para que no parezca que se perdió, que es lo que pasaba. */}
+          {enCola.map((texto, i) => (
+            <div className="msg msg-en-cola" key={`cola-${i}`}>
+              <div className="msg-cuerpo">
+                <div className="burbuja">{texto}</div>
+                <div className="en-cola-nota">{t.enviandoAlReconectar}</div>
+              </div>
+            </div>
           ))}
           {/* Un bloque de streaming POR AGENTE: varios pueden hablar a la vez */}
           {/* Los que trabajan entran aunque no hayan emitido NADA todavía.
@@ -1622,17 +1747,27 @@ function Sala({
         aria-orientation="vertical"
         aria-label={t.ajustarAncho}
         title={t.ajustarAncho}
-        onMouseDown={() => {
-          moviendoDivisor.current = true;
-          // En el body y no en el divisor: mientras arrastras el cursor se sale
-          // de él, y sin esto parpadea y se selecciona texto de la página.
-          document.body.style.cursor = "col-resize";
-          document.body.style.userSelect = "none";
+        // Con captura del puntero: los eventos siguen llegando al divisor
+        // aunque el mouse pase encima del preview o salga de la ventana, y
+        // soltar donde sea termina el arrastre. Con mousemove/mouseup en window
+        // el iframe se quedaba con ellos.
+        onPointerDown={(e) => {
+          e.currentTarget.setPointerCapture(e.pointerId);
+          setMoviendoDivisor(true);
         }}
+        onPointerMove={(e) => {
+          if (!moviendoDivisor) return;
+          // Topes para que ninguno de los dos desaparezca del todo.
+          setAnchoChat(Math.min(900, Math.max(280, e.clientX)));
+        }}
+        onPointerUp={() => setMoviendoDivisor(false)}
+        onLostPointerCapture={() => setMoviendoDivisor(false)}
       />
 
       {/* Escenario derecha */}
-      <section className="escenario" ref={escenarioRef}>
+      {/* Mientras se arrastra el divisor el iframe no recibe el mouse: si lo
+          recibe se queda con él, y el arrastre se atora al pasar encima. */}
+      <section className={`escenario${moviendoDivisor ? " moviendo-divisor" : ""}`} ref={escenarioRef}>
         <div className="barra-sup">
 
           {/* Qué se está mirando del proyecto. Dos botones pegados y no dos
@@ -1832,6 +1967,17 @@ function Sala({
                     ve en blanco. La barra es lo único que distingue "cargando"
                     de "se rompió". */}
                 {cargandoFrame && <div className="preview-barra" aria-hidden="true" />}
+                {/* Con la app ya a la vista, era lo único que no decía nada
+                    mientras el agente trabajaba: no había forma de saber si tu
+                    pedido se estaba haciendo. Lo pidió alguien que se fue a otra
+                    sala creyendo que esta se había trabado. */}
+                {agenteActivo && (
+                  <div className="preview-trabajando" role="status">
+                    <span className="preview-trabajando-punto" style={{ background: agenteActivo.color }} />
+                    <span className="preview-trabajando-quien">{agenteActivo.name}</span>
+                    <span>{ultimaLineaDe(agenteActivo)}</span>
+                  </div>
+                )}
                 <iframe
                   ref={iframeRef}
                   className="preview-frame"
@@ -1898,6 +2044,11 @@ function Sala({
                   <div className="preview-spinner" aria-hidden="true" />
                   <p className="preview-titulo">{t.cargandoSala}</p>
                 </>
+              ) : vecesUnido === 0 ? (
+                // Los primeros 600 ms, antes del aviso de carga: nada. Aquí iba
+                // "¿qué quieres construir?", y con internet lento se veía medio
+                // segundo en una sala que sí tenía app.
+                null
               ) : (
                 <>
                   {/* El mismo texto que sin sala: es el mismo momento y la

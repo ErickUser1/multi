@@ -1514,7 +1514,7 @@ function Sala({
           {enCola.map((texto, i) => (
             <div className="msg msg-en-cola" key={`cola-${i}`}>
               <div className="msg-cuerpo">
-                <div className="burbuja">{texto}</div>
+                <div className="burbuja burbuja-humano">{texto}</div>
                 <div className="en-cola-nota">{t.enviandoAlReconectar}</div>
               </div>
             </div>
@@ -2249,11 +2249,27 @@ function ChatRow({
     </div>
   ) : null;
 
+  /**
+   * Las personas hablan en burbuja con el contorno de su color, y los agentes
+   * no: a lo ancho, como un documento. Así se sabe de un vistazo quién es quién
+   * (Pedro es el verde) y qué es de una persona y qué de un agente, sin leer
+   * nombres. El nombre se queda igual: el color ayuda, pero no puede ser la
+   * única pista.
+   */
+  const burbuja = (texto: string) =>
+    msg.role === "human" ? (
+      <div className="burbuja burbuja-humano" style={{ borderColor: msg.color }}>
+        {texto}
+      </div>
+    ) : (
+      <div className={msg.role === "system" ? "system-text" : "burbuja"}>{texto}</div>
+    );
+
   // Continuación: solo el texto, alineado bajo el mensaje anterior.
   if (seguido) {
     return (
       <div className="msg-seguido">
-        {msg.text && <div className="burbuja">{msg.text}</div>}
+        {msg.text && burbuja(msg.text)}
         {adjuntos}
       </div>
     );
@@ -2280,9 +2296,7 @@ function ChatRow({
           </div>
         )}
         {msg.anchoredTo && <div className="anchor-note">sobre: {msg.anchoredTo}</div>}
-        {msg.text && (
-          <div className={msg.role === "system" ? "system-text" : "burbuja"}>{msg.text}</div>
-        )}
+        {msg.text && burbuja(msg.text)}
         {adjuntos}
       </div>
     </div>

@@ -253,6 +253,11 @@ export interface Proyecto {
   region?: string;
 }
 
+/** Los proyectos que la cuenta autorizada puede ver, de todas sus organizaciones. */
+export async function proyectos(acceso: string): Promise<Proyecto[]> {
+  return pedir<Proyecto[]>(acceso, "/v1/projects");
+}
+
 /**
  * Crea un proyecto y devuelve su referencia.
  *

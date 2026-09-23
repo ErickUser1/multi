@@ -2309,6 +2309,7 @@ interface AccionAgente {
     | "instalar"
     | "compilar"
     | "git"
+    | "historial"
     | "conexion"
     | "mover"
     | "revisar"
@@ -2343,6 +2344,8 @@ function fraseDeAccion(a: AccionAgente, t: Textos): string {
       return t.actCompilar;
     case "git":
       return t.actGit;
+    case "historial":
+      return t.actHistorial;
     case "conexion":
       return t.actConexion;
     case "mover":

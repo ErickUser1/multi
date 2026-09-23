@@ -37,6 +37,7 @@
     "uso": "npm run uso -w server --",
     "demo:variables": "npm run demo:variables -w server",
     "demo:politicas": "npm run demo:politicas -w server",
+    "demo:actividad": "npm run demo:actividad -w server",
     "demo:publicar": "npm run demo:publicar -w server",
     "demo:cuentas": "npm run demo:cuentas -w server",
     "demo:cripto": "npm run demo:cripto -w server",

@@ -23,7 +23,7 @@ import { Historial } from "./Historial.js";
 import { loadStoredCredencial } from "./KeyPanel.js";
 import { EnvPanel, type EstadoSupabase } from "./EnvPanel.js";
 import { PublicarPanel } from "./PublicarPanel.js";
-import { useTextos } from "./i18n.js";
+import { useTextos, type Textos } from "./i18n.js";
 import { MenuSalas } from "./MenuSalas.js";
 import { recordarSala, olvidarSala, recordarNombre, guardarSalas, siguienteLlave } from "./historial-salas.js";
 import { CuentaPanel } from "./CuentaPanel.js";
@@ -476,7 +476,7 @@ function Sala({
    * saber por dónde iba es justo lo que hace falta, y esa información no está en
    * ningún otro lado.
    */
-  const [toolLines, setToolLines] = useState<Record<string, string[]>>({});
+  const [toolLines, setToolLines] = useState<Record<string, AccionAgente[]>>({});
   /** Agentes cuyo detalle de tools está expandido (click en la línea). */
   const [toolsAbiertas, setToolsAbiertas] = useState<Record<string, boolean>>({});
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -828,12 +828,17 @@ function Sala({
     socket.on("agent:delta", ({ agentId, text }: { agentId: string; text: string }) =>
       setStreaming((p) => ({ ...p, [agentId]: (p[agentId] ?? "") + text })),
     );
-    socket.on("agent:tool", ({ agentId, summary }: { agentId: string; summary: string }) =>
-      setToolLines((p) => {
-        const previas = p[agentId] ?? [];
-        // Tope: un turno largo no debe crecer sin fin en memoria.
-        return { ...p, [agentId]: [...previas, summary].slice(-40) };
-      }),
+    socket.on(
+      "agent:tool",
+      ({ agentId, accion, summary }: { agentId: string; accion?: AccionAgente; summary: string }) =>
+        setToolLines((p) => {
+          const previas = p[agentId] ?? [];
+          // Un server anterior a `accion` solo manda el resumen crudo: se enseña
+          // tal cual en vez de dejar la línea vacía.
+          const nueva = accion ?? { tipo: "otra" as const, detalle: summary };
+          // Tope: un turno largo no debe crecer sin fin en memoria.
+          return { ...p, [agentId]: [...previas, nueva].slice(-40) };
+        }),
     );
 
     // Cursores de otros.
@@ -2134,6 +2139,75 @@ function ChatRow({
 }
 
 /**
+ * Una acción del agente, como la manda el server (`engine/actividad.ts`).
+ *
+ * Viene el QUÉ y no la frase para que la frase salga en el idioma de quien
+ * mira. `detalle` es lo crudo (el comando, la ruta): va al `title` de la línea,
+ * a la vista de quien pasa el mouse y no de quien solo quiere saber qué pasa.
+ */
+interface AccionAgente {
+  tipo:
+    | "leer"
+    | "escribir"
+    | "editar"
+    | "buscarArchivos"
+    | "buscarTexto"
+    | "baseDeDatos"
+    | "adjunto"
+    | "crearProyecto"
+    | "instalar"
+    | "compilar"
+    | "git"
+    | "conexion"
+    | "mover"
+    | "revisar"
+    | "comando"
+    | "otra";
+  archivo?: string;
+  detalle?: string;
+}
+
+function fraseDeAccion(a: AccionAgente, t: Textos): string {
+  const archivo = a.archivo || a.detalle || "";
+  switch (a.tipo) {
+    case "leer":
+      return t.actLeer(archivo);
+    case "escribir":
+      return t.actEscribir(archivo);
+    case "editar":
+      return t.actEditar(archivo);
+    case "buscarArchivos":
+      return t.actBuscarArchivos;
+    case "buscarTexto":
+      return t.actBuscarTexto;
+    case "baseDeDatos":
+      return t.actBaseDeDatos;
+    case "adjunto":
+      return t.actAdjunto;
+    case "crearProyecto":
+      return t.actCrearProyecto;
+    case "instalar":
+      return t.actInstalar;
+    case "compilar":
+      return t.actCompilar;
+    case "git":
+      return t.actGit;
+    case "conexion":
+      return t.actConexion;
+    case "mover":
+      return t.actMover;
+    case "revisar":
+      return t.actRevisar;
+    case "comando":
+      return t.actComando;
+    default:
+      // Una tool que esta Sala todavía no sabe nombrar: mejor su nombre crudo
+      // que una línea vacía.
+      return a.detalle ?? t.actComando;
+  }
+}
+
+/**
  * Lo que el agente va haciendo. Por default solo la última línea — la UI se
  * mantiene limpia y no crece mientras trabaja.
  *
@@ -2141,15 +2215,15 @@ function ChatRow({
  * saber por dónde iba es justo lo que hace falta, y esa información no está en
  * ningún otro lado: sin esto la línea se sobrescribía y lo anterior se perdía.
  */
-function ToolTrace(props: { lineas: string[]; abierto: boolean; onToggle: () => void }) {
+function ToolTrace(props: { lineas: AccionAgente[]; abierto: boolean; onToggle: () => void }) {
   const { t } = useTextos();
   const ultima = props.lineas[props.lineas.length - 1];
   const previas = props.lineas.length - 1;
 
   if (!props.abierto) {
     return (
-      <div className="tool-line tool-line-click" onClick={props.onToggle}>
-        {ultima}
+      <div className="tool-line tool-line-click" onClick={props.onToggle} title={ultima.detalle}>
+        {fraseDeAccion(ultima, t)}
         {previas > 0 && <span className="tool-mas">+{previas}</span>}
       </div>
     );
@@ -2158,8 +2232,8 @@ function ToolTrace(props: { lineas: string[]; abierto: boolean; onToggle: () => 
   return (
     <div className="tool-trace" onClick={props.onToggle}>
       {props.lineas.map((l, i) => (
-        <div className="tool-line" key={i}>
-          {l}
+        <div className="tool-line" key={i} title={l.detalle}>
+          {fraseDeAccion(l, t)}
         </div>
       ))}
       <div className="tool-cerrar">{t.contraer}</div>

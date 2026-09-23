@@ -239,6 +239,23 @@ const TEXTOS = {
     tituloSelector: "selecciona un elemento del preview",
     tituloEstadoActual: "el estado actual",
 
+    // Lo que el agente va haciendo, en la línea de actividad del chat
+    actLeer: (archivo: string) => `Leyendo ${archivo}`,
+    actEscribir: (archivo: string) => `Escribiendo ${archivo}`,
+    actEditar: (archivo: string) => `Editando ${archivo}`,
+    actBuscarArchivos: "Buscando archivos",
+    actBuscarTexto: "Buscando en el código",
+    actBaseDeDatos: "Cambiando la base de datos",
+    actAdjunto: "Usando un archivo adjunto",
+    actCrearProyecto: "Creando el proyecto",
+    actInstalar: "Instalando dependencias",
+    actCompilar: "Revisando que la app compile",
+    actGit: "Guardando la versión",
+    actConexion: "Probando una conexión",
+    actMover: "Moviendo archivos",
+    actRevisar: "Revisando archivos",
+    actComando: "Ejecutando un comando",
+
     // Back visual
     leyendoProyecto: "leyendo el proyecto…",
     sinBack: "Todavía no hay nada del lado del servidor.",
@@ -490,6 +507,23 @@ const TEXTOS = {
     tituloPreview: "app preview",
     tituloSelector: "select an element from the preview",
     tituloEstadoActual: "current state",
+
+    // What the agent is doing, in the chat's activity line
+    actLeer: (archivo: string) => `Reading ${archivo}`,
+    actEscribir: (archivo: string) => `Writing ${archivo}`,
+    actEditar: (archivo: string) => `Editing ${archivo}`,
+    actBuscarArchivos: "Looking for files",
+    actBuscarTexto: "Searching the code",
+    actBaseDeDatos: "Changing the database",
+    actAdjunto: "Using an attached file",
+    actCrearProyecto: "Creating the project",
+    actInstalar: "Installing dependencies",
+    actCompilar: "Checking that the app builds",
+    actGit: "Saving the version",
+    actConexion: "Testing a connection",
+    actMover: "Moving files",
+    actRevisar: "Looking through files",
+    actComando: "Running a command",
 
     // Back visual
     leyendoProyecto: "reading the project…",

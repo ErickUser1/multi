@@ -29,6 +29,7 @@
     "uso": "tsx --no-warnings src/demos/uso.ts",
     "demo:variables": "tsx src/demos/variables.ts",
     "demo:politicas": "tsx src/demos/politicas.ts",
+    "demo:actividad": "tsx src/demos/actividad.ts",
     "demo:publicar": "tsx src/demos/publicar.ts",
     "demo:cuentas": "tsx src/demos/cuentas.ts",
     "demo:cripto": "tsx src/demos/cripto.ts",

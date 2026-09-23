@@ -464,3 +464,35 @@ al agente. Si con eso se coordinan mejor, la regla vale la pena.
 Ataca el hueco documentado en `docs-write-pisa.md`: el CAS protege archivos de
 escrituras simultaneas, pero no evita que dos agentes trabajen sobre premisas
 incompatibles.
+
+---
+
+## Blender en la sala, en vivo en el preview
+
+Idea del 23 de septiembre de 2026, sin construir todavía. La pidió un usuario
+que llegó a hacer una tarea de Blender, no pudo, y se fue a probar otra cosa.
+
+**Lo que no encaja: un MCP de Blender.** Los que existen (`blender-mcp`) le
+mandan Python a un Blender abierto en la compu de quien lo usa, por un addon
+que escucha en `localhost`. El agente de Multi corre en el server y no llega a
+ese `localhost` sin un programa puente del lado del usuario; solo él podría
+"hospedar" el Blender, y el agente tampoco habla MCP.
+
+**Lo que sí encaja: Blender con ventana dentro de la sala, transmitido.**
+Blender corre en el contenedor sobre una pantalla virtual (`Xvfb`) y se ve en el
+navegador con noVNC. El preview ES esa ventana: toda la sala la ve y la puede
+girar. El agente lo maneja mandándole Python, que es lo mismo que hace el MCP
+por dentro, con un script por bash. noVNC puede ser el "dev server" de la sala
+(el único puerto que sale), y el proxy del preview ya pasa websockets.
+
+**Lo que falta averiguar antes de prometerlo:**
+1. Rendimiento: sin GPU, Blender dibuja por CPU; con 2 CPU y 2 GB puede ir lento.
+2. `Xvfb` se instala con `apt` y el agente no es root en la sala. Probar primero
+   que lo instale él sin root (desempacar los `.deb` en su HOME, o micromamba);
+   si sale frágil, agregar solo `Xvfb` a `docker/room.Dockerfile`. Blender mismo
+   (~300 MB, portátil) lo baja el agente solo cuando alguien lo pide.
+3. Que noVNC funcione a través del proxy del preview.
+
+**Plan B que seguro funciona:** Blender sin ventana (`blender --background
+--python`), renders a PNG y un visor 3D (three.js) del `.glb` exportado en el
+preview, con botón para descargar el `.blend`. No se modela a mano, se pide.

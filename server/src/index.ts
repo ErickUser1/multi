@@ -97,6 +97,7 @@ import {
   nuevaAutorizacion,
   nuevaPassword,
   organizaciones,
+  proyectos,
   ejecutarSql,
   refrescar as refrescarSupabase,
   urlDeAutorizacion as urlDeAutorizacionSupabase,
@@ -797,6 +798,7 @@ fastify.get<{ Params: { id: string } }>("/rooms/:id/supabase", async (req) => {
     configurado: credencialDeSupabase() !== null && hayLlave(),
     proyecto: conexion?.proyecto ?? null,
     url: conexion?.proyecto ? urlDelProyecto(conexion.proyecto) : null,
+    etapa: etapaSupabase.get(req.params.id) ?? null,
     // Tener proyecto no es lo mismo que tener las variables en el `.env`, que
     // es lo único que el agente ve. El panel decía "conectada" en cuanto el
     // proyecto existía, y si la preparación se cortaba después (el tope de
@@ -913,13 +915,28 @@ fastify.get<{ Querystring: { code?: string; state?: string; error?: string } }>(
  */
 const preparacionesDeSupabase = new KeyedMutex();
 
+/**
+ * Por dónde va la preparación de cada sala, para el `GET` del panel.
+ *
+ * Las etapas viajan por socket, y la vuelta de autorizar RECARGA la página: los
+ * primeros avisos llegaban antes de que la Sala se conectara, y el panel decía
+ * "Conectar Supabase" unos segundos como si no hubiera pasado nada. Con esto el
+ * panel sabe desde que carga que la base se está preparando.
+ */
+const etapaSupabase = new Map<string, string>();
+
 async function prepararProyecto(roomId: string): Promise<void> {
   // Serializado por sala: dos caminos llaman aquí (el callback al autorizar, y
   // el botón de conectar cuando retoma), y si coinciden los dos leen que no hay
   // proyecto y los dos lo crean. Supabase rechaza el segundo por nombre
   // repetido, así que el síntoma es un error confuso en vez de una carrera
   // evidente. Pasó la primera vez que se reconectó.
-  return preparacionesDeSupabase.run(roomId, () => prepararProyectoSerializado(roomId));
+  etapaSupabase.set(roomId, "creando");
+  try {
+    return await preparacionesDeSupabase.run(roomId, () => prepararProyectoSerializado(roomId));
+  } finally {
+    etapaSupabase.delete(roomId);
+  }
 }
 
 async function prepararProyectoSerializado(roomId: string): Promise<void> {
@@ -935,8 +952,10 @@ async function prepararProyectoSerializado(roomId: string): Promise<void> {
   const room = getRoom(roomId) ?? (await wakeRoom(roomId));
   if (!room) return;
 
-  const avisar = (etapa: string, extra: Record<string, unknown> = {}) =>
+  const avisar = (etapa: string, extra: Record<string, unknown> = {}) => {
+    etapaSupabase.set(roomId, etapa);
     io.to(roomId).emit("supabase:etapa", { etapa, ...extra });
+  };
 
   // Si el proyecto YA existe se retoma desde donde se quedó, en vez de crear
   // otro. Levantar una base tarda minutos y cualquier cosa puede cortar el
@@ -944,6 +963,27 @@ async function prepararProyectoSerializado(roomId: string): Promise<void> {
   // dejaría un proyecto huérfano en la cuenta de alguien por cada intento.
   let ref = conexion.proyecto ?? null;
   let password = conexion.password ?? null;
+
+  // Sin proyecto guardado, puede que igual exista: la sala se desconectó (eso
+  // borra la conexión, no el proyecto, que es de la persona) y ahora vuelve a
+  // conectar. Crear otro rompía la sala: Supabase rechaza el nombre repetido,
+  // y si no lo rechazara la app quedaría apuntando a una base vacía, sin sus
+  // tablas ni sus datos. Se adopta el que ya lleva el nombre de esta sala.
+  if (!ref) {
+    const existente = (await proyectos(acceso)).find((p) => p.name === `multi-${roomId}`);
+    if (existente) {
+      if (existente.status === "INACTIVE") {
+        throw new FalloDeSupabase(
+          "el proyecto de esta sala está pausado en Supabase: reactívalo desde su panel y vuelve a conectar",
+        );
+      }
+      ref = existente.ref ?? existente.id;
+      console.log(`[supabase] ${roomId} ya tenía el proyecto ${ref}: se adopta en vez de crear otro`);
+      // La contraseña no se recupera: Supabase no la devuelve nunca. La app no
+      // la necesita; solo quien quiera entrar a la base por fuera.
+      await (await getStorage()).guardarConexionSupabase({ ...conexion, proyecto: ref, password: null });
+    }
+  }
 
   if (!ref) {
     avisar("creando");

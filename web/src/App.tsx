@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback, type CSSProperties } from "react";
 import type { Socket } from "socket.io-client";
 import {
   connectSocket,
@@ -2258,7 +2258,7 @@ function ChatRow({
    */
   const burbuja = (texto: string) =>
     msg.role === "human" ? (
-      <div className="burbuja burbuja-humano" style={{ borderColor: msg.color }}>
+      <div className="burbuja burbuja-humano" style={{ "--color-autor": msg.color } as CSSProperties}>
         {texto}
       </div>
     ) : (

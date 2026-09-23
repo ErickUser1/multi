@@ -3020,20 +3020,11 @@ img.av {
   }
 }
 
-/* La burbuja de una persona: contorno fino de su color, sin relleno de color.
-   Un fondo de color por persona sería una feria; el contorno colorea sin
-   gritar. Los agentes no llevan burbuja (ver ChatRow). */
+
+/* La línea de una persona: una barra delgada de su color junto a su texto.
+   Colorea quién habla sin burbujas (que se veían de prototipo) y sin rellenos
+   que cansan la vista. Los agentes no la llevan: ver ChatRow. */
 .burbuja-humano {
-  display: inline-block;
-  max-width: 100%;
-  padding: 6px 11px;
-  border: 1px solid var(--linea);
-  border-radius: 4px 12px 12px 12px;
-  background: rgba(255, 255, 255, 0.03);
-}
-/* Las seguidas ya no cuelgan del nombre: esquina redonda, y un respiro entre
-   una y otra para que se lean como burbujas separadas. */
-.msg-seguido .burbuja-humano {
-  border-radius: 12px;
-  margin-top: 2px;
+  border-left: 2px solid var(--color-autor, var(--linea));
+  padding: 1px 0 1px 10px;
 }

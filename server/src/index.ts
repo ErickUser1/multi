@@ -75,6 +75,7 @@ import { leerVariables, modificarVariables, type Variable } from "./engine/env.j
 import { hayLlave } from "./cripto.js";
 import {
   anonKey,
+  asegurarLoginAnonimo,
   armarRls,
   consumirState as consumirStateSupabase,
   credencialDeSupabase,
@@ -967,6 +968,10 @@ async function prepararProyectoSerializado(roomId: string): Promise<void> {
 
   avisar("protegiendo");
   await armarRls(acceso, ref);
+  // Antes de escribir el .env, a propósito: el agente empieza a construir en
+  // cuanto ve las variables, y tiene que encontrar el login ya prendido para
+  // escribir políticas con auth.uid() desde la primera tabla.
+  await loginAnonimoDeLaSala(roomId, acceso, ref);
 
   const llave = await anonKey(acceso, ref);
 
@@ -990,6 +995,55 @@ async function prepararProyectoSerializado(roomId: string): Promise<void> {
   // y copiar. Multi la conserva cifrada, pero quien quiera entrar a su base por
   // fuera la necesita.
   io.to(roomId).emit("supabase:listo", { proyecto: ref, url: urlDelProyecto(ref), password });
+}
+
+/**
+ * Qué salas ya se revisaron en este proceso: las que tienen el login anónimo
+ * prendido y las que no se pudo por falta de permiso. Así el turno no le pega a
+ * la API de Supabase cada vez, y un 403 no se repite en el log en cada mensaje.
+ */
+const loginAnonimoRevisado = new Set<string>();
+
+/**
+ * Deja prendido el login anónimo de la base de la sala.
+ *
+ * Nunca lanza: si no se puede, la base sigue funcionando igual que antes, y el
+ * agente se entera cuando `signInAnonymously()` le conteste que está apagado.
+ * El caso esperado es el 403 de las salas que autorizaron antes de que la
+ * OAuth App tuviera el permiso Auth: ese permiso solo llega volviendo a
+ * autorizar, así que ahí se prende a mano desde el panel de Supabase.
+ */
+async function loginAnonimoDeLaSala(
+  roomId: string,
+  acceso?: string,
+  ref?: string,
+): Promise<void> {
+  if (loginAnonimoRevisado.has(roomId)) return;
+  try {
+    if (!ref) {
+      const conexion = await (await getStorage()).conexionSupabase(roomId);
+      if (!conexion?.proyecto) return; // sin base todavía: se revisa cuando la haya
+      ref = conexion.proyecto;
+    }
+    acceso ??= (await accesoVigente(roomId)) ?? undefined;
+    if (!acceso) return;
+
+    if (await asegurarLoginAnonimo(acceso, ref)) {
+      console.log(`[supabase] ${roomId} tiene login anónimo en ${ref}`);
+    }
+    loginAnonimoRevisado.add(roomId);
+  } catch (err) {
+    if (err instanceof FalloDeSupabase && err.status === 403) {
+      loginAnonimoRevisado.add(roomId);
+      console.warn(
+        `[supabase] ${roomId}: su autorización no incluye el permiso Auth, así que el login ` +
+          `anónimo de ${ref} hay que prenderlo a mano (Authentication > Sign In / Providers > Anonymous)`,
+      );
+      return;
+    }
+    // Cualquier otro fallo se reintenta en el siguiente turno.
+    console.error(`[supabase] no se pudo revisar el login anónimo de ${roomId}:`, err);
+  }
 }
 
 /** ¿Le faltan al `.env` de la sala las variables de su base? */
@@ -1088,6 +1142,8 @@ fastify.delete<{ Params: { id: string } }>("/rooms/:id/supabase", async (req) =>
   // es de la persona, y las variables se quedan en el .env porque la app las
   // sigue necesitando para funcionar.
   await (await getStorage()).borrarConexionSupabase(req.params.id);
+  // Si vuelve a conectar, puede ser otro proyecto: hay que revisarlo de nuevo.
+  loginAnonimoRevisado.delete(req.params.id);
   io.to(req.params.id).emit("supabase:desconectado", {});
   return { ok: true };
 });
@@ -1964,6 +2020,9 @@ async function runAgentTurn(
 
   try {
     await repararVariablesSupabase(room.id, room.workspace.dir);
+    // Con tope: es una llamada a la API de Supabase, y si esa API se cuelga el
+    // turno no tiene por qué colgarse con ella.
+    await Promise.race([loginAnonimoDeLaSala(room.id), new Promise((r) => setTimeout(r, 10_000))]);
     const result = await runAgent({
       provider,
       workspaceDir: room.workspace.dir,

@@ -2276,7 +2276,6 @@ function ChatRow({
             <span className="quien" style={{ color: msg.color }}>
               {msg.from}
             </span>
-            {msg.role === "agent" && <span className="tag-ai">agente</span>}
           </div>
         )}
         {msg.anchoredTo && <div className="anchor-note">sobre: {msg.anchoredTo}</div>}

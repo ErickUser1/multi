@@ -75,6 +75,7 @@ import { leerVariables, modificarVariables, type Variable } from "./engine/env.j
 import { hayLlave } from "./cripto.js";
 import {
   anonKey,
+  asegurarLoginAnonimo,
   armarRls,
   consumirState as consumirStateSupabase,
   credencialDeSupabase,

@@ -208,7 +208,15 @@ export async function refrescar(
 
 // ── La Management API ───────────────────────────────────────────────────────
 
-export class FalloDeSupabase extends Error {}
+export class FalloDeSupabase extends Error {
+  /** El código HTTP, si vino de una respuesta. 403 es un permiso que la autorización no incluye. */
+  constructor(
+    message: string,
+    readonly status?: number,
+  ) {
+    super(message);
+  }
+}
 
 async function pedir<T>(acceso: string, ruta: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API}${ruta}`, {
@@ -221,7 +229,7 @@ async function pedir<T>(acceso: string, ruta: string, init?: RequestInit): Promi
   });
   if (!res.ok) {
     const detalle = await res.text().catch(() => "");
-    throw new FalloDeSupabase(`${ruta} respondió ${res.status}: ${detalle.slice(0, 300)}`);
+    throw new FalloDeSupabase(`${ruta} respondió ${res.status}: ${detalle.slice(0, 300)}`, res.status);
   }
   return (await res.json()) as T;
 }
@@ -382,6 +390,33 @@ export async function armarRls(acceso: string, ref: string): Promise<void> {
       execute function public.multi_rls_automatico();
     `,
   );
+}
+
+/**
+ * Prende el login anónimo del proyecto, si no lo estaba.
+ *
+ * Sin una forma de saber quién es cada usuario, las políticas de RLS no tienen
+ * contra qué comparar (`auth.uid()`), y lo único que le queda al agente son
+ * políticas `using (true)`: RLS prendido y la base abierta igual. Pasó en una
+ * sala real, con ubicaciones de menores legibles con la llave pública.
+ *
+ * Anónimo porque es el único login que funciona sin configurar nada por fuera:
+ * el de correo necesita un SMTP propio (el de Supabase solo manda a su equipo) y
+ * el de SMS un proveedor de pago. Una cuenta anónima se puede volver permanente
+ * después agregándole correo o teléfono, sin perder su id.
+ *
+ * Necesita el permiso Auth de escritura en la OAuth App. Las autorizaciones
+ * anteriores a ese permiso no lo tienen, y Supabase contesta 403.
+ */
+export async function asegurarLoginAnonimo(acceso: string, ref: string): Promise<boolean> {
+  const ruta = `/v1/projects/${ref}/config/auth`;
+  const actual = await pedir<{ external_anonymous_users_enabled?: boolean }>(acceso, ruta);
+  if (actual.external_anonymous_users_enabled) return false;
+  await pedir(acceso, ruta, {
+    method: "PATCH",
+    body: JSON.stringify({ external_anonymous_users_enabled: true }),
+  });
+  return true;
 }
 
 /** La URL pública de la base de un proyecto. */

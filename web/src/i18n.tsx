@@ -18,7 +18,13 @@ const CLAVE = "multi.idioma";
 
 /** Arranca con el idioma del navegador y recuerda lo que elijas. */
 function idiomaInicial(): Idioma {
-  const guardado = localStorage.getItem(CLAVE);
+  let guardado: string | null = null;
+  try {
+    guardado = localStorage.getItem(CLAVE);
+  } catch {
+    // Con el storage bloqueado, leerlo lanza. Esto corre antes que todo lo
+    // demás: si lanzara aquí, la página entera se quedaría en blanco.
+  }
   if (guardado === "es" || guardado === "en") return guardado;
   return navigator.language.toLowerCase().startsWith("es") ? "es" : "en";
 }
@@ -255,6 +261,7 @@ const TEXTOS = {
     actMover: "Moviendo archivos",
     actRevisar: "Revisando archivos",
     actComando: "Ejecutando un comando",
+    enviandoAlReconectar: "Sin conexión: se envía en cuanto vuelva",
 
     // Back visual
     leyendoProyecto: "leyendo el proyecto…",
@@ -524,6 +531,7 @@ const TEXTOS = {
     actMover: "Moving files",
     actRevisar: "Looking through files",
     actComando: "Running a command",
+    enviandoAlReconectar: "Offline: it will be sent as soon as you're back",
 
     // Back visual
     leyendoProyecto: "reading the project…",
@@ -633,7 +641,11 @@ export function IdiomaProvider({ children }: { children: ReactNode }) {
   const [idioma] = useState<Idioma>(idiomaInicial);
 
   useEffect(() => {
-    localStorage.setItem(CLAVE, idioma);
+    try {
+      localStorage.setItem(CLAVE, idioma);
+    } catch {
+      // Se pierde la preferencia, no la página.
+    }
     document.documentElement.lang = idioma;
   }, [idioma]);
 

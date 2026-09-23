@@ -72,7 +72,17 @@ import {
 import { MAX_AGENTS_PER_ROOM, resumenDeOtros } from "./engine/agents.js";
 import { fileMutation } from "./engine/file-mutation.js";
 import { leerVariables, modificarVariables, type Variable } from "./engine/env.js";
-import { accionDeTool } from "./engine/actividad.js";
+import { accionDeTool, type Accion } from "./engine/actividad.js";
+
+/**
+ * Lo último que hizo cada agente que está trabajando, por sala.
+ *
+ * `agent:tool` es una noticia: quien recarga a media tarea no la recibió, y la
+ * Sala se quedaba en un "trabajando" genérico hasta la siguiente acción, que
+ * escribiendo un archivo grande pueden ser cuarenta segundos. Se manda en el
+ * `joined` para que quien entra vea en qué va, no solo que va.
+ */
+const ultimaAccion = new Map<string, Map<string, Accion>>();
 import { hayLlave } from "./cripto.js";
 import {
   anonKey,
@@ -1376,6 +1386,7 @@ io.on("connection", (socket) => {
       // de hace rato. Quien entra mañana tiene que poder abrirla igual.
       urlPublicada: room.urlPublicada ?? null,
       agents: room.agents.list(),
+      actividad: Object.fromEntries(ultimaAccion.get(room.id) ?? []),
       orphanTurns: room.orphanTurns ?? [],
       messages: history.map((m) => ({
         from: m.author,
@@ -2049,10 +2060,13 @@ async function runAgentTurn(
         onText: (delta) => io.to(room.id).emit("agent:delta", { agentId, text: delta }),
         onToolStart: ({ name, input }) => {
           room.agents.touch(agentId);
+          const accion = accionDeTool(name, input);
+          if (!ultimaAccion.has(room.id)) ultimaAccion.set(room.id, new Map());
+          ultimaAccion.get(room.id)!.set(agentId, accion);
           io.to(room.id).emit("agent:tool", {
             agentId,
             name,
-            accion: accionDeTool(name, input),
+            accion,
             // Para una Sala que se abrió antes del deploy y todavía no conoce
             // `accion`: sin esto su línea de actividad se quedaría en blanco.
             summary: summarizeTool(name, input),
@@ -2147,6 +2161,7 @@ async function runAgentTurn(
     systemMsg(room, `${agent.name}: ${explicarFalla(err)}`, "#d95d63");
   } finally {
     room.agents.finish(agentId);
+    ultimaAccion.get(room.id)?.delete(agentId);
     io.to(room.id).emit("agents", { agents: room.agents.list() });
   }
 }

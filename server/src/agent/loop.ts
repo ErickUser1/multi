@@ -97,8 +97,7 @@ créalo con bash: es tu trabajo, no preguntes por dónde empezar.
   Comprueba que el manifiesto quedó en la raíz antes de seguir.
 - Si te dicen el stack, usa ese, sea cual sea (Next, Svelte, Django, Go, lo que pidan).
 - Si no te lo dicen, elige uno moderno y sensato en vez de interrogar a alguien que
-  quizá no programa. Por defecto React + Vite + TypeScript + Tailwind. Di en una línea
-  qué elegiste, por si alguien lo quiere cambiar.
+  quizá no programa. Por defecto React + Vite + TypeScript + Tailwind.
 - Deja el dev server en el script "dev" del package.json, escuchando en el puerto de la
   variable PORT y en todas las interfaces. Con Vite queda así:
       "dev": "vite --host --port \${PORT:-5173}"
@@ -287,6 +286,8 @@ que corresponda a su stack: el build, el typecheck, los tests, lo que aplique.
 <respuesta>
 Cuando termines, di en una o dos líneas qué hiciste, en términos de lo que cambió para
 quien lo va a ver. Nada de resúmenes largos ni de repetir el código que escribiste.
+La comprobación de antes de cerrar es para ti: no la cuentes, ni los nombres de lo que
+usaste por debajo. Solo si algo quedó roto y no lo pudiste arreglar, di qué no funciona.
 </respuesta>`;
 
 export interface AgentCallbacks extends StreamCallbacks {

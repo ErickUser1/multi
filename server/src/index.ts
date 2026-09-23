@@ -72,6 +72,7 @@ import {
 import { MAX_AGENTS_PER_ROOM, resumenDeOtros } from "./engine/agents.js";
 import { fileMutation } from "./engine/file-mutation.js";
 import { leerVariables, modificarVariables, type Variable } from "./engine/env.js";
+import { accionDeTool } from "./engine/actividad.js";
 import { hayLlave } from "./cripto.js";
 import {
   anonKey,
@@ -2051,6 +2052,9 @@ async function runAgentTurn(
           io.to(room.id).emit("agent:tool", {
             agentId,
             name,
+            accion: accionDeTool(name, input),
+            // Para una Sala que se abrió antes del deploy y todavía no conoce
+            // `accion`: sin esto su línea de actividad se quedaría en blanco.
             summary: summarizeTool(name, input),
           });
         },

@@ -23,6 +23,7 @@ export type TipoDeAccion =
   | "instalar"
   | "compilar"
   | "git"
+  | "historial"
   | "conexion"
   | "mover"
   | "revisar"
@@ -76,10 +77,13 @@ export function accionDeComando(comando: string): TipoDeAccion {
     .filter((p) => p && !/^cd\b/.test(p));
 
   const hay = (re: RegExp) => pedazos.some((p) => re.test(p));
-  if (hay(CREAR_PROYECTO)) return "crearProyecto";
+  if (hay(CREAR_PROYECTO) || hay(/^git\s+init\b/)) return "crearProyecto";
   if (hay(INSTALAR)) return "instalar";
   if (hay(COMPILAR)) return "compilar";
-  if (hay(/^git\b/)) return "git";
+  // "Guardando la versión" solo cuando de verdad guarda: con cualquier git
+  // salía también para un `git status`, que no guarda nada.
+  if (hay(/^git\s+(add|commit|stash|tag|merge|rebase|cherry-pick|revert|reset|checkout|switch|restore)\b/)) return "git";
+  if (hay(/^git\b/)) return "historial";
   if (hay(/^(curl|wget)\b/)) return "conexion";
   if (hay(/^(mv|cp|mkdir|rm|rmdir|touch|chmod|ln)\b/)) return "mover";
   if (hay(REVISAR)) return "revisar";

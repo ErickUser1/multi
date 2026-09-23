@@ -46,7 +46,10 @@ comando("npx -y sv create .", "crearProyecto");
 comando("yarn", "instalar");
 comando("pip install -r requirements.txt", "instalar");
 comando("npx tsc --noEmit", "compilar");
-comando("git log --oneline", "git");
+comando("git log --oneline", "historial");
+comando("git status && git diff", "historial");
+comando("git add -A && git commit -m 'cambio'", "git");
+comando("git init", "crearProyecto");
 comando("curl -s https://api.example.com/health", "conexion");
 comando("node scripts/seed.js", "comando");
 

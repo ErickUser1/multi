@@ -30,7 +30,8 @@ export const sqlTool: Tool = {
       "Toda tabla nueva nace con RLS activo, así que crea también sus políticas o la app " +
       "no va a poder leer nada. Nunca desactives RLS, y no escribas políticas using (true) " +
       "ni with check (true) para escribir: la base tiene login anónimo, así que cada fila " +
-      "puede compararse con auth.uid().",
+      "puede compararse con auth.uid(). Para ver qué tablas y columnas hay, o revisar filas, " +
+      "usa ver_base.",
     input_schema: {
       type: "object",
       properties: {
@@ -76,7 +77,18 @@ export const sqlTool: Tool = {
       );
     }
 
-    await ctx.ejecutarSql(sql);
+    try {
+      await ctx.ejecutarSql(sql);
+    } catch (err) {
+      // Lo que diga Postgres (una tabla que ya existe, una columna que no) es
+      // justo lo que el agente necesita para corregir. Como `error inesperado`
+      // parecía una falla de Multi, no de su SQL.
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new ToolError(
+        `la base rechazó el SQL y no se guardó migración: ${msg}. Revisa la estructura ` +
+          "actual con ver_base antes de reintentar.",
+      );
+    }
 
     // La migración se guarda DESPUÉS de que corrió, no antes: un archivo que
     // describe un cambio que falló es peor que no tenerlo, porque quien rehaga

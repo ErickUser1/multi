@@ -1196,7 +1196,22 @@ async function repararVariablesSupabase(roomId: string, workspaceDir: string): P
  * credencial nunca entra al contenedor, que es la misma regla que ya cumple la
  * API key del modelo.
  */
-async function sqlDeLaSala(roomId: string): Promise<((sql: string) => Promise<void>) | undefined> {
+async function sqlDeLaSala(roomId: string): Promise<((sql: string) => Promise<unknown>) | undefined> {
+  return conLaBaseDeLaSala(roomId, {});
+}
+
+/**
+ * Con qué LEE la base el agente de esta sala (tool ver_base), o undefined si no
+ * tiene. Igual que `sqlDeLaSala`, pero cada consulta va en solo lectura.
+ */
+async function lecturaDeLaSala(roomId: string): Promise<((sql: string) => Promise<unknown>) | undefined> {
+  return conLaBaseDeLaSala(roomId, { soloLectura: true });
+}
+
+async function conLaBaseDeLaSala(
+  roomId: string,
+  opciones: { soloLectura?: boolean },
+): Promise<((sql: string) => Promise<unknown>) | undefined> {
   const conexion = await (await getStorage()).conexionSupabase(roomId);
   if (!conexion?.proyecto) return undefined;
   const ref = conexion.proyecto;
@@ -1206,7 +1221,7 @@ async function sqlDeLaSala(roomId: string): Promise<((sql: string) => Promise<vo
     // el agente se tope con un 401 a mitad de su trabajo.
     const acceso = await accesoVigente(roomId);
     if (!acceso) throw new FalloDeSupabase("la sala perdió el acceso a su base, hay que reconectar");
-    await ejecutarSql(acceso, ref, sql);
+    return ejecutarSql(acceso, ref, sql, opciones);
   };
 }
 
@@ -2109,6 +2124,8 @@ async function runAgentTurn(
       // manda el SQL. Undefined cuando la sala no tiene base, y entonces la
       // tool lo dice en vez de fallar de un modo que el agente no entienda.
       ejecutarSql: await sqlDeLaSala(room.id),
+      // Y con qué verla: su estructura y sus filas, siempre en solo lectura.
+      leerBase: await lecturaDeLaSala(room.id),
       messages: history,
       // Qué están haciendo los demás, para que no repita su trabajo. Se calcula
       // AL EMPEZAR el turno: es una foto del momento, no una suscripción.

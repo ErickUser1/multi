@@ -59,6 +59,7 @@ check("leer ShareDialog.tsx", leer.tipo === "leer" && leer.archivo === "ShareDia
 check("y el detalle guarda la ruta completa", leer.detalle === "src/components/ShareDialog.tsx");
 const sql = accionDeTool("sql", { sql: "create table x ()", descripcion: "crea-tabla-x" });
 check("sql es cambiar la base", sql.tipo === "baseDeDatos");
+check("ver_base es mirarla", accionDeTool("ver_base", {}).tipo === "verBase");
 check("una tool desconocida no se pierde", accionDeTool("nueva_tool", {}).detalle === "nueva_tool");
 
 console.log(`\n${pass} pasaron, ${fail} fallaron\n`);

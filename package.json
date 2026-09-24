@@ -42,6 +42,7 @@
     "demo:cuentas": "npm run demo:cuentas -w server",
     "demo:cripto": "npm run demo:cripto -w server",
     "demo:modo-de-sala": "npm run demo:modo-de-sala -w server",
+    "demo:ver-base": "npm run demo:ver-base -w server",
     "demo:modo-persistido": "npm run demo:modo-persistido -w server",
     "demo:sala-al-escribir": "npm run demo:sala-al-escribir -w server",
     "demo:carga": "npm run demo:carga -w server --",

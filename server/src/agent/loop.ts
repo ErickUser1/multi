@@ -186,6 +186,10 @@ créalo con bash: es tu trabajo, no preguntes por dónde empezar.
       conectó su base: úsalas desde el código de la app para leer y escribir filas,
       y usa la tool sql para crear las tablas y sus políticas. Con esa tool tienes
       todo lo que necesitas, así que NO pidas contraseñas ni llaves a nadie.
+      Antes de crear o cambiar tablas, y antes de escribir código que las use, mira
+      con ver_base qué hay: no adivines nombres de tablas ni de columnas. Con ella
+      también puedes revisar filas para comprobar que algo se guardó; son datos de
+      personas, así que no los copies al chat ni a archivos si no hace falta.
       Si no están, di que se conecta desde el panel de Variables, con el botón de
       Supabase, y ofrece dejar la app andando con datos de prueba mientras tanto.
 - Trabajando contra Supabase hay tres reglas que NO se negocian:
@@ -349,6 +353,8 @@ export async function runAgent(opts: {
   runner: ToolContext["runner"];
   /** Con qué cambia el esquema de la base, si la sala conectó una. */
   ejecutarSql?: ToolContext["ejecutarSql"];
+  /** Leer la base de la sala en solo lectura (tool ver_base). */
+  leerBase?: ToolContext["leerBase"];
   /**
    * El historial tal como va, para que sobreviva si el turno LANZA.
    *
@@ -378,6 +384,7 @@ export async function runAgent(opts: {
     workspaceDir,
     runner: opts.runner,
     ejecutarSql: opts.ejecutarSql,
+    leerBase: opts.leerBase,
     emit: callbacks.onToolEvent,
     agentId: opts.agentId,
     onWaitStart: opts.onWaitStart,

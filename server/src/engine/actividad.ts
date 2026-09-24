@@ -18,6 +18,7 @@ export type TipoDeAccion =
   | "buscarArchivos"
   | "buscarTexto"
   | "baseDeDatos"
+  | "verBase"
   | "adjunto"
   | "crearProyecto"
   | "instalar"
@@ -53,6 +54,8 @@ export function accionDeTool(nombre: string, input: Record<string, unknown>): Ac
       return { tipo: "buscarTexto", detalle: texto("pattern") };
     case "sql":
       return { tipo: "baseDeDatos", detalle: texto("descripcion") };
+    case "ver_base":
+      return { tipo: "verBase", detalle: texto("consulta") || undefined };
     case "usar_adjunto":
       return { tipo: "adjunto", detalle: texto("destino") || undefined };
     case "bash":

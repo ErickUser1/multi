@@ -2294,6 +2294,7 @@ interface AccionAgente {
     | "buscarArchivos"
     | "buscarTexto"
     | "baseDeDatos"
+    | "verBase"
     | "adjunto"
     | "crearProyecto"
     | "instalar"
@@ -2324,6 +2325,8 @@ function fraseDeAccion(a: AccionAgente, t: Textos): string {
       return t.actBuscarTexto;
     case "baseDeDatos":
       return t.actBaseDeDatos;
+    case "verBase":
+      return t.actVerBase;
     case "adjunto":
       return t.actAdjunto;
     case "crearProyecto":

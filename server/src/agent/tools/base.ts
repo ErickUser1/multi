@@ -36,7 +36,13 @@ export interface ToolContext {
    * Y sobre todo: la credencial NUNCA entra al contenedor. El agente pide que se
    * corra el SQL, y quien lo corre es el server con el permiso de la sala.
    */
-  ejecutarSql?: (sql: string) => Promise<void>;
+  ejecutarSql?: (sql: string) => Promise<unknown>;
+  /**
+   * Lee la base de la sala en modo solo lectura y devuelve las filas, o nada si
+   * no hay base. Mismo trato que `ejecutarSql`: capacidad, no credencial. Quien
+   * garantiza que no escribe es Supabase (`read_only`), no la tool.
+   */
+  leerBase?: (sql: string) => Promise<unknown>;
 }
 
 export type ToolEvent =

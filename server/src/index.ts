@@ -1600,37 +1600,13 @@ io.on("connection", (socket) => {
       modo: room.modo,
       texto: text,
       primerAgente: room.agents.list()[0]?.name,
+      personas: room.members.size,
     });
 
-    if (intent.kind === "talk") {
-      /**
-       * Plática entre humanos: nadie despierta. Pero si estás SOLO, lo más
-       * probable es que creyeras estarle hablando al agente.
-       *
-       * Las cuatro personas que llegaron solas a Multi esta semana escribieron
-       * su primer mensaje sin mencionarlo, y las cuatro se toparon con silencio.
-       * Una pegó el enunciado de su tarea dos veces, en dos salas distintas,
-       * antes de dar con la arroba; otro escribió "hola" y no volvió. Es
-       * entendible: todo lo que ya conocen (ChatGPT, Lovable) contesta sin que
-       * lo llames por su nombre.
-       *
-       * La regla no cambia, porque es la que deja platicar sin gastar tokens y
-       * la que permite lanzar varios agentes. Lo que cambia es que equivocarse
-       * deje de ser mudo.
-       *
-       * Aquí abajo solo llegan ya las salas en "multi": en las de una persona
-       * el mensaje se convirtió en una orden más arriba, así que no hay
-       * silencio que explicar.
-       */
-      if (room.members.size === 1 && !salasConPista.has(room.id)) {
-        salasConPista.add(room.id);
-        // Solo a quien escribió, y sin guardarlo: que alguien no conozca la
-        // mención no es asunto de la sala, ni algo que deba quedar en su
-        // historial para quien entre mañana.
-        socket.emit("pista:mencion");
-      }
-      return;
-    }
+    // Plática entre humanos: nadie despierta. Solo llega aquí con dos o más
+    // personas en la sala; quien está sola nunca le habla a la nada (ver
+    // intentDeLaSala), que es lo que antes se remendaba con una pista.
+    if (intent.kind === "talk") return;
 
     // El turno corre con la key de QUIEN lo pide: cada quien paga lo suyo.
     const provider = providerFor(socket.id);
@@ -1995,15 +1971,6 @@ function systemMsg(room: Room, text: string, color = "#a9abd0"): void {
 }
 
 /** Cola de mensajes pendientes por agente (para el coalescing del coordinador). */
-/**
- * Salas donde ya se explicó cómo llamar al agente.
- *
- * En memoria a propósito: si el server reinicia y alguien vuelve a escribir sin
- * mención, verlo otra vez no hace daño. Guardarlo en la BD sería una tabla para
- * una pista de una línea.
- */
-const salasConPista = new Set<string>();
-
 const pendingByAgent = new Map<string, string[]>();
 
 /**

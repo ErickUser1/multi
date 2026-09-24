@@ -42,3 +42,4 @@ jobs:
       - run: npm run demo:back
       - run: npm run demo:politicas
       - run: npm run demo:actividad
+      - run: npm run demo:modo-de-sala

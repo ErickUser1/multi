@@ -558,15 +558,22 @@ export function parseIntent(text: string, hasAnchor: boolean): ChatIntent {
  * pedir un cambio es hablarle al agente que está. Sin esto, anclar con el
  * primero ocupado hacía nacer un segundo.
  *
+ * Una sala en "multi" con UNA sola persona se trata como "solo": no hay con
+ * quién platicar, así que un mensaje sin arroba solo puede ser para el agente.
+ * Pasó en producción: alguien llegó sola, tocó el botón de Multijugador (que
+ * se ve igual que un botón de acción) y su primer mensaje cayó en silencio. Se
+ * fue sin respuesta. El modo guardado no cambia: vuelve a mandar en cuanto
+ * entra alguien más.
+ *
  * Lo que NO se toca es un `@agente` escrito a mano: ahí la arroba sigue
  * queriendo decir lo de siempre, uno nuevo en paralelo. En este modo la mención
  * no desaparece, deja de ser obligatoria.
  */
 export function intentDeLaSala(
   intent: ChatIntent,
-  opts: { modo: ModoDeSala; texto: string; primerAgente?: string },
+  opts: { modo: ModoDeSala; texto: string; primerAgente?: string; personas?: number },
 ): ChatIntent {
-  if (opts.modo !== "solo") return intent;
+  if (opts.modo !== "solo" && (opts.personas ?? 2) > 1) return intent;
   // Ya va dirigido a alguien por su nombre: no hay nada que reinterpretar.
   if (intent.kind === "address") return intent;
   // La arroba explícita pide uno nuevo, y eso vale en los dos modos.

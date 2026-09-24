@@ -341,13 +341,67 @@ export async function anonKey(acceso: string, ref: string): Promise<string> {
   return anon.api_key;
 }
 
-/** Corre SQL en el proyecto. */
-export async function ejecutarSql(acceso: string, ref: string, query: string): Promise<void> {
-  await pedir(acceso, `/v1/projects/${ref}/database/query`, {
+/**
+ * Corre SQL en el proyecto y devuelve lo que respondió: las filas de la última
+ * sentencia, o una lista vacía si no regresa ninguna.
+ *
+ * Con `soloLectura`, Supabase corre la consulta en una transacción de solo
+ * lectura: un `delete` escondido en un CTE falla del lado de Postgres. Esa es
+ * la garantía de verdad; lo que revise quien llama es solo para avisar antes.
+ */
+export async function ejecutarSql(
+  acceso: string,
+  ref: string,
+  query: string,
+  opciones: { soloLectura?: boolean } = {},
+): Promise<unknown> {
+  return pedir<unknown>(acceso, `/v1/projects/${ref}/database/query`, {
     method: "POST",
-    body: JSON.stringify({ query }),
+    body: JSON.stringify(opciones.soloLectura ? { query, read_only: true } : { query }),
   });
 }
+
+/**
+ * La estructura de la base, en una sola consulta: una fila por tabla de
+ * `public`, con sus columnas, llaves y políticas ya agrupadas.
+ *
+ * Todo va calificado con su esquema y sale del catálogo, no de las tablas: no
+ * lee ni una fila de datos, así que es barata aunque la base sea grande.
+ */
+export const CONSULTA_ESQUEMA = `
+select
+  c.relname as tabla,
+  c.relrowsecurity as rls,
+  c.relforcerowsecurity as rls_forzado,
+  coalesce((
+    select json_agg(json_build_object(
+      'nombre', a.attname,
+      'tipo', pg_catalog.format_type(a.atttypid, a.atttypmod),
+      'nulo', not a.attnotnull,
+      'default', pg_catalog.pg_get_expr(d.adbin, d.adrelid)
+    ) order by a.attnum)
+    from pg_catalog.pg_attribute a
+    left join pg_catalog.pg_attrdef d on d.adrelid = a.attrelid and d.adnum = a.attnum
+    where a.attrelid = c.oid and a.attnum > 0 and not a.attisdropped
+  ), '[]'::json) as columnas,
+  coalesce((
+    select json_agg(pg_catalog.pg_get_constraintdef(k.oid) order by k.contype, k.conname)
+    from pg_catalog.pg_constraint k
+    where k.conrelid = c.oid and k.contype in ('p', 'f', 'u')
+  ), '[]'::json) as llaves,
+  coalesce((
+    select json_agg(json_build_object(
+      'nombre', p.policyname, 'para', p.cmd, 'roles', p.roles,
+      'using', p.qual, 'check', p.with_check
+    ) order by p.policyname)
+    from pg_catalog.pg_policies p
+    where p.schemaname = 'public' and p.tablename = c.relname
+  ), '[]'::json) as politicas
+from pg_catalog.pg_class c
+join pg_catalog.pg_namespace n on n.oid = c.relnamespace
+where n.nspname = 'public' and c.relkind in ('r', 'p')
+order by c.relname
+`;
 
 /**
  * Deja el proyecto de modo que TODA tabla nueva nazca con RLS activo.

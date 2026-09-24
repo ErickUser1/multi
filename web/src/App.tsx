@@ -372,12 +372,6 @@ function Sala({
   const [unido, setUnido] = useState(false);
 
   /**
-   * Escribió sin mencionar al agente y está solo: el server lo avisa y aquí se
-   * pinta hasta que mande otra cosa. Que reaccione es la señal de que ya lo vio.
-   */
-  const [pistaMencion, setPistaMencion] = useState(false);
-
-  /**
    * Ya pasó el tiempo suficiente como para que valga la pena decir "cargando".
    *
    * Con conexión buena el `joined` llega en milisegundos, y un indicador que
@@ -413,6 +407,12 @@ function Sala({
    * Con null, los textos que dependen del modo no se pintan hasta saberlo.
    */
   const [modo, setModo] = useState<ModoDeSala | null>(null);
+  /**
+   * Lo que de verdad pasa al escribir. Sola en la sala, escribir despierta al
+   * agente aunque el modo diga Multijugador (el server decide igual, ver
+   * intentDeLaSala), así que la caja no debe pedir la arroba.
+   */
+  const modoAlEscribir: ModoDeSala | null = modo && members.length <= 1 ? "solo" : modo;
   const [editandoNombre, setEditandoNombre] = useState(false);
   const [creandoSala, setCreandoSala] = useState(false);
   /** El botón de compartir acaba de copiar. Se apaga solo. */
@@ -712,9 +712,6 @@ function Sala({
       setUnido(false);
       unidoRef.current = false;
     });
-
-    // Le habló al vacío. La pista llega solo a quien escribió y no se guarda.
-    socket.on("pista:mencion", () => setPistaMencion(true));
 
     socket.on("connect", () => {
       socket.emit("join", { roomId, name });
@@ -1183,7 +1180,6 @@ function Sala({
       setEnCola((prev) => [...prev, text]);
     }
     setDraft("");
-    setPistaMencion(false);
     setPendientes([]);
     setMention(null);
     if (mySelection) {
@@ -1566,11 +1562,6 @@ function Sala({
             );
           })}
 
-          {/* Va aquí abajo y no en una barra arriba: la persona acaba de
-              escribir y está mirando el final del chat, que es justo donde no
-              pasó nada. Un aviso fuera de su campo de visión se lee igual que
-              el silencio que viene a explicar. */}
-          {pistaMencion && <div className="chat-pista">{t.pistaMencion}</div>}
         </div>
 
         <div
@@ -1668,8 +1659,8 @@ function Sala({
               placeholder={
                 subiendoAlgo
                   ? t.subiendoArchivo
-                  : roomId && modo
-                    ? t.hablaConLaSala(modo)
+                  : roomId && modoAlEscribir
+                    ? t.hablaConLaSala(modoAlEscribir)
                     : t.quieresConstruir
               }
               value={draft}
@@ -2057,7 +2048,7 @@ function Sala({
                   <p className="preview-titulo">{t.quieresConstruir}</p>
                   {/* Sin saber el modo no se dice nada: enseñar la arroba a
                       quien no la necesita es peor que esperar medio segundo. */}
-                  {modo && <Ejemplos modo={modo} />}
+                  {modoAlEscribir && <Ejemplos modo={modoAlEscribir} />}
                 </>
               )}
             </div>

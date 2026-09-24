@@ -33,8 +33,9 @@ function loQuePasa(
   modo: "solo" | "multi",
   primerAgente?: string,
   anclado = false,
+  personas = 2,
 ): ChatIntent {
-  return intentDeLaSala(parseIntent(texto, anclado), { modo, texto, primerAgente });
+  return intentDeLaSala(parseIntent(texto, anclado), { modo, texto, primerAgente, personas });
 }
 
 function main() {
@@ -118,6 +119,24 @@ function main() {
     check(
       "en multi sigue siendo orden, como siempre",
       loQuePasa("hazlo más grande", "multi", "agente-1", true).kind === "spawn",
+    );
+  }
+
+  console.log("\n6. Sola en multijugador, escribir igual despierta al agente");
+  {
+    // El caso real: llegó sola, tocó Multijugador y su primer mensaje ("you are
+    // goinh yo help me to build a flutter") se quedó sin respuesta. Se fue.
+    const meg = loQuePasa("you are goinh yo help me to build a flutter", "multi", undefined, false, 1);
+    check("su primer mensaje hace nacer al agente", meg.kind === "spawn", meg.kind);
+    const siguiente = loQuePasa("ponlo azul", "multi", "agente-1", false, 1);
+    check(
+      "y el siguiente le habla al mismo",
+      siguiente.kind === "address" && siguiente.agentName === "agente-1",
+      siguiente.kind,
+    );
+    check(
+      "con dos personas vuelve a ser plática",
+      loQuePasa("oye, ¿ya viste?", "multi", "agente-1", false, 2).kind === "talk",
     );
   }
 

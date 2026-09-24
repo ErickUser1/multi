@@ -80,8 +80,6 @@ const TEXTOS = {
       "Cuando esté lista aparece aquí. Mientras tanto pueden seguir pidiendo cosas en el chat.",
     cargandoSala: "Cargando la sala…",
     reconectando: "Sin conexión. Reconectando…",
-    pistaMencion:
-      "Escribe @ y selecciona agente para invocarlo. Si ya hay uno trabajando, selecciona @agente-1 para seguir con él. Puedes tener varios al mismo tiempo.",
     /* Lo que la sala vacía y la caja de escribir dicen cambia con el modo.
      *
      * En "solo" no se menciona la arroba: ahí escribir YA despierta al agente,
@@ -381,8 +379,6 @@ const TEXTOS = {
       "It shows up here when it is ready. Meanwhile you can keep asking for things in the chat.",
     cargandoSala: "Loading the room…",
     reconectando: "No connection. Reconnecting…",
-    pistaMencion:
-      "Type @ and pick agente to summon one. If one is already working, pick @agente-1 to keep going with it. You can have several at once.",
     hablaConLaSala: (m: "solo" | "multi"): string =>
       m === "solo" ? "type what you want to build" : "type @agente to ask for something",
     ejemplos: [

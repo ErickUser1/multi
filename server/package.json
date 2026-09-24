@@ -31,6 +31,7 @@
     "demo:politicas": "tsx src/demos/politicas.ts",
     "demo:actividad": "tsx src/demos/actividad.ts",
     "demo:ver-base": "tsx src/demos/ver-base.ts",
+    "demo:candados": "tsx src/demos/candados.ts",
     "demo:publicar": "tsx src/demos/publicar.ts",
     "demo:cuentas": "tsx src/demos/cuentas.ts",
     "demo:cripto": "tsx src/demos/cripto.ts",

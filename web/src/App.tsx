@@ -282,6 +282,40 @@ function NamePrompt(props: {
  * Rota en vez de listar los cinco: leer una lista es trabajo, y lo que hace
  * falta aquí es una idea, no un menú.
  */
+/** Un mensaje escrito sin conexión: lo que se pinta y lo que se va a mandar. */
+interface EnCola {
+  text: string;
+  payload: Record<string, unknown>;
+}
+
+/**
+ * Dónde sobrevive la cola a una recarga: en la pestaña, una por sala.
+ *
+ * Vivía solo en memoria. Escribir sin conexión y recargar antes de que volviera
+ * la borraba, y como la caja ya se había vaciado, el mensaje desaparecía sin
+ * rastro. `sessionStorage` y no `localStorage`: es de esta pestaña, que es la
+ * que lo escribió, y no reaparece mañana en otra.
+ */
+const claveDeCola = (roomId: string) => `multi.cola.${roomId}`;
+
+function leerCola(roomId: string): EnCola[] {
+  try {
+    const crudo = JSON.parse(sessionStorage.getItem(claveDeCola(roomId)) ?? "[]");
+    return Array.isArray(crudo) ? crudo.filter((m) => typeof m?.text === "string" && m.payload) : [];
+  } catch {
+    return [];
+  }
+}
+
+function guardarCola(roomId: string, items: EnCola[]): void {
+  try {
+    if (items.length) sessionStorage.setItem(claveDeCola(roomId), JSON.stringify(items));
+    else sessionStorage.removeItem(claveDeCola(roomId));
+  } catch {
+    // Sin storage se queda en memoria, como antes: no es motivo para no mandar.
+  }
+}
+
 function Ejemplos({ modo }: { modo: ModoDeSala }) {
   const { t } = useTextos();
   const [i, setI] = useState(0);
@@ -488,7 +522,7 @@ function Sala({
    * estaba en ninguna sala y lo tiraba sin avisar. La caja ya se había vaciado,
    * así que el mensaje simplemente desaparecía. Ahora espera aquí al `joined`.
    */
-  const cola = useRef<Record<string, unknown>[]>([]);
+  const cola = useRef<EnCola[]>([]);
   /** Lo que está en la cola, para pintarlo en el chat como "enviando". */
   const [enCola, setEnCola] = useState<string[]>([]);
   /**
@@ -703,6 +737,12 @@ function Sala({
     // segunda sala la pinta como si ya se supiera qué hay dentro.
     setUnido(false);
 
+    // La cola es de ESTA sala. Se recupera de la pestaña por si lo que se
+    // escribió sin conexión quedó ahí de antes de recargar; y lo que quedó en
+    // otra sala se queda allá, en vez de salir en esta.
+    cola.current = leerCola(roomId);
+    setEnCola(cola.current.map((m) => m.text));
+
     const socket = connectSocket();
     socketRef.current = socket;
 
@@ -784,7 +824,8 @@ function Sala({
         setDraft("");
       }
       // Lo que se escribió con la conexión caída, en el orden en que se mandó.
-      for (const payload of cola.current.splice(0)) socket.emit("chat", payload);
+      for (const { payload } of cola.current.splice(0)) socket.emit("chat", payload);
+      guardarCola(roomId, []);
       setEnCola([]);
     });
     socket.on("presence", ({ members }: { members: Member[] }) => setMembers(members));
@@ -1175,9 +1216,11 @@ function Sala({
     if (unidoRef.current) {
       socketRef.current?.emit("chat", payload);
     } else {
-      // Sin conexión, o reconectando: espera al `joined` (ver `cola`).
-      cola.current.push(payload);
-      setEnCola((prev) => [...prev, text]);
+      // Sin conexión, o reconectando: espera al `joined` (ver `cola`). Se
+      // guarda también en la pestaña: recargar sin conexión lo borraba.
+      cola.current.push({ text, payload });
+      if (roomId) guardarCola(roomId, cola.current);
+      setEnCola(cola.current.map((m) => m.text));
     }
     setDraft("");
     setPendientes([]);

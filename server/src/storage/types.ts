@@ -222,6 +222,8 @@ export interface Storage {
   conexionSupabase(roomId: string): Promise<ConexionSupabase | null>;
   guardarConexionSupabase(conexion: ConexionSupabase): Promise<void>;
   borrarConexionSupabase(roomId: string): Promise<void>;
+  /** Las salas que tienen una conexión guardada, para retomar las que quedaron a medias. */
+  salasConSupabase(): Promise<string[]>;
 
   close(): Promise<void>;
 }

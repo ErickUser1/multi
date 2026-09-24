@@ -73,6 +73,7 @@ import { MAX_AGENTS_PER_ROOM, resumenDeOtros } from "./engine/agents.js";
 import { fileMutation } from "./engine/file-mutation.js";
 import { leerVariables, modificarVariables, type Variable } from "./engine/env.js";
 import { accionDeTool, type Accion } from "./engine/actividad.js";
+import { WORKSPACES_ROOT } from "./engine/workspace.js";
 
 /**
  * Lo último que hizo cada agente que está trabajando, por sala.
@@ -963,6 +964,9 @@ async function prepararProyectoSerializado(roomId: string): Promise<void> {
   // dejaría un proyecto huérfano en la cuenta de alguien por cada intento.
   let ref = conexion.proyecto ?? null;
   let password = conexion.password ?? null;
+  // Si al terminar hay que avisarles a los agentes: solo cuando la base es nueva
+  // para la sala (se creó o se adoptó ahora), no cuando se reponen variables.
+  const baseNueva = !ref;
 
   // Sin proyecto guardado, puede que igual exista: la sala se desconectó (eso
   // borra la conexión, no el proyecto, que es de la persona) y ahora vuelve a
@@ -1040,6 +1044,7 @@ async function prepararProyectoSerializado(roomId: string): Promise<void> {
   // El camino feliz tampoco dejaba línea: tras "proyecto X creado" el log se
   // quedaba mudo, igual que si la preparación se hubiera colgado.
   console.log(`[supabase] ${roomId} lista: ${ref} con sus variables en el .env`);
+  if (baseNueva) baseRecienConectada.set(roomId, new Set());
 
   // La contraseña va en el aviso y NO se vuelve a mandar nunca: Supabase no la
   // devuelve por su API, así que esta es la única vez que alguien la puede ver
@@ -1094,6 +1099,54 @@ async function loginAnonimoDeLaSala(
     }
     // Cualquier otro fallo se reintenta en el siguiente turno.
     console.error(`[supabase] no se pudo revisar el login anónimo de ${roomId}:`, err);
+  }
+}
+
+/**
+ * Salas cuya base se acaba de conectar, con los agentes que ya se enteraron.
+ *
+ * Un agente que trabajó ANTES de la conexión decidió sin base: guardó en local,
+ * o dijo "conecta Supabase desde el panel". Nada le avisa que eso cambió, y
+ * como en su historial ya resolvió el tema, no vuelve a mirar el `.env`. Pasó en
+ * una sala real: la app quedó en modo local con la base ya conectada. Se le dice
+ * una vez, en su siguiente turno.
+ */
+const baseRecienConectada = new Map<string, Set<string>>();
+
+/** El aviso para este agente, o "" si no toca (ya lo recibió, o es nuevo y va a leer el `.env`). */
+function avisoDeBaseConectada(roomId: string, agentId: string, yaHabiaTrabajado: boolean): string {
+  const avisados = baseRecienConectada.get(roomId);
+  if (!avisados || avisados.has(agentId)) return "";
+  avisados.add(agentId);
+  if (!yaHabiaTrabajado) return "";
+  return (
+    "[Aviso de Multi] La sala acaba de conectar su base de Supabase: VITE_SUPABASE_URL y " +
+    "VITE_SUPABASE_ANON_KEY ya están en el .env y el login anónimo está prendido. Si antes " +
+    "dejaste la app guardando datos en local, o dijiste que faltaba conectar la base, eso " +
+    "cambió: cuando venga al caso de lo que te piden, pásala a Supabase.\n\n"
+  );
+}
+
+/**
+ * Al arrancar: las salas cuya preparación de Supabase quedó a medias.
+ *
+ * Crear la base tarda minutos, y un reinicio a la mitad (un deploy) la cortaba
+ * sin que nada la retomara: la sala se quedaba autorizada y sin proyecto, o con
+ * proyecto y sin variables, hasta que alguien volviera a darle al botón. Solo se
+ * despiertan esas salas, no todas.
+ */
+async function retomarPreparacionesSupabase(): Promise<void> {
+  if (!credencialDeSupabase() || !hayLlave()) return;
+  const storage = await getStorage();
+  for (const roomId of await storage.salasConSupabase()) {
+    const conexion = await storage.conexionSupabase(roomId);
+    if (!conexion) continue;
+    if (conexion.proyecto && !(await faltanVariablesSupabase(join(WORKSPACES_ROOT, roomId)))) continue;
+    console.log(`[supabase] ${roomId} quedó a medias antes del reinicio: se retoma`);
+    void prepararProyecto(roomId).catch((err) => {
+      console.error(`[supabase] no se pudo retomar ${roomId}:`, err);
+      io.to(roomId).emit("supabase:fallo", { error: String(err?.message ?? err) });
+    });
   }
 }
 
@@ -2092,7 +2145,8 @@ async function runAgentTurn(
       messages: history,
       // Qué están haciendo los demás, para que no repita su trabajo. Se calcula
       // AL EMPEZAR el turno: es una foto del momento, no una suscripción.
-      userMessage: conContextoDeOtros(room, agentId, task),
+      userMessage:
+        avisoDeBaseConectada(room.id, agentId, history.length > 0) + conContextoDeOtros(room, agentId, task),
       imagenes,
       signal,
       agentId,
@@ -2368,6 +2422,9 @@ try {
   // Las salas no se despiertan al arrancar: sería carísimo levantar N dev
   // servers. Cada una despierta cuando alguien entra (wakeRoom).
   const salas = await loadRoomIndex();
+  void retomarPreparacionesSupabase().catch((err) => {
+    console.error("[supabase] no se pudieron revisar las preparaciones pendientes:", err);
+  });
   // Las sesiones caducadas se barren aquí y no con un timer: un temporizador
   // vivo para siempre es un recurso más que cuidar, y esto puede esperar al
   // siguiente arranque sin que nadie lo note.

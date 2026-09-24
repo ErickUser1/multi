@@ -496,3 +496,32 @@ por dentro, con un script por bash. noVNC puede ser el "dev server" de la sala
 **Plan B que seguro funciona:** Blender sin ventana (`blender --background
 --python`), renders a PNG y un visor 3D (three.js) del `.glb` exportado en el
 preview, con botón para descargar el `.blend`. No se modela a mano, se pide.
+
+---
+
+## Un tutor con IA dentro de las apps que se publican
+
+Idea del 24 de septiembre de 2026, sin construir todavía. Salió de una maestra
+que le ve uso a Multi para enseñar a programar: una app de lecciones sale hoy
+sin problema, lo que no se puede es que la app misma le pregunte a una IA.
+
+**El problema:** la llave no puede ir en el código de la app. Lo que corre en el
+navegador lo ve cualquiera, y una variable `VITE_` queda dentro de lo publicado.
+Y la app publicada son archivos en Cloudflare Pages: no hay servidor donde
+esconderla.
+
+**El plan: Supabase Edge Functions.** La sala ya tiene su proyecto; la función
+vive ahí y la llave se guarda como secreto de ese proyecto, en la cuenta de
+quien conectó. Funciona igual en el preview y publicada (es la misma URL). Con
+el login anónimo que ya se prende solo, la función exige un usuario de la app
+y limita cuántas preguntas hace cada uno al día: sin ese límite, cualquiera
+usa la app para gastar la llave de quien la puso.
+
+**Lo que falta en Multi:** una tool para que el agente despliegue funciones
+(como `sql` para el esquema) y otra para guardar el secreto, sin que la llave
+entre nunca al contenedor. Permisos de la OAuth App: Edge Functions de
+escritura ya está; Secrets hay que subirlo de lectura a lectura y escritura.
+
+Descartado: funciones de Cloudflare Pages. La llave quedaría en la cuenta de
+quien corre Multi y no en la del usuario, y en el preview no corren igual que
+publicadas.

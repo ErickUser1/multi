@@ -481,6 +481,11 @@ export class SqliteStorage implements Storage {
    * Solo lo de aquí: el proyecto en Supabase sigue existiendo, porque es de la
    * persona. Desconectar en Multi no puede borrarle una base de datos.
    */
+  async salasConSupabase(): Promise<string[]> {
+    const rows = this.db.prepare(`SELECT room_id FROM supabase_salas`).all() as { room_id: string }[];
+    return rows.map((r) => r.room_id);
+  }
+
   async borrarConexionSupabase(roomId: string): Promise<void> {
     this.db.prepare(`DELETE FROM supabase_salas WHERE room_id = ?`).run(roomId);
   }

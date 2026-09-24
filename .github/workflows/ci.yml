@@ -44,3 +44,4 @@ jobs:
       - run: npm run demo:actividad
       - run: npm run demo:modo-de-sala
       - run: npm run demo:ver-base
+      - run: npm run demo:candados

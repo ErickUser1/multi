@@ -800,6 +800,9 @@ fastify.get<{ Params: { id: string } }>("/rooms/:id/supabase", async (req) => {
     proyecto: conexion?.proyecto ?? null,
     url: conexion?.proyecto ? urlDelProyecto(conexion.proyecto) : null,
     etapa: etapaSupabase.get(req.params.id) ?? null,
+    // Lo que salió mal al volver de autorizar. Va aquí y no solo por socket
+    // porque esa vuelta RECARGA la página: el aviso llegaría antes que la Sala.
+    error: errorSupabase.get(req.params.id) ?? null,
     // Tener proyecto no es lo mismo que tener las variables en el `.env`, que
     // es lo único que el agente ve. El panel decía "conectada" en cuanto el
     // proyecto existía, y si la preparación se cortaba después (el tope de
@@ -884,24 +887,24 @@ fastify.get<{ Querystring: { code?: string; state?: string; error?: string } }>(
     if (!tokens) return reply.code(502).send({ error: "Supabase no confirmó la autorización" });
     console.log(`[supabase] tokens recibidos, redirigiendo a ${aLaSala}`);
 
-    // Se guarda ANTES de crear el proyecto, a propósito: crear tarda minutos y
-    // si el server se cae en medio, la autorización no se pierde y se puede
-    // reintentar solo la parte que faltó.
-    await (await getStorage()).guardarConexionSupabase({
-      roomId: vuelo.roomId,
-      acceso: tokens.acceso,
-      refresco: tokens.refresco,
-      expiraEn: tokens.expiraEn,
-      conectadoEn: Date.now(),
-    });
-
-    // La persona se va de vuelta a su sala YA. Crear el proyecto sigue por su
-    // cuenta y la sala se entera por socket: tenerla mirando una pantalla de
-    // redirección durante tres minutos sería peor.
-    void prepararProyecto(vuelo.roomId).catch((err) => {
+    const fallo = (err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
       console.error(`[supabase] no se pudo preparar el proyecto de ${vuelo.roomId}:`, err);
-      io.to(vuelo.roomId).emit("supabase:fallo", { error: String(err?.message ?? err) });
-    });
+      io.to(vuelo.roomId).emit("supabase:fallo", { error: msg });
+    };
+    // Guardar va en la misma fila que la preparación de esta sala, para que una
+    // segunda autorización no se meta a media creación. Crear el proyecto sigue
+    // por su cuenta y la sala se entera por socket: tenerla mirando una pantalla
+    // de redirección durante minutos sería peor.
+    const guardado = preparacionesDeSupabase
+      .run(vuelo.roomId, () => guardarAutorizacion(vuelo.roomId, tokens))
+      .then((preparar) => {
+        if (preparar) void prepararProyecto(vuelo.roomId).catch(fallo);
+      }, fallo);
+    // Se espera a que quede guardado antes de volver, como antes: así el panel
+    // ya sabe al recargar que la base se está preparando (o por qué no). Con
+    // tope, porque si otra preparación de la sala va en curso, eso son minutos.
+    await Promise.race([guardado, new Promise((r) => setTimeout(r, 3000))]);
 
     return reply.redirect(aLaSala);
   },
@@ -925,6 +928,67 @@ const preparacionesDeSupabase = new KeyedMutex();
  * panel sabe desde que carga que la base se está preparando.
  */
 const etapaSupabase = new Map<string, string>();
+
+/**
+ * Lo que salió mal en la última vuelta de autorizar, por sala. Lo lee el `GET`
+ * del panel; se borra con la siguiente autorización buena o al desconectar.
+ */
+const errorSupabase = new Map<string, string>();
+
+/**
+ * Guarda lo que volvió de autorizar sin pisar lo que la sala ya tenía. Devuelve
+ * si hay que preparar el proyecto.
+ *
+ * Antes se guardaba la fila completa con proyecto y contraseña en null. Una
+ * segunda autorización (dos pestañas, un doble clic, dos personas de la sala a
+ * la vez) borraba así el proyecto y la contraseña, que Supabase no devuelve
+ * nunca; y si venía de OTRA cuenta, la sala acababa con una base nueva y vacía.
+ *
+ * Corre dentro de `preparacionesDeSupabase`: no se mete a media creación.
+ */
+async function guardarAutorizacion(
+  roomId: string,
+  tokens: { acceso: string; refresco: string; expiraEn: number },
+): Promise<boolean> {
+  const storage = await getStorage();
+  const previa = await storage.conexionSupabase(roomId);
+
+  if (!previa) {
+    // Se guarda ANTES de crear el proyecto, a propósito: crear tarda minutos y
+    // si el server se cae en medio, la autorización no se pierde y se puede
+    // reintentar solo la parte que faltó.
+    await storage.guardarConexionSupabase({ roomId, ...tokens, conectadoEn: Date.now() });
+    errorSupabase.delete(roomId);
+    return true;
+  }
+
+  if (previa.proyecto) {
+    // Con base ya hecha, solo cuenta si es la MISMA cuenta: la que puede ver ese
+    // proyecto. Otra cuenta no se lleva la sala; para cambiarla hay que
+    // desconectar primero, que es una decisión y no un accidente.
+    const suyos = await proyectos(tokens.acceso);
+    const esLaMisma = suyos.some((p) => (p.ref ?? p.id) === previa.proyecto);
+    if (!esLaMisma) {
+      console.log(`[supabase] ${roomId} autorizó otra cuenta; la conexión no se cambia`);
+      const error =
+        "Esa cuenta de Supabase no ve la base de esta sala (es otra cuenta, o el proyecto " +
+        "ya no existe), así que no se cambió nada. Para usar otra, desconecta primero.";
+      errorSupabase.set(roomId, error);
+      io.to(roomId).emit("supabase:fallo", { error });
+      return false;
+    }
+    await storage.actualizarConexionSupabase(roomId, tokens);
+    errorSupabase.delete(roomId);
+    console.log(`[supabase] ${roomId} volvió a autorizar la misma cuenta: solo se renuevan los tokens`);
+    return false;
+  }
+
+  // Autorizada y sin proyecto todavía: la preparación quedó a medias o está en
+  // fila. Tokens frescos, y que siga.
+  await storage.actualizarConexionSupabase(roomId, tokens);
+  errorSupabase.delete(roomId);
+  return true;
+}
 
 async function prepararProyecto(roomId: string): Promise<void> {
   // Serializado por sala: dos caminos llaman aquí (el callback al autorizar, y
@@ -985,7 +1049,7 @@ async function prepararProyectoSerializado(roomId: string): Promise<void> {
       console.log(`[supabase] ${roomId} ya tenía el proyecto ${ref}: se adopta en vez de crear otro`);
       // La contraseña no se recupera: Supabase no la devuelve nunca. La app no
       // la necesita; solo quien quiera entrar a la base por fuera.
-      await (await getStorage()).guardarConexionSupabase({ ...conexion, proyecto: ref, password: null });
+      await (await getStorage()).actualizarConexionSupabase(roomId, { proyecto: ref, password: null });
     }
   }
 
@@ -1013,7 +1077,7 @@ async function prepararProyectoSerializado(roomId: string): Promise<void> {
     // Se guarda la referencia en cuanto existe, aunque el proyecto todavía esté
     // levantándose: si el server se reinicia ahora, lo que ya se creó no se
     // vuelve a crear.
-    await (await getStorage()).guardarConexionSupabase({ ...conexion, proyecto: ref, password });
+    await (await getStorage()).actualizarConexionSupabase(roomId, { proyecto: ref, password });
   } else {
     console.log(`[supabase] retomando el proyecto ${ref} de ${roomId}`);
   }
@@ -1232,35 +1296,46 @@ async function conLaBaseDeLaSala(
  * hay nada que reintentar, hay que volver a autorizar.
  */
 async function accesoVigente(roomId: string): Promise<string | null> {
-  const storage = await getStorage();
-  const conexion = await storage.conexionSupabase(roomId);
-  if (!conexion) return null;
+  // Una renovación a la vez por sala. Dos al mismo tiempo (dos agentes, o sql y
+  // ver_base) mandaban el MISMO token de renovación, y Supabase los rota: el
+  // segundo fallaba y la sala se quedaba "sin poder renovar". Adentro se relee,
+  // así el que esperó usa lo que el primero acaba de renovar.
+  return renovacionesDeSupabase.run(roomId, async () => {
+    const storage = await getStorage();
+    const conexion = await storage.conexionSupabase(roomId);
+    if (!conexion) return null;
 
-  // Un minuto de margen: si está a punto de caducar, mejor renovar ahora que a
-  // media operación.
-  if (conexion.expiraEn > Date.now() + 60_000) return conexion.acceso;
+    // Un minuto de margen: si está a punto de caducar, mejor renovar ahora que a
+    // media operación.
+    if (conexion.expiraEn > Date.now() + 60_000) return conexion.acceso;
 
-  const cred = credencialDeSupabase();
-  if (!cred) return null;
-  const tokens = await refrescarSupabase(cred, conexion.refresco);
-  if (!tokens) {
-    console.error(`[supabase] ${roomId} ya no puede renovar su token`);
-    return null;
-  }
-  await storage.guardarConexionSupabase({
-    ...conexion,
-    acceso: tokens.acceso,
-    refresco: tokens.refresco,
-    expiraEn: tokens.expiraEn,
+    const cred = credencialDeSupabase();
+    if (!cred) return null;
+    const tokens = await refrescarSupabase(cred, conexion.refresco);
+    if (!tokens) {
+      console.error(`[supabase] ${roomId} ya no puede renovar su token`);
+      return null;
+    }
+    // Solo los tokens: guardar la fila completa desde la copia de arriba podía
+    // regresar el proyecto a null si la preparación lo guardó mientras tanto.
+    await storage.actualizarConexionSupabase(roomId, {
+      acceso: tokens.acceso,
+      refresco: tokens.refresco,
+      expiraEn: tokens.expiraEn,
+    });
+    return tokens.acceso;
   });
-  return tokens.acceso;
 }
+
+/** Ver `accesoVigente`. Aparte del de preparaciones: la preparación lo llama adentro. */
+const renovacionesDeSupabase = new KeyedMutex();
 
 fastify.delete<{ Params: { id: string } }>("/rooms/:id/supabase", async (req) => {
   // Solo se desconecta de aquí: el proyecto en Supabase sigue existiendo porque
   // es de la persona, y las variables se quedan en el .env porque la app las
   // sigue necesitando para funcionar.
   await (await getStorage()).borrarConexionSupabase(req.params.id);
+  errorSupabase.delete(req.params.id);
   // Si vuelve a conectar, puede ser otro proyecto: hay que revisarlo de nuevo.
   loginAnonimoRevisado.delete(req.params.id);
   io.to(req.params.id).emit("supabase:desconectado", {});
@@ -2252,7 +2327,7 @@ async function runAgentTurn(
  * algo variable tiraría ese caché en cada llamada.
  */
 function conContextoDeOtros(room: Room, agentId: string, task: string): string {
-  const archivos = fileMutation.trabajoRecienteDeOtros(agentId);
+  const archivos = fileMutation.trabajoRecienteDeOtros(agentId, { sala: room.workspace.dir });
   const resumen = resumenDeOtros(room.agents, agentId, archivos, ultimosMensajes(room));
   return resumen ? `${resumen}\n\n${task}` : task;
 }

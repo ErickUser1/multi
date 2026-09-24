@@ -486,6 +486,38 @@ export class SqliteStorage implements Storage {
     return rows.map((r) => r.room_id);
   }
 
+  async actualizarConexionSupabase(
+    roomId: string,
+    campos: Partial<Pick<ConexionSupabase, "acceso" | "refresco" | "expiraEn" | "proyecto" | "password">>,
+  ): Promise<void> {
+    const columnas: string[] = [];
+    const valores: (string | number | null)[] = [];
+    if (campos.acceso !== undefined) {
+      columnas.push("acceso = ?");
+      valores.push(cifrar(campos.acceso));
+    }
+    if (campos.refresco !== undefined) {
+      columnas.push("refresco = ?");
+      valores.push(cifrar(campos.refresco));
+    }
+    if (campos.expiraEn !== undefined) {
+      columnas.push("expira_en = ?");
+      valores.push(campos.expiraEn);
+    }
+    if (campos.proyecto !== undefined) {
+      columnas.push("proyecto = ?");
+      valores.push(campos.proyecto ?? null);
+    }
+    if (campos.password !== undefined) {
+      columnas.push("password = ?");
+      valores.push(campos.password ? cifrar(campos.password) : null);
+    }
+    if (columnas.length === 0) return;
+    this.db
+      .prepare(`UPDATE supabase_salas SET ${columnas.join(", ")} WHERE room_id = ?`)
+      .run(...valores, roomId);
+  }
+
   async borrarConexionSupabase(roomId: string): Promise<void> {
     this.db.prepare(`DELETE FROM supabase_salas WHERE room_id = ?`).run(roomId);
   }

@@ -241,7 +241,11 @@ export function resumenDeOtros(
   if (otros.length === 0) return null;
 
   const lineas = otros.map((a) => {
-    const suyos = archivos.filter((f) => f.agentId === a.id);
+    const todos = archivos.filter((f) => f.agentId === a.id);
+    // Las migraciones son cambios a la BASE, no archivos que haya que releer: se
+    // cuentan aparte y por lo que hicieron ("crea-tabla-tareas").
+    const base = todos.filter((f) => esMigracion(f.path)).map((f) => cambioDeBase(f.path));
+    const suyos = todos.filter((f) => !esMigracion(f.path));
     const enVuelo = suyos.filter((f) => f.escribiendoAhora).map((f) => f.path);
     const tocados = suyos.filter((f) => !f.escribiendoAhora).map((f) => f.path);
 
@@ -251,6 +255,7 @@ export function resumenDeOtros(
     const partes = [`${a.name}${estado}: ${a.task ?? "trabajando"}`];
     if (enVuelo.length) partes.push(`  escribiendo ahora: ${enVuelo.join(", ")}`);
     if (tocados.length) partes.push(`  ya tocó: ${tocados.slice(0, 8).join(", ")}`);
+    if (base.length) partes.push(`  cambió la base: ${base.slice(0, 8).join(", ")}`);
 
     const dijo = ultimoMensaje?.get(a.id);
     if (dijo) partes.push(`  dijo: "${recorta(dijo, 300)}"`);
@@ -266,12 +271,23 @@ export function resumenDeOtros(
     "No rehagas lo que otro ya hizo ni lo que está haciendo. Si alguien está montando",
     "el proyecto, espera a que termine o trabaja en otra parte. Un archivo que otro",
     "está escribiendo en este momento: déjalo. Uno que ya soltó: léelo antes de",
-    "tocarlo, porque cambió desde la última vez que lo viste.",
+    "tocarlo, porque cambió desde la última vez que lo viste. Si otro cambió la base,",
+    "revisa con ver_base antes de tocar esas tablas.",
     "",
     "Esto cubre los últimos minutos. Si lo que te piden pudo hacerse antes, `git log`",
     "dice qué hizo cada agente en cada turno.",
     "</otros_agentes>",
   ].join("\n");
+}
+
+function esMigracion(path: string): boolean {
+  return /(^|[\\/])migraciones[\\/][^\\/]+\.sql$/.test(path);
+}
+
+/** `migraciones/20260924065501-crea-tabla-tareas.sql` → `crea-tabla-tareas`. */
+function cambioDeBase(path: string): string {
+  const nombre = path.split(/[\\/]/).pop() ?? path;
+  return nombre.replace(/\.sql$/, "").replace(/^\d{14}-(\d+-)?/, "");
 }
 
 /** Recorta a lo que quepa sin comerse el contexto del turno. */

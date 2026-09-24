@@ -1,6 +1,6 @@
 import { readFile, writeFile, rename, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname, relative, resolve, sep } from "node:path";
 import { KeyedMutex } from "./keyed-mutex.js";
 
 /**
@@ -113,6 +113,31 @@ export class FileMutation {
     );
   }
 
+  /**
+   * Corre `fn` con el candado de `ruta` tomado, igual que una escritura.
+   *
+   * Para lo que no es escribir un archivo pero tampoco puede pasar dos veces a
+   * la vez: correr SQL contra la base de la sala, por ejemplo. Lo que `fn`
+   * devuelva en `tocados` queda anotado como escrito por `agentId`, así que
+   * entra al resumen que reciben los demás agentes.
+   */
+  async conCandado<T>(
+    ruta: string,
+    opts: { agentId: string; onWait?: (holder: string | undefined) => void },
+    fn: () => Promise<{ valor: T; tocados?: string[] }>,
+  ): Promise<T> {
+    return this.mutex.run(
+      resolve(ruta),
+      async () => {
+        const { valor, tocados = [] } = await fn();
+        for (const t of tocados) this.lastWriter.set(resolve(t), { agentId: opts.agentId, at: Date.now() });
+        this.pruneWriters();
+        return valor;
+      },
+      { owner: opts.agentId, onWait: opts.onWait },
+    );
+  }
+
   /** Lee un archivo (fuera del lock: leer no necesita exclusión). */
   async read(path: string): Promise<string | null> {
     const key = resolve(path);
@@ -133,12 +158,24 @@ export class FileMutation {
    */
   trabajoRecienteDeOtros(
     exceptoAgente: string,
-    dentroDeMs = 120_000,
+    opts: {
+      dentroDeMs?: number;
+      /**
+       * La carpeta de la sala. Sin esto se mezclaban salas: los ids de agente se
+       * repiten en cada una (`agente-1`), y este registro es uno por proceso, así
+       * que el agente-2 de una sala recibía lo que tocó el agente-1 de otra. Con
+       * ella, además, las rutas salen relativas a la sala y no absolutas.
+       */
+      sala?: string;
+    } = {},
   ): Array<{ agentId: string; path: string; hace: number; escribiendoAhora: boolean }> {
+    const { dentroDeMs = 120_000 } = opts;
+    const sala = opts.sala ? resolve(opts.sala) + sep : null;
     const ahora = Date.now();
     const out: Array<{ agentId: string; path: string; hace: number; escribiendoAhora: boolean }> = [];
     for (const [path, w] of this.lastWriter) {
       if (w.agentId === exceptoAgente) continue;
+      if (sala && !path.startsWith(sala)) continue;
       const hace = ahora - w.at;
       if (hace > dentroDeMs) continue;
       // Con el lock tomado no es "lo tocó": lo está escribiendo AHORA. Distinguirlo
@@ -146,7 +183,7 @@ export class FileMutation {
       // hay que releerlo.
       out.push({
         agentId: w.agentId,
-        path,
+        path: sala ? relative(sala, path) : path,
         hace,
         escribiendoAhora: !!this.mutex.info(path).holder,
       });

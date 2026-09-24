@@ -221,6 +221,18 @@ export interface Storage {
    */
   conexionSupabase(roomId: string): Promise<ConexionSupabase | null>;
   guardarConexionSupabase(conexion: ConexionSupabase): Promise<void>;
+  /**
+   * Cambia SOLO los campos que llegan, sin tocar los demás.
+   *
+   * Es lo que usan la renovación del token, la preparación y una segunda
+   * autorización. Guardar la fila completa desde una copia leída antes pisaba lo
+   * que otro camino había escrito mientras tanto: el proyecto volvía a null, o
+   * los tokens a unos ya rotados. No hace nada si la sala no tiene conexión.
+   */
+  actualizarConexionSupabase(
+    roomId: string,
+    campos: Partial<Pick<ConexionSupabase, "acceso" | "refresco" | "expiraEn" | "proyecto" | "password">>,
+  ): Promise<void>;
   borrarConexionSupabase(roomId: string): Promise<void>;
   /** Las salas que tienen una conexión guardada, para retomar las que quedaron a medias. */
   salasConSupabase(): Promise<string[]>;

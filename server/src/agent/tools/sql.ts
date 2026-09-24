@@ -1,5 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { fileMutation } from "../../engine/file-mutation.js";
 import { type Tool, ToolError, reqString } from "./base.js";
 import { politicasAbiertas, type PoliticaAbierta } from "./politicas.js";
 
@@ -77,32 +79,60 @@ export const sqlTool: Tool = {
       );
     }
 
-    try {
-      await ctx.ejecutarSql(sql);
-    } catch (err) {
-      // Lo que diga Postgres (una tabla que ya existe, una columna que no) es
-      // justo lo que el agente necesita para corregir. Como `error inesperado`
-      // parecía una falla de Multi, no de su SQL.
-      const msg = err instanceof Error ? err.message : String(err);
-      throw new ToolError(
-        `la base rechazó el SQL y no se guardó migración: ${msg}. Revisa la estructura ` +
-          "actual con ver_base antes de reintentar.",
-      );
-    }
-
-    // La migración se guarda DESPUÉS de que corrió, no antes: un archivo que
-    // describe un cambio que falló es peor que no tenerlo, porque quien rehaga
-    // la base desde estos archivos acabaría con un esquema que nunca existió.
-    const sello = new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14);
-    const limpia = descripcion
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "")
-      .slice(0, 60);
+    const ejecutarSql = ctx.ejecutarSql;
     const dir = join(ctx.workspaceDir, "migraciones");
-    await mkdir(dir, { recursive: true });
-    const archivo = `${sello}-${limpia || "cambio"}.sql`;
-    await writeFile(join(dir, archivo), sql.trim() + "\n", "utf8");
+    // Un SQL a la vez por sala, con su migración. Dos agentes cambiando la base
+    // al mismo tiempo (uno crea la tabla, otro la altera) quedaban en un orden
+    // al azar, y sus migraciones podían caer en el mismo segundo. Es el mismo
+    // candado de los archivos: la sala ve "esperando a agente-1", y la espera no
+    // cuenta contra el turno. Y como la migración queda anotada ahí, los demás
+    // agentes se enteran del cambio en su resumen.
+    let archivo: string;
+    try {
+      archivo = await fileMutation.conCandado(
+        dir,
+        {
+          agentId: ctx.agentId ?? "agente",
+          onWait: (holder) => ctx.onWaitStart?.({ path: "migraciones", holder }),
+        },
+        async () => {
+          try {
+            await ejecutarSql(sql);
+          } catch (err) {
+            // Lo que diga Postgres (una tabla que ya existe, una columna que no)
+            // es justo lo que el agente necesita para corregir. Como `error
+            // inesperado` parecía una falla de Multi, no de su SQL.
+            const msg = err instanceof Error ? err.message : String(err);
+            throw new ToolError(
+              `la base rechazó el SQL y no se guardó migración: ${msg}. Revisa la estructura ` +
+                "actual con ver_base antes de reintentar.",
+            );
+          }
+
+          // La migración se guarda DESPUÉS de que corrió, no antes: un archivo
+          // que describe un cambio que falló es peor que no tenerlo, porque quien
+          // rehaga la base desde estos archivos acabaría con un esquema que
+          // nunca existió.
+          const sello = new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14);
+          const limpia = descripcion
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-|-$/g, "")
+            .slice(0, 60);
+          await mkdir(dir, { recursive: true });
+          // Dos cambios en el mismo segundo no se pisan: el orden de los archivos
+          // es el orden en que corrieron.
+          let nombre = `${sello}-${limpia || "cambio"}.sql`;
+          for (let n = 2; existsSync(join(dir, nombre)); n++) {
+            nombre = `${sello}-${n}-${limpia || "cambio"}.sql`;
+          }
+          await writeFile(join(dir, nombre), sql.trim() + "\n", "utf8");
+          return { valor: nombre, tocados: [join(dir, nombre)] };
+        },
+      );
+    } finally {
+      ctx.onWaitEnd?.();
+    }
 
     ctx.emit?.({ type: "file:changed", path: `migraciones/${archivo}`, action: "write" });
 

@@ -14,19 +14,68 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 
 export type Idioma = "es" | "en";
 
-const CLAVE = "multi.idioma";
+/**
+ * Dónde se guardaba el idioma detectado. Ya no se usa: se borra al arrancar.
+ *
+ * Guardaba lo que se DETECTÓ en la primera visita, no algo que alguien eligiera
+ * (nunca hubo dónde elegir), así que quien entró una vez con el navegador en
+ * inglés se quedaba en inglés para siempre aunque lo cambiara después.
+ */
+const CLAVE_VIEJA = "multi.idioma";
 
-/** Arranca con el idioma del navegador y recuerda lo que elijas. */
+/**
+ * Zonas horarias de donde se habla español.
+ *
+ * La zona sale de la configuración del sistema, no del idioma del navegador, y
+ * no pide permisos. Es lo que deja reconocer el caso más común: el celular o
+ * Chrome en inglés de alguien en México, que igual lee en español.
+ */
+const ZONAS_EN_ESPANOL = new Set([
+  // México
+  "America/Mexico_City", "America/Cancun", "America/Merida", "America/Monterrey",
+  "America/Matamoros", "America/Chihuahua", "America/Ciudad_Juarez", "America/Ojinaga",
+  "America/Mazatlan", "America/Bahia_Banderas", "America/Hermosillo", "America/Tijuana",
+  // Centroamérica y el Caribe
+  "America/Guatemala", "America/El_Salvador", "America/Tegucigalpa", "America/Managua",
+  "America/Costa_Rica", "America/Panama", "America/Havana", "America/Santo_Domingo",
+  "America/Puerto_Rico",
+  // Sudamérica
+  "America/Bogota", "America/Caracas", "America/Lima", "America/Guayaquil",
+  "Pacific/Galapagos", "America/La_Paz", "America/Santiago", "America/Punta_Arenas",
+  "Pacific/Easter", "America/Asuncion", "America/Montevideo",
+  // España y Guinea Ecuatorial
+  "Europe/Madrid", "Atlantic/Canary", "Africa/Ceuta", "Africa/Malabo",
+]);
+
+/**
+ * El idioma de quien entra, decidido en cada visita.
+ *
+ * 1. Si CUALQUIERA de sus idiomas preferidos es español, español. No solo el
+ *    primero: `navigator.language` es el idioma de la interfaz del navegador, y
+ *    mucha gente la tiene en inglés aunque lea en español.
+ * 2. Si no, la región: una zona horaria de un país hispanohablante es español.
+ * 3. Si no, inglés.
+ *
+ * No se guarda: así, cambiar el idioma del navegador cambia Multi en la
+ * siguiente visita.
+ */
 function idiomaInicial(): Idioma {
-  let guardado: string | null = null;
   try {
-    guardado = localStorage.getItem(CLAVE);
+    localStorage.removeItem(CLAVE_VIEJA);
   } catch {
-    // Con el storage bloqueado, leerlo lanza. Esto corre antes que todo lo
+    // Con el storage bloqueado, tocarlo lanza. Esto corre antes que todo lo
     // demás: si lanzara aquí, la página entera se quedaría en blanco.
   }
-  if (guardado === "es" || guardado === "en") return guardado;
-  return navigator.language.toLowerCase().startsWith("es") ? "es" : "en";
+  const preferidos = navigator.languages?.length ? navigator.languages : [navigator.language];
+  if (preferidos.some((l) => l?.toLowerCase().startsWith("es"))) return "es";
+  let zona = "";
+  try {
+    zona = Intl.DateTimeFormat().resolvedOptions().timeZone ?? "";
+  } catch {
+    // Un navegador sin Intl completo: se queda con los idiomas.
+  }
+  if (ZONAS_EN_ESPANOL.has(zona) || zona.startsWith("America/Argentina/")) return "es";
+  return "en";
 }
 
 const TEXTOS = {
@@ -639,11 +688,6 @@ export function IdiomaProvider({ children }: { children: ReactNode }) {
   const [idioma] = useState<Idioma>(idiomaInicial);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(CLAVE, idioma);
-    } catch {
-      // Se pierde la preferencia, no la página.
-    }
     document.documentElement.lang = idioma;
   }, [idioma]);
 

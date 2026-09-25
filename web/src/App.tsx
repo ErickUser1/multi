@@ -284,8 +284,21 @@ function NamePrompt(props: {
  */
 /** Un mensaje escrito sin conexión: lo que se pinta y lo que se va a mandar. */
 interface EnCola {
+  /** Con esto el server reconoce un reintento de algo que ya le llegó. */
+  id: string;
   text: string;
   payload: Record<string, unknown>;
+}
+
+/** Cuánto se espera la confirmación del server antes de dar el socket por muerto. */
+const ESPERA_CONFIRMACION_MS = 6000;
+
+function nuevoIdDeMensaje(): string {
+  try {
+    return crypto.randomUUID();
+  } catch {
+    return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  }
 }
 
 /**
@@ -301,7 +314,11 @@ const claveDeCola = (roomId: string) => `multi.cola.${roomId}`;
 function leerCola(roomId: string): EnCola[] {
   try {
     const crudo = JSON.parse(sessionStorage.getItem(claveDeCola(roomId)) ?? "[]");
-    return Array.isArray(crudo) ? crudo.filter((m) => typeof m?.text === "string" && m.payload) : [];
+    if (!Array.isArray(crudo)) return [];
+    return crudo
+      .filter((m) => typeof m?.text === "string" && m.payload)
+      // Lo guardado antes de que hubiera ids también sale; con uno nuevo.
+      .map((m) => ({ ...m, id: typeof m.id === "string" ? m.id : nuevoIdDeMensaje() }));
   } catch {
     return [];
   }
@@ -550,6 +567,16 @@ function Sala({
   /** Lo que está en la cola, para pintarlo en el chat como "enviando". */
   const [enCola, setEnCola] = useState<string[]>([]);
   /**
+   * Lo que ya salió y espera su confirmación, con el intento en el que salió.
+   * Mientras espera no se pinta como pendiente: casi siempre la confirmación
+   * llega en milisegundos, y el mensaje aparece en el chat con el eco del server.
+   */
+  const enVuelo = useRef(new Map<string, number>());
+  /** Cuántas veces se ha entrado a la sala por este socket: separa intentos viejos de nuevos. */
+  const conexiones = useRef(0);
+  /** La sala de ESTA pantalla, para que una confirmación tardía no toque la cola de otra. */
+  const salaActual = useRef<string | null>(null);
+  /**
    * Cuántas veces ha llegado el `joined`. Cero es "todavía no sabemos nada de
    * esta sala"; más de cero y sin estar unido es una reconexión.
    */
@@ -764,8 +791,10 @@ function Sala({
     // La cola es de ESTA sala. Se recupera de la pestaña por si lo que se
     // escribió sin conexión quedó ahí de antes de recargar; y lo que quedó en
     // otra sala se queda allá, en vez de salir en esta.
+    salaActual.current = roomId;
+    enVuelo.current.clear();
     cola.current = leerCola(roomId);
-    setEnCola(cola.current.map((m) => m.text));
+    mostrarCola();
 
     const socket = connectSocket();
     socketRef.current = socket;
@@ -841,17 +870,21 @@ function Sala({
       // El mensaje con el que nació la sala. Aquí, y no en el `connect`: si la
       // sala estaba dormida, su `join` pasa por un await antes de quedar puesta
       // y un `chat` adelantado se pierde en silencio.
+      conexiones.current++;
       const primero = porMandar.current ?? leerPrimero(roomId);
       if (primero) {
         porMandar.current = null;
+        // Va primero en la cola y sale por el mismo camino que todo lo demás:
+        // con confirmación, y guardado hasta tenerla.
+        cola.current.unshift({ id: nuevoIdDeMensaje(), text: primero.text, payload: { text: primero.text } });
+        guardarCola(roomId, cola.current);
         guardarPrimero(roomId, null);
-        socket.emit("chat", { text: primero.text });
         setDraft("");
       }
-      // Lo que se escribió con la conexión caída, en el orden en que se mandó.
-      for (const { payload } of cola.current.splice(0)) socket.emit("chat", payload);
-      guardarCola(roomId, []);
-      setEnCola([]);
+      // Todo lo pendiente, en el orden en que se escribió. Incluye lo que salió
+      // por la conexión anterior sin confirmarse: si sí había llegado, el server
+      // lo reconoce por su id y no lo repite.
+      for (const m of [...cola.current]) mandarDeLaCola(m);
     });
     socket.on("presence", ({ members }: { members: Member[] }) => setMembers(members));
 
@@ -1054,7 +1087,22 @@ function Sala({
       setErrorAdjunto(message);
     });
 
+    // El navegador sabe antes que socket.io cuando se va la red: sin esto, la
+    // sala se seguía creyendo conectada hasta que fallaran sus pings (casi un
+    // minuto), y con el "Offline" de DevTools, para siempre. Desconectar aquí
+    // pasa lo que se escriba directo a la cola, con su aviso.
+    const alPerderRed = () => {
+      if (socket.connected) socket.disconnect();
+    };
+    const alVolverRed = () => {
+      if (!socket.connected) socket.connect();
+    };
+    window.addEventListener("offline", alPerderRed);
+    window.addEventListener("online", alVolverRed);
+
     return () => {
+      window.removeEventListener("offline", alPerderRed);
+      window.removeEventListener("online", alVolverRed);
       socket.disconnect();
     };
   }, [roomId, name]);
@@ -1219,6 +1267,54 @@ function Sala({
    */
   const subiendoAlgo = pendientes.some((p) => !p.id);
 
+  /** Pinta como pendiente lo que no está esperando su confirmación. */
+  const mostrarCola = () => {
+    setEnCola(cola.current.filter((m) => !enVuelo.current.has(m.id)).map((m) => m.text));
+  };
+
+  /** Saca de la cola lo que el server ya confirmó, en la sala que sea. */
+  const confirmado = (sala: string, id: string) => {
+    if (sala === salaActual.current) {
+      cola.current = cola.current.filter((m) => m.id !== id);
+      guardarCola(sala, cola.current);
+      mostrarCola();
+    } else {
+      guardarCola(sala, leerCola(sala).filter((m) => m.id !== id));
+    }
+  };
+
+  /**
+   * Manda un mensaje de la cola y espera la confirmación del server.
+   *
+   * Sin confirmación a tiempo, el socket se da por muerto aunque diga que está
+   * conectado: se reconecta, y al volver a entrar se reintenta todo lo pendiente.
+   * Así se cubren los segundos en que la red ya se cayó y socket.io todavía no
+   * se entera, que con el "Offline" de DevTools no terminan nunca.
+   */
+  const mandarDeLaCola = (item: EnCola) => {
+    const socket = socketRef.current;
+    const sala = salaActual.current;
+    if (!socket || !sala) return;
+    const intento = conexiones.current;
+    enVuelo.current.set(item.id, intento);
+    mostrarCola();
+    socket
+      .timeout(ESPERA_CONFIRMACION_MS)
+      .emit("chat", { ...item.payload, id: item.id }, (err: Error | null, r?: { ok?: boolean }) => {
+        // Solo el intento más reciente de este mensaje decide cómo se pinta.
+        if (enVuelo.current.get(item.id) === intento) enVuelo.current.delete(item.id);
+        if (!err && r?.ok) return confirmado(sala, item.id);
+        if (sala !== salaActual.current) return;
+        mostrarCola();
+        // Ya hubo otra entrada a la sala desde que salió: esa lo reintenta.
+        if (intento !== conexiones.current) return;
+        if (socket.connected) {
+          socket.disconnect();
+          socket.connect();
+        }
+      });
+  };
+
   const send = () => {
     const text = draft.trim();
     // Mandar solo un archivo, sin escribir nada, es un mensaje legítimo.
@@ -1245,14 +1341,22 @@ function Sala({
             .map((p) => ({ id: p.id, nombre: p.nombre, mediaType: p.mediaType }))
         : undefined,
     };
+    // Todo mensaje entra a la cola, guardada en la pestaña, y sale de ahí solo
+    // cuando el server confirma. Antes, con la sala "conectada" se mandaba y se
+    // olvidaba: si el socket ya estaba muerto sin que nadie lo supiera (los
+    // primeros segundos de un corte de red), el mensaje se perdía sin aviso.
+    const item: EnCola = { id: nuevoIdDeMensaje(), text, payload };
+    cola.current.push(item);
+    guardarCola(roomId, cola.current);
     if (unidoRef.current) {
-      socketRef.current?.emit("chat", payload);
+      mandarDeLaCola(item);
     } else {
-      // Sin conexión, o reconectando: espera al `joined` (ver `cola`). Se
-      // guarda también en la pestaña: recargar sin conexión lo borraba.
-      cola.current.push({ text, payload });
-      if (roomId) guardarCola(roomId, cola.current);
-      setEnCola(cola.current.map((m) => m.text));
+      // Sin conexión, o reconectando: espera al `joined`, que la vacía.
+      mostrarCola();
+      const socket = socketRef.current;
+      // Desconectado a propósito (el navegador avisó que no hay red) y sin
+      // intentos en curso: escribir es buen momento para volver a probar.
+      if (socket && !socket.connected && !socket.active) socket.connect();
     }
     setDraft("");
     setPendientes([]);

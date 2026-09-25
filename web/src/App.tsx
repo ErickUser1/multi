@@ -316,6 +316,30 @@ function guardarCola(roomId: string, items: EnCola[]): void {
   }
 }
 
+/**
+ * El mensaje con el que nació una sala, mientras no sale. Ver `nacerConMensaje`:
+ * vive en la pestaña para sobrevivir a la pantalla del nombre.
+ */
+const claveDePrimero = (roomId: string) => `multi.primero.${roomId}`;
+
+function leerPrimero(roomId: string): { text: string } | null {
+  try {
+    const text = sessionStorage.getItem(claveDePrimero(roomId));
+    return text ? { text } : null;
+  } catch {
+    return null;
+  }
+}
+
+function guardarPrimero(roomId: string, text: string | null): void {
+  try {
+    if (text) sessionStorage.setItem(claveDePrimero(roomId), text);
+    else sessionStorage.removeItem(claveDePrimero(roomId));
+  } catch {
+    // Sin storage queda el ref, que alcanza cuando no hay que preguntar nombre.
+  }
+}
+
 function Ejemplos({ modo }: { modo: ModoDeSala }) {
   const { t } = useTextos();
   const [i, setI] = useState(0);
@@ -817,9 +841,10 @@ function Sala({
       // El mensaje con el que nació la sala. Aquí, y no en el `connect`: si la
       // sala estaba dormida, su `join` pasa por un await antes de quedar puesta
       // y un `chat` adelantado se pierde en silencio.
-      const primero = porMandar.current;
+      const primero = porMandar.current ?? leerPrimero(roomId);
       if (primero) {
         porMandar.current = null;
+        guardarPrimero(roomId, null);
         socket.emit("chat", { text: primero.text });
         setDraft("");
       }
@@ -1105,7 +1130,14 @@ function Sala({
     setCreandoSala(true);
     try {
       const id = await createRoom();
-      if (text) porMandar.current = { text };
+      if (text) {
+        porMandar.current = { text };
+        // También en la pestaña: si no tienes nombre, entre crear la sala y
+        // entrar se pregunta cómo te llamas, y esa pantalla DESMONTA la Sala, ref
+        // incluido. Quien llegaba por primera vez escribía su idea, daba su
+        // nombre y caía en una sala vacía, sin respuesta y sin su mensaje.
+        guardarPrimero(id, text);
+      }
       window.location.hash = `#/sala/${id}`;
       return id;
     } catch (e) {

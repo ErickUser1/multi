@@ -11,15 +11,24 @@ import type { Agent } from "./socket.js";
  * "@agente" (crear uno nuevo) va al FINAL: lo normal es seguirle hablando a
  * quien ya está en la sala; abrir otro es para trabajo en paralelo.
  */
-export function MentionMenu(props: {
-  agents: Agent[];
-  /** Lo escrito después de la @ (para filtrar). */
-  query: string;
-  onPick: (name: string) => void;
-}) {
-  const q = props.query.toLowerCase();
+export interface OpcionDeMencion {
+  name: string;
+  hint: string;
+  color: string;
+  nuevo: boolean;
+  ocupado: boolean;
+}
 
-  const existentes = props.agents.map((a) => ({
+/**
+ * Lo que ofrece el menú para lo escrito después de la @, en orden.
+ *
+ * Aparte del componente porque la caja de escribir también lo necesita: es la
+ * que recibe el teclado, y tiene que saber qué opción acepta un Tab o un Enter.
+ */
+export function opcionesDeMencion(agents: Agent[], query: string): OpcionDeMencion[] {
+  const q = query.toLowerCase();
+
+  const existentes = agents.map((a) => ({
     name: a.name,
     hint: hintDe(a),
     color: a.color,
@@ -27,7 +36,7 @@ export function MentionMenu(props: {
     ocupado: a.state !== "idle",
   }));
 
-  const opciones = [
+  return [
     ...existentes,
     {
       name: "agente",
@@ -37,15 +46,24 @@ export function MentionMenu(props: {
       ocupado: false,
     },
   ].filter((o) => o.name.toLowerCase().startsWith(q));
+}
 
-  if (opciones.length === 0) return null;
+export function MentionMenu(props: {
+  opciones: OpcionDeMencion[];
+  /** La que acepta un Tab o un Enter; las flechas la mueven. */
+  seleccion: number;
+  onPick: (name: string) => void;
+}) {
+  if (props.opciones.length === 0) return null;
 
   return (
-    <div className="mention-menu">
-      {opciones.map((o) => (
+    <div className="mention-menu" role="listbox">
+      {props.opciones.map((o, i) => (
         <div
           key={o.name}
-          className={`mention-item ${o.nuevo ? "mention-nuevo" : ""}`}
+          role="option"
+          aria-selected={i === props.seleccion}
+          className={`mention-item ${o.nuevo ? "mention-nuevo" : ""} ${i === props.seleccion ? "mention-activo" : ""}`}
           onMouseDown={() => props.onPick(o.name)}
         >
           <span className="mention-name" style={{ color: o.color }}>

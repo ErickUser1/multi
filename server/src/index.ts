@@ -1617,11 +1617,19 @@ io.on("connection", (socket) => {
   // `anchor` (opcional) es la selección LOCAL del que manda (cuidado 2).
   socket.on(
     "chat",
-    async ({
+    async (
+      {
+      id: idCliente,
       text,
       anchor,
       adjuntos: crudos,
     }: {
+      /**
+       * Lo pone la Sala para poder reintentar sin duplicar: un mensaje que se
+       * mandó por un socket que ya estaba muerto se vuelve a mandar al
+       * reconectar, y si en realidad sí había llegado, aquí se reconoce.
+       */
+      id?: string;
       text: string;
       anchor?: SelectedElement | null;
       /**
@@ -1632,13 +1640,32 @@ io.on("connection", (socket) => {
        * mensaje se pasa de su tope socket.io lo descarta sin avisar a nadie.
        */
       adjuntos?: { id?: unknown; nombre?: unknown; mediaType?: unknown }[];
-    }) => {
+    },
+      /**
+       * La confirmación de que el mensaje llegó. Hasta recibirla, la Sala lo
+       * guarda y lo reintenta: sin esto, lo que se escribía mientras el socket
+       * ya estaba muerto pero nadie lo sabía todavía (los primeros segundos de
+       * un corte de red) se perdía sin aviso. `ok: false` solo cuando vale la
+       * pena reintentar; lo que nunca va a entrar se confirma igual.
+       */
+      confirmar?: (r: { ok: boolean }) => void,
+    ) => {
+    const ack = (ok: boolean) => {
+      if (typeof confirmar === "function") confirmar({ ok });
+    };
     const room = joinedRoom;
     const hayAdjuntos = Array.isArray(crudos) && crudos.length > 0;
+    // Todavía no está en la sala: que lo reintente después del `joined`.
+    if (!room) return ack(false);
     // Mandar solo un archivo, sin escribir nada, es un mensaje legítimo.
-    if (!room || (!text?.trim() && !hayAdjuntos)) return;
+    if (!text?.trim() && !hayAdjuntos) return ack(true);
     const member = room.members.get(socket.id);
-    if (!member) return;
+    if (!member) return ack(false);
+
+    // Un reintento de algo que ya llegó: se confirma y no se repite.
+    if (typeof idCliente === "string" && idCliente) {
+      if (yaRecibido(room.id, idCliente)) return ack(true);
+    }
 
     // 0) Comprobar que los archivos que dice traer existen de verdad en esta
     //    sala. Se subieron antes por HTTP; aquí solo se confirma que el id es
@@ -1649,14 +1676,14 @@ io.on("connection", (socket) => {
         socket.emit("error:adjunto", {
           message: `máximo ${MAX_POR_MENSAJE} archivos por mensaje`,
         });
-        return;
+        return ack(true);
       }
       for (const crudo of crudos!) {
         const id = typeof crudo?.id === "string" ? crudo.id : "";
         const mediaType = id ? mediaTypeDe(id) : null;
         if (!id || !mediaType || !(await rutaAdjunto(room.workspace.dir, id))) {
           socket.emit("error:adjunto", { message: "ese archivo ya no está" });
-          return;
+          return ack(true);
         }
         adjuntos.push({
           id,
@@ -1682,6 +1709,7 @@ io.on("connection", (socket) => {
       usuarioId: member.usuarioId,
       foto: member.foto,
     });
+    ack(true);
 
     // 2) ¿Es plática o una orden? El agente solo despierta si lo llaman, salvo
     //    en una sala de una persona, donde escribir ya es pedirle algo.
@@ -2062,6 +2090,24 @@ function systemMsg(room: Room, text: string, color = "#a9abd0"): void {
 
 /** Cola de mensajes pendientes por agente (para el coalescing del coordinador). */
 const pendingByAgent = new Map<string, string[]>();
+
+/**
+ * Los ids de mensaje que cada sala ya recibió, para que un reintento no salga
+ * dos veces. Los últimos 200 por sala alcanzan: un reintento llega segundos
+ * después, no horas. En memoria: tras un reinicio, un reintento de lo que llegó
+ * justo antes podría repetirse, y eso es mejor que perderlo.
+ */
+const idsRecibidos = new Map<string, Set<string>>();
+
+/** ¿Ya llegó este mensaje? Si no, lo anota y dice que no. */
+function yaRecibido(roomId: string, id: string): boolean {
+  let vistos = idsRecibidos.get(roomId);
+  if (!vistos) idsRecibidos.set(roomId, (vistos = new Set()));
+  if (vistos.has(id)) return true;
+  vistos.add(id);
+  if (vistos.size > 200) vistos.delete(vistos.values().next().value!);
+  return false;
+}
 
 /**
  * Las imágenes pendientes por agente, en paralelo a la cola de texto.

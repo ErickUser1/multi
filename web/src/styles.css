@@ -782,8 +782,14 @@ body {
   padding: 8px 12px;
   cursor: pointer;
 }
-.mention-item:hover {
-  background: var(--panel);
+/* La resaltada es la que toma un Tab o un Enter: tiene que verse cuál es.
+   `--panel` es del mismo tono que el fondo del menú, así que no alcanzaba. */
+.mention-item:hover,
+.mention-item.mention-activo {
+  background: color-mix(in srgb, var(--linea) 55%, var(--fondo2));
+}
+.mention-item.mention-activo {
+  box-shadow: inset 2px 0 0 var(--acento);
 }
 .mention-name {
   font-size: 12px;

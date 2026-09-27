@@ -1,7 +1,7 @@
 import { readFile, writeFile, mkdir, rename } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join, dirname } from "node:path";
-import { commitAll } from "./git.js";
+import { commitAll, filesInCommit } from "./git.js";
 import { KeyedMutex } from "./keyed-mutex.js";
 
 /**
@@ -182,4 +182,60 @@ export async function sweepOrphans(workspaceDir: string): Promise<Turn[]> {
 
 export async function listTurns(workspaceDir: string): Promise<Turn[]> {
   return readTurns(workspaceDir);
+}
+
+/**
+ * Los turnos de OTROS agentes que terminaron después del último turno de
+ * `agentId`: lo que cambió en el proyecto mientras él no estaba.
+ *
+ * Es lo que le faltaba al resumen en vivo, que solo cubre los últimos minutos.
+ * Pasó de verdad: un agente volvió a trabajar seis minutos después de que otro
+ * terminara su parte, no supo que existía, y la borró. Aquí no hay ventana de
+ * tiempo: si pasó después de tu último turno, te lo cuentan.
+ *
+ * Un agente nuevo (sin turnos) recibe los últimos `max`: no hay "desde", pero sí
+ * un proyecto que otros ya armaron. Solo cuentan los turnos con commit, que son
+ * los que dejaron algo en el proyecto.
+ */
+export async function turnosDeOtrosDesde(
+  workspaceDir: string,
+  agentId: string,
+  opts: { max?: number } = {},
+): Promise<{ turnos: Turn[]; fuera: number; esNuevo: boolean }> {
+  const { max = 5 } = opts;
+  const turns = await readTurns(workspaceDir);
+  // El turno que está corriendo (el suyo, recién abierto) no cuenta como "último".
+  const mios = turns.filter((t) => t.agentId === agentId && t.state !== "running" && t.endedAt);
+  const desde = mios.length ? Math.max(...mios.map((t) => t.endedAt!)) : 0;
+  const nuevos = turns
+    .filter((t) => t.agentId !== agentId && t.commit && (t.endedAt ?? 0) > desde)
+    .sort((a, b) => (a.endedAt ?? 0) - (b.endedAt ?? 0));
+  return {
+    turnos: nuevos.slice(-max),
+    fuera: Math.max(0, nuevos.length - max),
+    esNuevo: mios.length === 0,
+  };
+}
+
+/**
+ * Lo mismo, listo para el resumen que recibe el agente: cada turno con los
+ * archivos que dejó en su commit.
+ */
+export async function trabajoDeOtrosDesde(
+  workspaceDir: string,
+  agentId: string,
+): Promise<{
+  turnos: Array<{ agentId: string; task: string; archivos: string[] }>;
+  fuera: number;
+  esNuevo: boolean;
+}> {
+  const { turnos, fuera, esNuevo } = await turnosDeOtrosDesde(workspaceDir, agentId);
+  const conArchivos = await Promise.all(
+    turnos.map(async (t) => ({
+      agentId: t.agentId,
+      task: t.task,
+      archivos: await filesInCommit(workspaceDir, t.commit!),
+    })),
+  );
+  return { turnos: conArchivos, fuera, esNuevo };
 }

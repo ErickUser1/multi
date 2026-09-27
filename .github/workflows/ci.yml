@@ -45,3 +45,5 @@ jobs:
       - run: npm run demo:modo-de-sala
       - run: npm run demo:ver-base
       - run: npm run demo:candados
+      - run: npm run demo:agentes-se-ven
+      - run: npm run demo:respetar

@@ -10,6 +10,7 @@ import {
   optBool,
 } from "./base.js";
 import { fileMutation, StaleContentError } from "../../engine/file-mutation.js";
+import { autoresDe } from "../../engine/git.js";
 
 // ── Read ────────────────────────────────────────────────────────────────────
 
@@ -30,6 +31,8 @@ export const readTool: Tool = {
     const p = safePath(ctx.workspaceDir, reqString(input, "path"));
     if (!existsSync(p)) throw new ToolError(`no existe el archivo: ${reqString(input, "path")}`);
     const content = await readFile(p, "utf8");
+    // Ya lo vio completo: si luego lo reescribe entero, sabe qué había.
+    if (ctx.agentId) fileMutation.registrarVisto(p, ctx.agentId, content);
     // Numerar líneas (como Claude Code) para que el modelo pueda referenciarlas.
     const numbered = content
       .split("\n")
@@ -59,9 +62,12 @@ export const writeTool: Tool = {
     const rel = reqString(input, "path");
     const content = reqString(input, "content");
     const p = safePath(ctx.workspaceDir, rel);
+    await noPisarLoQueNoViste(ctx, p, rel);
     // write es incondicional (crear/sobrescribir a propósito): expected undefined.
     // Igual pasa por el mutex → nunca dos escrituras simultáneas a la misma ruta.
     await casWrite(ctx, { path: p, rel, content });
+    // Lo que acaba de escribir entero también lo vio.
+    if (ctx.agentId) fileMutation.registrarVisto(p, ctx.agentId, content);
     ctx.emit?.({ type: "file:changed", path: rel, action: "write" });
     return `escrito ${rel} (${content.length} caracteres)`;
   },
@@ -111,6 +117,11 @@ export const editTool: Tool = {
     // CAS: escribe solo si el archivo sigue como lo acabamos de leer. Si otro
     // agente lo cambió en medio, falla con un mensaje que el modelo sabe resolver.
     await casWrite(ctx, { path: p, rel, content: updated, expected: content });
+    // Si había visto el archivo completo, también conoce el resultado de su
+    // propio cambio. Si no, sigue sin haberlo visto: edit_file no se lo enseña.
+    if (ctx.agentId && fileMutation.loVio(p, ctx.agentId, content)) {
+      fileMutation.registrarVisto(p, ctx.agentId, updated);
+    }
     ctx.emit?.({ type: "file:changed", path: rel, action: "edit" });
     return `editado ${rel} (${count} reemplazo${count > 1 ? "s" : ""})`;
   },
@@ -192,6 +203,46 @@ export const fsTools: Tool[] = [readTool, writeTool, editTool, globTool, grepToo
  * Traduce StaleContentError a ToolError para que el mensaje llegue al modelo
  * como tool_result (is_error) y pueda reintentar solo.
  */
+/**
+ * Que write_file no reescriba un archivo con trabajo de OTRO agente que este no
+ * ha visto.
+ *
+ * El caso real: le pidieron a un agente un cambio grande y rehízo App.tsx de
+ * memoria, sin leerlo. Ahí otro agente había conectado su parte (niveles,
+ * racha, gráficas); la reescritura la desconectó sin que nadie lo notara, y
+ * cuando el build se quejó de esos archivos "sueltos", los borró para que
+ * compilara.
+ *
+ * No prohíbe cambiar lo del otro: pide verlo antes. Después de leerlo, la misma
+ * escritura pasa, y puede adaptarlo como haga falta. No aplica a archivos
+ * nuevos ni a los que solo ha tocado este agente, así que quien trabaja solo no
+ * nota nada.
+ */
+async function noPisarLoQueNoViste(ctx: ToolContext, p: string, rel: string): Promise<void> {
+  const yo = ctx.agentId;
+  if (!yo || !existsSync(p)) return;
+
+  const actual = await readFile(p, "utf8");
+  if (fileMutation.loVio(p, yo, actual)) return;
+
+  // Los autores salen de los commits (uno por turno, firmado por el agente) y,
+  // para lo que aún no llega a un commit, de quién escribió último.
+  const autores = new Set(await autoresDe(ctx.workspaceDir, relative(ctx.workspaceDir, p)));
+  const enVuelo = fileMutation.ultimoEscritor(p);
+  if (enVuelo) autores.add(enVuelo);
+  // Solo agentes: los commits de personas son vueltas atrás en el historial,
+  // que restauran código que escribió algún agente.
+  const otros = [...autores].filter((a) => a !== yo && /^agente-\d+$/.test(a));
+  if (otros.length === 0) return;
+
+  const quien = otros.includes(enVuelo ?? "") ? enVuelo! : otros[0];
+  throw new ToolError(
+    `${rel} tiene trabajo de ${quien} que no has visto. Léelo con read_file antes de reescribirlo: ` +
+      `conserva lo suyo y adáptalo a tu cambio (con edit_file si solo cambias una parte). ` +
+      `Después de leerlo, esta misma escritura va a pasar.`,
+  );
+}
+
 async function casWrite(
   ctx: ToolContext,
   opts: { path: string; rel: string; content: string; expected?: string | null },

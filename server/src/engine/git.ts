@@ -223,6 +223,19 @@ export async function filesInCommit(dir: string, hash: string): Promise<string[]
   return stdout.split("\n").filter(Boolean);
 }
 
+/**
+ * Quiénes han cambiado un archivo, según sus commits (el autor de cada turno es
+ * el agente). Vacío si el archivo no está en el historial o no hay repo.
+ */
+export async function autoresDe(dir: string, rel: string, limit = 50): Promise<string[]> {
+  const { stdout } = await execFileP(
+    "git",
+    ["log", `--max-count=${limit}`, "--format=%an", "--", rel],
+    { cwd: dir },
+  ).catch(() => ({ stdout: "" }));
+  return [...new Set(stdout.split("\n").filter(Boolean))];
+}
+
 /** Si el repo tiene al menos un commit. Una sala recién creada no tiene ninguno. */
 export async function hayCommits(dir: string): Promise<boolean> {
   return execFileP("git", ["rev-parse", "--verify", "HEAD"], { cwd: dir })

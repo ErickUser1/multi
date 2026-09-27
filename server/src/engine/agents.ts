@@ -220,6 +220,16 @@ export function resumenDeOtros(
    * leyendo o lo reinvente distinto.
    */
   ultimoMensaje?: Map<string, string>,
+  /**
+   * Lo que otros agentes terminaron desde el último turno de `yo`, sin ventana
+   * de tiempo (ver `turnosDeOtrosDesde`). Es trabajo que alguien de la sala
+   * pidió, y se cuenta con el pedido completo para que se note.
+   */
+  desdeTuUltimoTurno?: {
+    turnos: Array<{ agentId: string; task: string; archivos: string[] }>;
+    fuera: number;
+    esNuevo: boolean;
+  },
 ): string | null {
   /**
    * Los que están trabajando MÁS los que acaban de terminar dejando rastro.
@@ -238,9 +248,15 @@ export function resumenDeOtros(
     .list()
     .filter((a) => a.id !== yo)
     .filter((a) => a.state !== "idle" || archivos.some((f) => f.agentId === a.id));
-  if (otros.length === 0) return null;
+  const historial = desdeTuUltimoTurno?.turnos ?? [];
+  // El que ya terminó y sale en el historial se cuenta ahí, con su pedido
+  // completo; contarlo también arriba sería decir lo mismo dos veces.
+  const enVivoSinRepetir = otros.filter(
+    (a) => !(a.state === "idle" && historial.some((t) => t.agentId === a.id)),
+  );
+  if (enVivoSinRepetir.length === 0 && historial.length === 0) return null;
 
-  const lineas = otros.map((a) => {
+  const lineas = enVivoSinRepetir.map((a) => {
     const todos = archivos.filter((f) => f.agentId === a.id);
     // Las migraciones son cambios a la BASE, no archivos que haya que releer: se
     // cuentan aparte y por lo que hicieron ("crea-tabla-tareas").
@@ -262,20 +278,58 @@ export function resumenDeOtros(
     return partes.join("\n");
   });
 
+  const enVivo = enVivoSinRepetir.length
+    ? ["Otros agentes están trabajando en este proyecto, o acaban de trabajar en él:", "", ...lineas, ""]
+    : [];
+
+  const hechos = historial.map((t, i) => {
+    const base = t.archivos.filter(esMigracion).map(cambioDeBase);
+    const suyos = t.archivos.filter((f) => !esMigracion(f));
+    const partes = [`${t.agentId}: le pidieron "${recorta(t.task, 300)}"`];
+    if (suyos.length) partes.push(`  tocó: ${suyos.slice(0, 10).join(", ")}${suyos.length > 10 ? "…" : ""}`);
+    if (base.length) partes.push(`  cambió la base: ${base.slice(0, 8).join(", ")}`);
+    // Lo que contó al terminar va con su ÚLTIMO turno: es lo único que se sabe
+    // que corresponde a ese y no a uno anterior.
+    // Y solo si ya no está trabajando: si volvió a empezar, lo último que dijo
+    // es de su turno nuevo, que ya se cuenta arriba.
+    const esSuUltimo =
+      !historial.slice(i + 1).some((o) => o.agentId === t.agentId) &&
+      (registro.get(t.agentId)?.state ?? "idle") === "idle";
+    const dijo = esSuUltimo ? ultimoMensaje?.get(t.agentId) : undefined;
+    if (dijo) partes.push(`  dijo: "${recorta(dijo, 300)}"`);
+    return partes.join("\n");
+  });
+  const antes = desdeTuUltimoTurno?.esNuevo
+    ? "Antes de que llegaras, otros agentes hicieron esto en el proyecto:"
+    : "Desde tu último turno, otros agentes hicieron esto en el proyecto:";
+  const fuera = desdeTuUltimoTurno?.fuera
+    ? [`(y ${desdeTuUltimoTurno.fuera} turno${desdeTuUltimoTurno.fuera > 1 ? "s" : ""} más antes de esos: \`git log\` los tiene)`]
+    : [];
+  const yaHecho = historial.length
+    ? [
+        antes,
+        "",
+        ...hechos,
+        ...fuera,
+        "",
+        "Eso lo pidió alguien de la sala y lo quiere conservar. Si lo que te piden ahora",
+        "lo cambia, ADÁPTALO a lo nuevo en vez de quitarlo, aunque ya no compile como está.",
+        "Quítalo solo si te lo piden, y si de verdad no se puede adaptar, dilo al cerrar.",
+        "",
+      ]
+    : [];
+
   return [
     "<otros_agentes>",
-    "Otros agentes están trabajando en este proyecto, o acaban de trabajar en él:",
-    "",
-    ...lineas,
-    "",
+    ...enVivo,
+    ...yaHecho,
     "No rehagas lo que otro ya hizo ni lo que está haciendo. Si alguien está montando",
     "el proyecto, espera a que termine o trabaja en otra parte. Un archivo que otro",
     "está escribiendo en este momento: déjalo. Uno que ya soltó: léelo antes de",
     "tocarlo, porque cambió desde la última vez que lo viste. Si otro cambió la base,",
     "revisa con ver_base antes de tocar esas tablas.",
     "",
-    "Esto cubre los últimos minutos. Si lo que te piden pudo hacerse antes, `git log`",
-    "dice qué hizo cada agente en cada turno.",
+    "Para más atrás, `git log` dice qué hizo cada agente en cada turno.",
     "</otros_agentes>",
   ].join("\n");
 }

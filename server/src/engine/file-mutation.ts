@@ -1,5 +1,6 @@
 import { readFile, writeFile, rename, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { dirname, relative, resolve, sep } from "node:path";
 import { KeyedMutex } from "./keyed-mutex.js";
 
@@ -74,6 +75,20 @@ export class FileMutation {
   private lastWriter = new Map<string, WriterInfo>();
 
   /**
+   * (agente, ruta canónica) → huella del contenido que ese agente vio COMPLETO:
+   * el que leyó con read_file o el que él mismo escribió entero.
+   *
+   * Es lo que permite que write_file no pase por encima de trabajo ajeno que el
+   * agente nunca vio. Pasó de verdad: un agente rehízo App.tsx de memoria, se
+   * llevó sin saberlo lo que otro había conectado ahí, y después borró los
+   * archivos del otro porque "no se usaban".
+   *
+   * En memoria: si el server reinicia, lo peor que pasa es que el agente tenga
+   * que leer una vez más un archivo compartido antes de reescribirlo.
+   */
+  private vistos = new Map<string, string>();
+
+  /**
    * Escribe solo si el archivo sigue teniendo `expected`.
    * @param expected contenido que el agente leyó. `null` = el archivo no existía.
    *                 `undefined` = escritura incondicional (crear/sobrescribir a propósito).
@@ -136,6 +151,35 @@ export class FileMutation {
       },
       { owner: opts.agentId, onWait: opts.onWait },
     );
+  }
+
+  /** Anota que `agentId` vio `contenido` completo en `path`. */
+  registrarVisto(path: string, agentId: string, contenido: string): void {
+    const k = claveVisto(agentId, path);
+    // Reinsertar la manda al final: el Map queda en orden de uso y el recorte
+    // de abajo tira lo más viejo.
+    this.vistos.delete(k);
+    this.vistos.set(k, huella(contenido));
+    if (this.vistos.size > 5000) {
+      for (const clave of this.vistos.keys()) {
+        this.vistos.delete(clave);
+        if (this.vistos.size <= 4000) break;
+      }
+    }
+  }
+
+  /** Si `agentId` ya vio exactamente este `contenido` de `path`. */
+  loVio(path: string, agentId: string, contenido: string): boolean {
+    return this.vistos.get(claveVisto(agentId, path)) === huella(contenido);
+  }
+
+  /**
+   * Quién escribió por última vez, sin la caducidad de `writerInfo`: aquí no es
+   * para un mensaje de error sino para saber de quién es un archivo que todavía
+   * no llega a un commit.
+   */
+  ultimoEscritor(path: string): string | undefined {
+    return this.lastWriter.get(resolve(path))?.agentId;
   }
 
   /** Lee un archivo (fuera del lock: leer no necesita exclusión). */
@@ -213,6 +257,14 @@ export class FileMutation {
       if (v.at < cutoff) this.lastWriter.delete(k);
     }
   }
+}
+
+function claveVisto(agentId: string, path: string): string {
+  return `${agentId}\0${resolve(path)}`;
+}
+
+function huella(contenido: string): string {
+  return createHash("sha1").update(contenido).digest("hex");
 }
 
 /** Una instancia por proceso: el lock es process-local (como OpenCode). */

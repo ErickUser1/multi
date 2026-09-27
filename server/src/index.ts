@@ -111,7 +111,7 @@ import {
   type Credencial,
   type EtapaDeploy,
 } from "./engine/publicar.js";
-import { startTurn, commitTurn, failTurnConCommit } from "./engine/turns.js";
+import { startTurn, commitTurn, failTurnConCommit, trabajoDeOtrosDesde } from "./engine/turns.js";
 import {
   commitAll,
   discardChanges,
@@ -2187,7 +2187,10 @@ async function runAgentTurn(
   const agent = room.agents.get(agentId);
   if (!agent) return;
 
-  agent.task = task.slice(0, 80);
+  // Lo que le pidieron, para la lista de agentes y para el resumen que reciben
+  // los demás. Con 80 caracteres los otros agentes leían "cada dia con su" y
+  // se quedaban sin saber qué era; la pantalla ya recorta por su cuenta.
+  agent.task = task.slice(0, 300);
   room.agents.setState(agentId, "working");
   io.to(room.id).emit("agents", { agents: room.agents.list() });
 
@@ -2251,7 +2254,8 @@ async function runAgentTurn(
       // Qué están haciendo los demás, para que no repita su trabajo. Se calcula
       // AL EMPEZAR el turno: es una foto del momento, no una suscripción.
       userMessage:
-        avisoDeBaseConectada(room.id, agentId, history.length > 0) + conContextoDeOtros(room, agentId, task),
+        avisoDeBaseConectada(room.id, agentId, history.length > 0) +
+        (await conContextoDeOtros(room, agentId, task)),
       imagenes,
       signal,
       agentId,
@@ -2372,9 +2376,19 @@ async function runAgentTurn(
  * cada turno: el prompt del sistema se cachea del lado del proveedor y meterle
  * algo variable tiraría ese caché en cada llamada.
  */
-function conContextoDeOtros(room: Room, agentId: string, task: string): string {
+async function conContextoDeOtros(room: Room, agentId: string, task: string): Promise<string> {
   const archivos = fileMutation.trabajoRecienteDeOtros(agentId, { sala: room.workspace.dir });
-  const resumen = resumenDeOtros(room.agents, agentId, archivos, ultimosMensajes(room));
+  // Lo que otros terminaron desde su último turno sale del disco (turnos y git).
+  // Si eso falla o tarda, el turno sigue con lo de en vivo: saber menos no es
+  // razón para no trabajar.
+  const desdeTuUltimoTurno = await Promise.race([
+    trabajoDeOtrosDesde(room.workspace.dir, agentId),
+    new Promise<undefined>((r) => setTimeout(() => r(undefined), 5_000)),
+  ]).catch((err) => {
+    console.error(`[sala ${room.id}] no se pudo leer el trabajo de otros agentes:`, err);
+    return undefined;
+  });
+  const resumen = resumenDeOtros(room.agents, agentId, archivos, ultimosMensajes(room), desdeTuUltimoTurno);
   return resumen ? `${resumen}\n\n${task}` : task;
 }
 

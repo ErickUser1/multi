@@ -3014,10 +3014,10 @@ img.av {
 
 /* ── El documento ─────────────────────────────────────────────────────────
  *
- * Una hoja clara sobre el lienzo oscuro, no texto gris sobre negro: así se lee
- * como documento y no como otra parte de la app, y lo que se ve es lo que sale
- * en el PDF. Los colores de la hoja viven aquí y no en :root porque solo
- * existen dentro de ella (la copia para imprimir vive fuera de .documento). */
+ * En pantalla, oscuro como el resto de la sala (al estilo del modo oscuro de
+ * Notion): la hoja es el mismo panel, sin tarjeta blanca encima. Al imprimir se
+ * vuelve blanco con tinta oscura, que es lo que se espera de un PDF. Por eso
+ * todos los colores de la hoja son variables: la impresión solo las cambia. */
 .documento {
   flex: 1;
   min-width: 0;
@@ -3059,16 +3059,19 @@ img.av {
   text-align: center;
 }
 .doc-hoja {
-  --hoja: #ffffff;
-  --tinta: #1d1d1f;
-  --tinta-dim: #5f6368;
-  --tinta-linea: #e3e3e3;
+  --hoja: transparent;
+  --tinta: #e6e6e6;
+  --tinta-dim: #9b9b9b;
+  --tinta-linea: #3a3a3a;
+  --tinta-fondo: rgba(255, 255, 255, 0.06);
+  --tinta-enlace: #7fb0ff;
+  --tinta-aviso: #ff9a85;
+  --tinta-aviso-fondo: rgba(255, 77, 28, 0.12);
   max-width: 816px;
   margin: 0 auto;
   background: var(--hoja);
   color: var(--tinta);
-  border-radius: 4px;
-  padding: 56px 64px 72px;
+  padding: 40px 64px 72px;
   font-family: Georgia, "Times New Roman", serif;
   font-size: 16px;
   line-height: 1.6;
@@ -3111,7 +3114,7 @@ img.av {
   margin: 0 0 1em;
 }
 .doc-md a {
-  color: #1a5fd0;
+  color: var(--tinta-enlace);
 }
 .doc-md blockquote {
   border-left: 3px solid var(--tinta-linea);
@@ -3121,12 +3124,12 @@ img.av {
 .doc-md code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.88em;
-  background: #f3f3f3;
+  background: var(--tinta-fondo);
   border-radius: 3px;
   padding: 1px 4px;
 }
 .doc-md pre {
-  background: #f6f6f6;
+  background: var(--tinta-fondo);
   border-radius: 4px;
   padding: 12px 14px;
   overflow-x: auto;
@@ -3150,7 +3153,7 @@ img.av {
   vertical-align: top;
 }
 .doc-md th {
-  background: #f5f5f5;
+  background: var(--tinta-fondo);
   font-family: "Segoe UI", system-ui, sans-serif;
 }
 .doc-md img {
@@ -3173,6 +3176,11 @@ img.av {
   max-width: 100%;
   height: auto;
 }
+/* El agente dibuja textos y líneas con currentColor: así el mismo diagrama se
+   lee claro en pantalla y oscuro en el PDF. */
+.doc-diagrama svg {
+  color: var(--tinta);
+}
 .doc-grafica .g-texto {
   font: 12px "Segoe UI", system-ui, sans-serif;
   fill: var(--tinta-dim);
@@ -3187,8 +3195,8 @@ img.av {
 }
 .doc-aviso {
   font: 13px "Segoe UI", system-ui, sans-serif;
-  color: #a33;
-  background: #fdf0ee;
+  color: var(--tinta-aviso);
+  background: var(--tinta-aviso-fondo);
   border-radius: 4px;
   padding: 8px 12px;
   margin: 0 0 1em;
@@ -3206,7 +3214,7 @@ img.av {
 .doc-linea {
   height: 10px;
   border-radius: 3px;
-  background: linear-gradient(90deg, #eee 0%, #f8f8f8 50%, #eee 100%);
+  background: linear-gradient(90deg, var(--tinta-fondo) 0%, rgba(255, 255, 255, 0.12) 50%, var(--tinta-fondo) 100%);
   background-size: 200% 100%;
   animation: doc-respira 1.6s ease-in-out infinite;
 }
@@ -3248,9 +3256,16 @@ img.av {
     display: block;
   }
   .doc-impresion .doc-hoja {
+    --hoja: #ffffff;
+    --tinta: #1d1d1f;
+    --tinta-dim: #5f6368;
+    --tinta-linea: #d9d9d9;
+    --tinta-fondo: #f3f3f3;
+    --tinta-enlace: #1a5fd0;
+    --tinta-aviso: #a33;
+    --tinta-aviso-fondo: #fdf0ee;
     max-width: none;
     padding: 0;
-    border-radius: 0;
   }
   .doc-impresion .doc-pendiente {
     display: none;

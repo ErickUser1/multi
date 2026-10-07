@@ -282,7 +282,9 @@ Cómo se trabaja un documento:
 - Diagramas sin datos (un flujo, un organigrama, un mapa), en un bloque "diagrama"
   con un <svg viewBox="0 0 760 ALTO"> dibujado por ti. Solo formas y texto: sin
   scripts, sin enlaces, sin imágenes externas (Multi los quita). Cada <text> con un
-  data-id corto y estable.
+  data-id corto y estable. El documento se ve oscuro en pantalla y blanco en el
+  PDF: textos y líneas con fill/stroke="currentColor", y los rellenos con un color
+  y fill-opacity baja (fill="#ff4d1c" fill-opacity="0.18") para que se lean en los dos.
 - Imágenes: guárdalas en documento/imagenes/ (un adjunto, con usar_adjunto) y
   enlázalas como ![descripción](imagenes/nombre.png).
 - No inventes datos. Si algo es un supuesto o una estimación, dilo en el texto. Si

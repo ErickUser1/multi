@@ -18,6 +18,7 @@ import { AgentRegistry } from "./engine/agents.js";
 import { KeyedMutex } from "./engine/keyed-mutex.js";
 import { RunCoordinator } from "./engine/coordinator.js";
 import { sweepOrphans, type Turn } from "./engine/turns.js";
+import { esDocumento, type TipoDeSala } from "./engine/documento.js";
 import { getStorage } from "./storage/index.js";
 
 /** Un miembro humano conectado a la sala. */
@@ -91,6 +92,13 @@ export interface Room {
    * esperaba.
    */
   modo: ModoDeSala;
+  /**
+   * Si la sala es software o documento, o null mientras nadie lo decide.
+   *
+   * No se guarda en la BD: lo dice el disco (ver `tipoDeSala`). Esto es solo el
+   * último valor que se le avisó a la sala, para saber cuándo cambió.
+   */
+  tipo?: TipoDeSala | null;
   /** El contenedor que aísla esta sala. null si se está corriendo sin Docker. */
   container?: Container | null;
   /** Dónde se ejecutan los comandos del agente (contenedor o local). */
@@ -287,6 +295,31 @@ async function despertarSala(id: string): Promise<Room | null> {
   await storage.touchRoom(id);
   void bootPreview(room);
   return room;
+}
+
+/**
+ * Qué es la sala: documento, software, o null si todavía nadie lo decide.
+ *
+ * Lo dice el disco y no una columna: si hay documento/documento.json es un
+ * documento; si hay un proyecto que se puede levantar, software. Así "volver
+ * atrás" en el historial también devuelve el tipo, y no hay dos verdades que
+ * se puedan desincronizar.
+ */
+export async function tipoDeSala(room: Room): Promise<TipoDeSala | null> {
+  if (esDocumento(room.workspace.dir)) return "documento";
+  if ((await detectLaunch(room.workspace.dir)) !== null) return "app";
+  return null;
+}
+
+/**
+ * Vuelve a mirar el tipo y dice si cambió desde la última vez que se avisó.
+ * Quien llama es quien avisa a la sala; aquí solo se lleva la cuenta.
+ */
+export async function actualizarTipo(room: Room): Promise<boolean> {
+  const tipo = await tipoDeSala(room);
+  if (tipo === (room.tipo ?? null)) return false;
+  room.tipo = tipo;
+  return true;
 }
 
 /** Carga el índice de salas al arrancar (sin despertarlas: eso es perezoso). */

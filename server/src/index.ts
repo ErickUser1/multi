@@ -25,6 +25,8 @@ import {
   deleteRoom,
   cambiarModo,
   renameRoom,
+  tipoDeSala,
+  actualizarTipo,
   type Room,
   type SelectedElement,
   dormirSalasOciosas,
@@ -74,6 +76,7 @@ import { fileMutation } from "./engine/file-mutation.js";
 import { leerVariables, modificarVariables, type Variable } from "./engine/env.js";
 import { accionDeTool, type Accion } from "./engine/actividad.js";
 import { WORKSPACES_ROOT } from "./engine/workspace.js";
+import { leerDocumento, imagenDelDocumento, CARPETA_DOCUMENTO } from "./engine/documento.js";
 
 /**
  * Lo último que hizo cada agente que está trabajando, por sala.
@@ -656,6 +659,38 @@ fastify.get<{ Params: { id: string; adjuntoId: string } }>(
       // Inmutable: el id es un UUID, nunca cambia de contenido.
       .header("cache-control", "public, max-age=31536000, immutable")
       .send(await readFile(ruta));
+  },
+);
+
+/**
+ * El documento de la sala, ya leído: título y secciones con su markdown.
+ *
+ * Va bajo `/rooms` porque el proxy del preview deja pasar ese prefijo. 404 si
+ * la sala no es un documento.
+ */
+fastify.get<{ Params: { id: string } }>("/rooms/:id/documento", async (req, reply) => {
+  const room = getRoom(req.params.id) ?? (await wakeRoom(req.params.id));
+  if (!room) return reply.code(404).send({ error: "sala no encontrada" });
+  const doc = await leerDocumento(room.workspace.dir);
+  if (!doc) return reply.code(404).send({ error: "esta sala no es un documento" });
+  return reply.header("cache-control", "no-store").send(doc);
+});
+
+// Las imágenes del documento (documento/imagenes/). Solo nombres planos y
+// formatos de imagen; SVG no, porque puede traer código.
+fastify.get<{ Params: { id: string; nombre: string } }>(
+  "/rooms/:id/documento/imagenes/:nombre",
+  async (req, reply) => {
+    const room = getRoom(req.params.id) ?? (await wakeRoom(req.params.id));
+    if (!room) return reply.code(404).send({ error: "sala no encontrada" });
+    const img = imagenDelDocumento(room.workspace.dir, req.params.nombre);
+    if (!img) return reply.code(404).send({ error: "imagen no encontrada" });
+    return reply
+      .header("content-type", img.tipo)
+      // El agente puede reemplazar la imagen con el mismo nombre.
+      .header("cache-control", "no-cache")
+      .header("x-content-type-options", "nosniff")
+      .send(await readFile(img.ruta));
   },
 );
 
@@ -1550,6 +1585,9 @@ io.on("connection", (socket) => {
       // Null si nadie la ha nombrado: la Sala muestra el id en ese caso.
       nombre: room.nombre ?? null,
       modo: room.modo,
+      // Documento, software, o null si nadie lo ha decidido. Se calcula aquí y
+      // no se lee de la sala: quien entra tiene que ver lo que hay en disco.
+      tipo: (room.tipo = await tipoDeSala(room)),
       you: member,
       members: membersList(room),
       previewUrl: room.preview?.url ?? null,
@@ -1910,6 +1948,8 @@ io.on("connection", (socket) => {
             : `${author} regresó el proyecto a un estado anterior`,
         );
         io.to(room.id).emit("history:changed", { newHash });
+        // Regresar a antes del documento devuelve la sala a "sin tipo".
+        void avisarTipo(room);
       } catch (err) {
         systemMsg(room, `no se pudo regresar: ${String(err)}`, "#d95d63");
       }
@@ -2278,6 +2318,10 @@ async function runAgentTurn(
         onToolEvent: (e) => {
           if (e.type === "file:changed") {
             io.to(room.id).emit("file:changed", { path: e.path, action: e.action });
+            // El primer archivo del documento es lo que convierte la sala: se
+            // avisa en ese momento y no al cerrar el turno, para que el panel
+            // cambie mientras el esqueleto aparece.
+            if (e.path.startsWith(`${CARPETA_DOCUMENTO}/`)) void avisarTipo(room);
           }
         },
       },
@@ -2334,6 +2378,9 @@ async function runAgentTurn(
     // El turno pudo haber creado el proyecto (la sala nace vacía): si ya se
     // puede levantar, el preview arranca solo y todos lo ven aparecer.
     void notifyPreviewWhenReady(room);
+    // O pudo haberla vuelto documento (o software) por bash, sin pasar por
+    // las tools que avisan en vivo.
+    void avisarTipo(room);
   } catch (err) {
     // El turno falló, pero lo que alcanzó a hacer NO se tira.
     //
@@ -2431,6 +2478,18 @@ function summarizeTool(name: string, input: Record<string, unknown>): string {
   if (name === "bash") return `$ ${String(input.command).slice(0, 60)}`;
   if (name === "glob" || name === "grep") return `${name} ${input.pattern ?? ""}`;
   return name;
+}
+
+/**
+ * Si la sala cambió de tipo (se volvió documento o software), avisa a todos
+ * para que el panel cambie sin recargar.
+ */
+async function avisarTipo(room: Room): Promise<void> {
+  try {
+    if (await actualizarTipo(room)) io.to(room.id).emit("room:tipo", { tipo: room.tipo ?? null });
+  } catch (err) {
+    console.error(`[sala ${room.id}] no se pudo revisar el tipo:`, err);
+  }
 }
 
 /**

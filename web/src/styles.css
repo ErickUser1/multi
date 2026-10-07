@@ -3011,3 +3011,276 @@ img.av {
     opacity: 0.35;
   }
 }
+
+/* ── El documento ─────────────────────────────────────────────────────────
+ *
+ * En pantalla, oscuro como el resto de la sala (al estilo del modo oscuro de
+ * Notion): la hoja es el mismo panel, sin tarjeta blanca encima. Al imprimir se
+ * vuelve blanco con tinta oscura, que es lo que se espera de un PDF. Por eso
+ * todos los colores de la hoja son variables: la impresión solo las cambia. */
+.documento {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.doc-barra {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--linea);
+}
+.doc-boton {
+  font: inherit;
+  font-size: 12px;
+  color: var(--texto);
+  background: transparent;
+  border: 1px solid var(--linea);
+  border-radius: 4px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+.doc-boton:hover {
+  border-color: var(--dim);
+}
+.doc-scroll {
+  flex: 1;
+  overflow: auto;
+  padding: 24px 16px 48px;
+}
+.doc-estado {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  color: var(--dim);
+  font-size: 13px;
+  padding: 16px;
+  text-align: center;
+}
+.doc-hoja {
+  --hoja: transparent;
+  --tinta: #e6e6e6;
+  --tinta-dim: #9b9b9b;
+  --tinta-linea: #3a3a3a;
+  --tinta-fondo: rgba(255, 255, 255, 0.06);
+  --tinta-enlace: #7fb0ff;
+  --tinta-aviso: #ff9a85;
+  --tinta-aviso-fondo: rgba(255, 77, 28, 0.12);
+  max-width: 816px;
+  margin: 0 auto;
+  background: var(--hoja);
+  color: var(--tinta);
+  padding: 40px 64px 72px;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 16px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 700px) {
+  .doc-hoja {
+    padding: 32px 20px 48px;
+  }
+}
+.doc-titulo {
+  font-size: 30px;
+  line-height: 1.2;
+  margin: 0 0 28px;
+}
+.doc-seccion + .doc-seccion {
+  margin-top: 8px;
+}
+.doc-md h1,
+.doc-md h2,
+.doc-md h3,
+.doc-md h4 {
+  font-family: "Segoe UI", system-ui, sans-serif;
+  line-height: 1.3;
+  margin: 1.4em 0 0.5em;
+}
+.doc-md h2 {
+  font-size: 22px;
+}
+.doc-md h3 {
+  font-size: 18px;
+}
+.doc-md p,
+.doc-md ul,
+.doc-md ol,
+.doc-md blockquote,
+.doc-md pre,
+.doc-md table,
+.doc-md figure {
+  margin: 0 0 1em;
+}
+.doc-md a {
+  color: var(--tinta-enlace);
+}
+.doc-md blockquote {
+  border-left: 3px solid var(--tinta-linea);
+  padding-left: 14px;
+  color: var(--tinta-dim);
+}
+.doc-md code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.88em;
+  background: var(--tinta-fondo);
+  border-radius: 3px;
+  padding: 1px 4px;
+}
+.doc-md pre {
+  background: var(--tinta-fondo);
+  border-radius: 4px;
+  padding: 12px 14px;
+  overflow-x: auto;
+}
+.doc-md pre code {
+  background: none;
+  padding: 0;
+}
+.doc-md table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 14px;
+  display: block;
+  overflow-x: auto;
+}
+.doc-md th,
+.doc-md td {
+  border: 1px solid var(--tinta-linea);
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+.doc-md th {
+  background: var(--tinta-fondo);
+  font-family: "Segoe UI", system-ui, sans-serif;
+}
+.doc-md img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 3px;
+}
+.doc-md hr {
+  border: 0;
+  border-top: 1px solid var(--tinta-linea);
+  margin: 2em 0;
+}
+.doc-grafica,
+.doc-diagrama {
+  margin: 0 0 1.2em;
+  text-align: center;
+}
+.doc-grafica svg,
+.doc-diagrama svg {
+  max-width: 100%;
+  height: auto;
+}
+/* El agente dibuja textos y líneas con currentColor: así el mismo diagrama se
+   lee claro en pantalla y oscuro en el PDF. */
+.doc-diagrama svg {
+  color: var(--tinta);
+}
+.doc-grafica .g-texto {
+  font: 12px "Segoe UI", system-ui, sans-serif;
+  fill: var(--tinta-dim);
+}
+.doc-grafica .g-titulo {
+  font: 600 15px "Segoe UI", system-ui, sans-serif;
+  fill: var(--tinta);
+}
+.doc-grafica .g-rejilla {
+  stroke: var(--tinta-linea);
+  stroke-width: 1;
+}
+.doc-aviso {
+  font: 13px "Segoe UI", system-ui, sans-serif;
+  color: var(--tinta-aviso);
+  background: var(--tinta-aviso-fondo);
+  border-radius: 4px;
+  padding: 8px 12px;
+  margin: 0 0 1em;
+}
+/* Una sección que nadie ha escrito: lo que va a llevar y unas líneas que
+   respiran, para que se note que alguien está en eso. */
+.doc-pendiente {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 1.4em;
+  font: italic 14px "Segoe UI", system-ui, sans-serif;
+  color: var(--tinta-dim);
+}
+.doc-linea {
+  height: 10px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--tinta-fondo) 0%, rgba(255, 255, 255, 0.12) 50%, var(--tinta-fondo) 100%);
+  background-size: 200% 100%;
+  animation: doc-respira 1.6s ease-in-out infinite;
+}
+.doc-linea.corta {
+  width: 60%;
+}
+@keyframes doc-respira {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .doc-linea {
+    animation: none;
+  }
+}
+
+/* La copia para imprimir no se ve en pantalla. */
+.doc-impresion {
+  display: none;
+}
+@media print {
+  @page {
+    margin: 18mm 16mm;
+  }
+  html,
+  body {
+    background: #fff !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+  body > *:not(.doc-impresion) {
+    display: none !important;
+  }
+  .doc-impresion {
+    display: block;
+  }
+  .doc-impresion .doc-hoja {
+    --hoja: #ffffff;
+    --tinta: #1d1d1f;
+    --tinta-dim: #5f6368;
+    --tinta-linea: #d9d9d9;
+    --tinta-fondo: #f3f3f3;
+    --tinta-enlace: #1a5fd0;
+    --tinta-aviso: #a33;
+    --tinta-aviso-fondo: #fdf0ee;
+    max-width: none;
+    padding: 0;
+  }
+  .doc-impresion .doc-pendiente {
+    display: none;
+  }
+  .doc-impresion .doc-md h2,
+  .doc-impresion .doc-md h3 {
+    break-after: avoid;
+  }
+  /* En la hoja impresa una gráfica a todo lo ancho pesa más que el texto. */
+  .doc-impresion figure svg {
+    max-width: 15cm;
+  }
+  .doc-impresion figure,
+  .doc-impresion tr,
+  .doc-impresion img {
+    break-inside: avoid;
+  }
+}

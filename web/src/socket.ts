@@ -96,6 +96,9 @@ export interface SelectionInfo {
 /** Cuánta gente asume una sala. */
 export type ModoDeSala = "solo" | "multi";
 
+/** Qué es la sala. Lo decide el agente con el primer pedido. */
+export type TipoDeSala = "app" | "documento";
+
 export interface JoinedPayload {
   roomId: string;
   /** Cómo le dicen a esta sala, o null si nadie la ha nombrado (se ve el id). */
@@ -107,6 +110,8 @@ export interface JoinedPayload {
    * conoce. En "multi" sí, que es lo que deja platicar sin gastar tokens.
    */
   modo?: ModoDeSala;
+  /** Si la sala es un documento, software, o null mientras nadie lo decide. */
+  tipo?: TipoDeSala | null;
   you: Member;
   members: Member[];
   previewUrl: string | null;

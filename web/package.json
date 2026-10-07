@@ -9,11 +9,14 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "dompurify": "^3.4.16",
+    "markdown-it": "^15.0.2",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "socket.io-client": "^4.8.3"
   },
   "devDependencies": {
+    "@types/markdown-it": "^14.2.0",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^6.0.0",

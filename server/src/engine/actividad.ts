@@ -20,6 +20,7 @@ export type TipoDeAccion =
   | "baseDeDatos"
   | "verBase"
   | "adjunto"
+  | "documento"
   | "crearProyecto"
   | "instalar"
   | "compilar"
@@ -56,6 +57,8 @@ export function accionDeTool(nombre: string, input: Record<string, unknown>): Ac
       return { tipo: "baseDeDatos", detalle: texto("descripcion") };
     case "ver_base":
       return { tipo: "verBase", detalle: texto("consulta") || undefined };
+    case "iniciar_documento":
+      return { tipo: "documento", detalle: texto("titulo") || undefined };
     case "usar_adjunto":
       return { tipo: "adjunto", detalle: texto("destino") || undefined };
     case "bash":

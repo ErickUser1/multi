@@ -4,11 +4,19 @@ import { bashTool } from "./bash.js";
 import { usarAdjuntoTool } from "./adjuntos.js";
 import { sqlTool } from "./sql.js";
 import { verBaseTool } from "./ver-base.js";
+import { iniciarDocumentoTool } from "./documento.js";
 
 export * from "./base.js";
 
 /** Todas las tools del agente. */
-export const allTools: Tool[] = [...fsTools, bashTool, usarAdjuntoTool, sqlTool, verBaseTool];
+export const allTools: Tool[] = [
+  ...fsTools,
+  bashTool,
+  usarAdjuntoTool,
+  sqlTool,
+  verBaseTool,
+  iniciarDocumentoTool,
+];
 
 /** Registro por nombre, para despachar los tool_use. */
 export const toolRegistry = new Map<string, Tool>(allTools.map((t) => [t.spec.name, t]));

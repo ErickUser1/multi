@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { DocumentoView } from "./documento/DocumentoView";
 import type { Socket } from "socket.io-client";
 import {
   connectSocket,
@@ -8,6 +9,7 @@ import {
   type Member,
   type JoinedPayload,
   type ModoDeSala,
+  type TipoDeSala,
   type SelectedElement,
   type CursorInfo,
   type SelectionInfo,
@@ -482,6 +484,12 @@ function Sala({
    * Con null, los textos que dependen del modo no se pintan hasta saberlo.
    */
   const [modo, setModo] = useState<ModoDeSala | null>(null);
+  // Documento, software, o null mientras el agente no decide. Un documento lo
+  // pinta Multi en el lienzo en vez del preview.
+  const [tipo, setTipo] = useState<TipoDeSala | null>(null);
+  // Sube con cada archivo que cambia dentro de documento/: la vista lo vuelve a
+  // pedir. Junto con histVersion cubre los turnos y el "volver atrás".
+  const [docCambios, setDocCambios] = useState(0);
   /**
    * Lo que de verdad pasa al escribir. Sola en la sala, escribir despierta al
    * agente aunque el modo diga Multijugador (el server decide igual, ver
@@ -822,6 +830,7 @@ function Sala({
       setMembers(p.members);
       setNombre(p.nombre ?? null);
       setModo(p.modo ?? "multi");
+      setTipo(p.tipo ?? null);
       recordarNombre(roomId, p.nombre ?? null);
       setPublicando(p.publicando ?? null);
       setUrlPublicada(p.urlPublicada ?? null);
@@ -895,6 +904,9 @@ function Sala({
     // Lo manda el server cuando alguien lo cambia, y también solo, cuando entra
     // una segunda persona y la sala deja de ser de una.
     socket.on("room:modo", ({ modo }: { modo: ModoDeSala }) => setModo(modo));
+    // El agente decidió que la sala es un documento (o regresaron a antes de
+    // que lo fuera): el lienzo cambia para todos sin recargar.
+    socket.on("room:tipo", ({ tipo }: { tipo: TipoDeSala | null }) => setTipo(tipo));
 
     socket.on("room:renamed", ({ nombre }: { nombre: string | null }) => {
       setNombre(nombre);
@@ -959,7 +971,8 @@ function Sala({
       setFalloElArranque(false);
     });
     // Tocó un archivo: está construyendo de verdad, no solo contestando.
-    socket.on("file:changed", () => {
+    socket.on("file:changed", ({ path }: { path?: string }) => {
+      if (path?.startsWith("documento/")) setDocCambios((n) => n + 1);
       setArmando(true);
       // Volvió a escribir: lo está arreglando, así que el aviso de fallo sobra.
       setFalloElArranque(false);
@@ -1973,7 +1986,7 @@ function Sala({
               esa petición no tiene dónde aterrizar. */}
           <div className="switch-vista" role="group">
             <button className="switch-op activa" type="button">
-              {t.vistaPreview}
+              {tipo === "documento" ? t.vistaDocumento : t.vistaPreview}
             </button>
             <button className="switch-op" type="button" disabled title={t.vistaCodigoPronto}>
               {t.vistaCodigo}
@@ -2100,8 +2113,10 @@ function Sala({
               de la barra: ahí arriba se veía igual que "compartir" o
               "variables", que son otra cosa. Flotando encima de lo que señala
               se entiende sin leerlo. */}
-          {roomId && previewReady && (
+          {roomId && (previewReady || tipo === "documento") && (
             <div className="herramientas-preview">
+            {tipo !== "documento" && (
+            <>
             <button
               className={`inspect-flotante ${inspect ? "on" : ""}`}
               onClick={() => setInspect((v) => !v)}
@@ -2129,6 +2144,8 @@ function Sala({
             >
               <IconoDeVista vista={vista} />
             </button>
+            </>
+            )}
             {/* El historial, detrás de un icono. Antes vivía siempre abierto
                 debajo del preview, y eso son unos cincuenta píxeles de alto
                 para algo que se consulta de vez en cuando. */}
@@ -2150,7 +2167,9 @@ function Sala({
             </button>
             </div>
           )}
-          {previewReady ? (
+          {roomId && tipo === "documento" ? (
+            <DocumentoView roomId={roomId} version={docCambios + histVersion} />
+          ) : previewReady ? (
             <>
               {/* El ancho va en el marco, no en el iframe, y el iframe NUNCA se
                   desmonta: recargarlo perdería el estado de la app (formularios
@@ -2498,6 +2517,7 @@ interface AccionAgente {
     | "baseDeDatos"
     | "verBase"
     | "adjunto"
+    | "documento"
     | "crearProyecto"
     | "instalar"
     | "compilar"
@@ -2531,6 +2551,8 @@ function fraseDeAccion(a: AccionAgente, t: Textos): string {
       return t.actVerBase;
     case "adjunto":
       return t.actAdjunto;
+    case "documento":
+      return t.actDocumento;
     case "crearProyecto":
       return t.actCrearProyecto;
     case "instalar":

@@ -50,7 +50,6 @@
     "@fastify/static": "^10.1.2",
     "@tiptap/core": "^3.31.4",
     "@tiptap/extension-table": "^3.31.4",
-    "@tiptap/extension-unique-id": "^3.31.4",
     "@tiptap/pm": "^3.31.4",
     "@tiptap/starter-kit": "^3.31.4",
     "@tiptap/y-tiptap": "^3.0.9",

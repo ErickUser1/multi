@@ -8,7 +8,7 @@ import { writeTool } from "../agent/tools/fs.js";
 import { ToolError, type Tool, type ToolContext, type ToolEvent } from "../agent/tools/base.js";
 import { localRunner } from "../engine/runner.js";
 import { esDocumento, imagenDelDocumento, nombreSeguro } from "../engine/documento.js";
-import { documentosVivos, estado, exportarMarkdown, FRAGMENTO } from "../engine/doc-vivo.js";
+import { documentosVivos, estado, exportarMarkdown, FRAGMENTO, idDeElemento } from "../engine/doc-vivo.js";
 import { markdownABloques, bloquesAMarkdown } from "../engine/doc-markdown.js";
 import { accionDeTool } from "../engine/actividad.js";
 import { commitAll, revertTo } from "../engine/git.js";
@@ -135,7 +135,6 @@ async function main(): Promise<void> {
   const b = markdownABloques(md2);
   check("una segunda vuelta no cambia nada", bloquesAMarkdown(b.bloques, b.objetos) === md2);
   check("la gráfica y el diagrama son objetos aparte", Object.values(a.objetos).map((o) => o.tipo).sort().join() === "diagrama,grafica");
-  check("cada bloque de arriba trae id", a.bloques.every((x) => typeof x.attrs?.id === "string"));
   const raro = markdownABloques("<div onclick=x>html suelto</div>\n\nTexto con ![img](a.png) en medio.");
   check(
     "lo que no se reconoce queda como texto, no se tira",
@@ -178,7 +177,10 @@ async function main(): Promise<void> {
   );
   leido = await tool("leer_documento").run({}, ctx);
   check("la sección escrita deja de estar pendiente", !/«Resumen».*PENDIENTE/.test(leido));
-  check("conserva el id de su título", seccion(leido, "Resumen").id === resumen.id);
+  check("los ids de bloque son únicos", (() => {
+    const ids = estado(documentosVivos.obtener("sala-a")!).ids;
+    return new Set(ids).size === ids.length && ids.every((x) => /^[0-9a-z]+\.[0-9a-z]+$/.test(x));
+  })());
   const viejo = await falla(() =>
     tool("escribir_seccion").run({ seccion: resumen.id, huella: resumen.huella, markdown: "## Resumen\n\nOtra cosa." }, ctx),
   );
@@ -189,7 +191,7 @@ async function main(): Promise<void> {
   const p1 = bloque(leido, "Multi es una sala.");
   const p2 = bloque(leido, "Segundo párrafo.");
   const frag = doc.ydoc.getXmlFragment(FRAGMENTO);
-  const elemento = frag.toArray().find((e) => e instanceof Y.XmlElement && e.getAttribute("id") === p1.id) as Y.XmlElement;
+  const elemento = frag.toArray().find((e) => e instanceof Y.XmlElement && idDeElemento(e) === p1.id) as Y.XmlElement;
   doc.ydoc.transact(() => (elemento.get(0) as Y.XmlText).insert(0, "Hoy "), { autor: "Erick" });
   const pisar = await falla(() => tool("reemplazar_bloque").run({ id: p1.id, huella: p1.huella, markdown: "Reescrito." }, ctx));
   check("el agente no pisa lo que una persona acaba de cambiar", !!pisar?.includes("lo tocó Erick"), String(pisar));
@@ -290,8 +292,8 @@ async function main(): Promise<void> {
 
   function exportarMarkdownConIds(): string {
     const d = documentosVivos.obtener("sala-a")!;
-    const { bloques, objetos } = estado(d);
-    return bloquesAMarkdown(bloques, objetos, { conIds: true });
+    const { bloques, ids, objetos } = estado(d);
+    return bloquesAMarkdown(bloques, objetos, { ids });
   }
 
   await Promise.all(["sala-a", "sala-vieja"].map((id) => documentosVivos.cerrar(id)));

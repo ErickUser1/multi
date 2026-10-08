@@ -41,8 +41,8 @@ const esTitulo = (b: JSONContent) => b.type === "heading";
 const nivel = (b: JSONContent) => Number(b.attrs?.level ?? 9);
 
 /** Dónde empieza y termina una sección: su título y lo que sigue hasta el siguiente del mismo nivel o mayor. */
-function rangoDeSeccion(bloques: JSONContent[], id: string): [number, number] | null {
-  const i = bloques.findIndex((b) => b.attrs?.id === id);
+function rangoDeSeccion(bloques: JSONContent[], ids: string[], id: string): [number, number] | null {
+  const i = ids.indexOf(id);
   if (i < 0 || !esTitulo(bloques[i])) return null;
   const n = nivel(bloques[i]);
   let j = i + 1;
@@ -57,11 +57,11 @@ function hashDeRango(bloques: JSONContent[], objetos: Objetos): string {
 }
 
 /** Las secciones del documento, para que el agente sepa qué ids y huellas usar. */
-function indice(bloques: JSONContent[], objetos: Objetos): string {
+function indice(bloques: JSONContent[], ids: string[], objetos: Objetos): string {
   const lineas: string[] = [];
-  bloques.forEach((b) => {
+  bloques.forEach((b, i) => {
     if (!esTitulo(b) || nivel(b) > 2) return;
-    const r = rangoDeSeccion(bloques, String(b.attrs?.id))!;
+    const r = rangoDeSeccion(bloques, ids, ids[i])!;
     const cuerpo = bloques.slice(r[0], r[1]);
     // Pendiente es lo que falta en SU texto, hasta el siguiente título de
     // cualquier nivel: el título del documento no está pendiente porque una de
@@ -70,7 +70,7 @@ function indice(bloques: JSONContent[], objetos: Objetos): string {
     while (fin < r[1] && !esTitulo(bloques[fin])) fin++;
     const pendiente = bloques.slice(r[0], fin).some((x) => x.type === "pendiente") ? " (PENDIENTE)" : "";
     lineas.push(
-      `- ${"#".repeat(nivel(b))} «${textoDe(b)}» seccion=${b.attrs?.id} huella_seccion=${hashDeRango(cuerpo, objetos)}${pendiente}`,
+      `- ${"#".repeat(nivel(b))} «${textoDe(b)}» seccion=${ids[i]} huella_seccion=${hashDeRango(cuerpo, objetos)}${pendiente}`,
     );
   });
   return lineas.join("\n");
@@ -80,7 +80,8 @@ export function operacionesDeDocumento(
   roomId: string,
   dir: string,
   autor: string,
-  avisar: () => void = () => {},
+  /** Dónde está escribiendo: la sala lo marca en la hoja ("agente-1 escribiendo aquí"). */
+  alEscribir: (bloques: string[]) => void = () => {},
 ): OperacionesDeDocumento {
   const origen: Origen = { autor };
 
@@ -91,22 +92,25 @@ export function operacionesDeDocumento(
   };
 
   /** Quién tocó por última vez alguno de estos bloques, si no fui yo. */
-  const quienCambio = (doc: DocVivo, bloques: JSONContent[]): string | null => {
+  const quienCambio = (doc: DocVivo, ids: string[]): string | null => {
     let ultimo: { autor: string; en: number } | null = null;
-    for (const b of bloques) {
-      const a = doc.autorPorBloque.get(String(b.attrs?.id));
+    for (const id of ids) {
+      const a = doc.autorPorBloque.get(id);
       if (a && a.autor !== autor && (!ultimo || a.en > ultimo.en)) ultimo = a;
     }
     return ultimo?.autor ?? null;
   };
 
-  const rechazo = (doc: DocVivo, que: string, bloques: JSONContent[]): ToolError => {
-    const quien = quienCambio(doc, bloques);
+  const rechazo = (doc: DocVivo, que: string, ids: string[]): ToolError => {
+    const quien = quienCambio(doc, ids);
     return new ToolError(
       `${que} cambió desde que lo leíste${quien ? ` (lo tocó ${quien})` : ""}. ` +
         `Vuelve a leerlo con leer_documento y haz tu cambio sobre lo nuevo; no repitas lo que ya está.`,
     );
   };
+
+  const noExiste = (id: string) =>
+    new ToolError(`no hay un bloque con id ${id}: pudo haberse borrado o reemplazado. Vuelve a leer el documento`);
 
   const nuevosBloques = (markdown: string) => {
     if (!markdown.trim()) throw new ToolError("el markdown llegó vacío; para quitar un bloque usa borrar_bloque");
@@ -115,8 +119,8 @@ export function operacionesDeDocumento(
     return r;
   };
 
-  const hecho = (texto: string) => {
-    avisar();
+  const hecho = (texto: string, bloques: string[]) => {
+    alEscribir(bloques);
     return texto;
   };
 
@@ -130,117 +134,118 @@ export function operacionesDeDocumento(
       } catch (err) {
         throw new ToolError(String((err as Error).message ?? err));
       }
-      avisar();
       return this.leer();
     },
 
     async leer(seccion) {
       const doc = await abierto();
-      const { bloques, objetos } = estado(doc);
-      let parte = bloques;
+      const { bloques, ids, objetos } = estado(doc);
+      let parte: [number, number] = [0, bloques.length];
       if (seccion) {
-        const r = rangoDeSeccion(bloques, seccion);
+        const r = rangoDeSeccion(bloques, ids, seccion);
         if (!r) throw new ToolError(`no hay una sección con id ${seccion}; lee el documento completo para ver los ids`);
-        parte = bloques.slice(r[0], r[1]);
+        parte = r;
       }
       return [
         `revisión ${doc.revision}`,
         "Secciones:",
-        indice(bloques, objetos) || "(ninguna)",
+        indice(bloques, ids, objetos) || "(ninguna)",
         "",
         "Contenido (cada bloque va precedido de ⟦id·huella⟧):",
-        bloquesAMarkdown(parte, objetos, { conIds: true }) || "(vacío)",
+        bloquesAMarkdown(bloques.slice(...parte), objetos, { ids: ids.slice(...parte) }) || "(vacío)",
       ].join("\n");
     },
 
     async escribirSeccion(seccion, hash, markdown) {
       const doc = await abierto();
-      const { bloques, objetos } = estado(doc);
-      const r = rangoDeSeccion(bloques, seccion);
+      const { bloques, ids, objetos } = estado(doc);
+      const r = rangoDeSeccion(bloques, ids, seccion);
       if (!r) throw new ToolError(`no hay una sección con id ${seccion}`);
       const actual = bloques.slice(r[0], r[1]);
-      if (hashDeRango(actual, objetos) !== hash) throw rechazo(doc, `La sección «${textoDe(bloques[r[0]])}»`, actual);
-      const nuevo = nuevosBloques(markdown);
-      let cuerpo = nuevo.bloques;
-      const titulo = { ...bloques[r[0]] };
-      // Si el markdown trae su propio título, reemplaza al de la sección pero
-      // conserva el id: los comentarios y los demás agentes la siguen encontrando.
-      if (esTitulo(cuerpo[0])) {
-        Object.assign(titulo, cuerpo[0], { attrs: { ...cuerpo[0].attrs, id: titulo.attrs?.id } });
-        cuerpo = cuerpo.slice(1);
+      if (hashDeRango(actual, objetos) !== hash) {
+        throw rechazo(doc, `La sección «${textoDe(bloques[r[0]])}»`, ids.slice(r[0], r[1]));
       }
-      aplicar(doc, origen, (a) => ({
-        bloques: [...a.bloques.slice(0, r[0]), titulo, ...cuerpo, ...a.bloques.slice(r[1])],
+      const nuevo = nuevosBloques(markdown);
+      // Si el markdown no trae su título, se queda el que tenía.
+      const completa = esTitulo(nuevo.bloques[0]) ? nuevo.bloques : [bloques[r[0]], ...nuevo.bloques];
+      const finales = aplicar(doc, origen, (a) => ({
+        bloques: [...a.bloques.slice(0, r[0]), ...completa, ...a.bloques.slice(r[1])],
         objetos: nuevo.objetos,
       }));
-      return hecho(`sección «${textoDe(titulo)}» escrita (${cuerpo.length} bloques)`);
+      return hecho(
+        `sección «${textoDe(completa[0])}» escrita (${completa.length - 1} bloques). Su id ahora es ${finales[r[0]]}`,
+        finales.slice(r[0], r[0] + completa.length),
+      );
     },
 
     async reemplazarBloque(id, hash, markdown) {
       const doc = await abierto();
-      const { bloques, objetos } = estado(doc);
-      const i = bloques.findIndex((b) => b.attrs?.id === id);
-      if (i < 0) throw new ToolError(`no hay un bloque con id ${id}`);
-      if (hashDeBloque(bloques[i], objetos) !== hash) throw rechazo(doc, "Ese bloque", [bloques[i]]);
+      const { bloques, ids, objetos } = estado(doc);
+      const i = ids.indexOf(id);
+      if (i < 0) throw noExiste(id);
+      if (hashDeBloque(bloques[i], objetos) !== hash) throw rechazo(doc, "Ese bloque", [id]);
       const nuevo = nuevosBloques(markdown);
-      // Un bloque que se reemplaza por uno del mismo tipo conserva su id.
-      if (nuevo.bloques.length === 1 && nuevo.bloques[0].type === bloques[i].type) {
-        nuevo.bloques[0] = { ...nuevo.bloques[0], attrs: { ...nuevo.bloques[0].attrs, id } };
-      }
-      aplicar(doc, origen, (a) => ({
+      const finales = aplicar(doc, origen, (a) => ({
         bloques: [...a.bloques.slice(0, i), ...nuevo.bloques, ...a.bloques.slice(i + 1)],
         objetos: nuevo.objetos,
       }));
-      return hecho(`bloque reemplazado (${nuevo.bloques.length} nuevo${nuevo.bloques.length > 1 ? "s" : ""})`);
+      return hecho(
+        `bloque reemplazado (${nuevo.bloques.length} nuevo${nuevo.bloques.length > 1 ? "s" : ""})`,
+        finales.slice(i, i + nuevo.bloques.length),
+      );
     },
 
     async insertarBloques(despuesDe, markdown) {
       const doc = await abierto();
-      const { bloques } = estado(doc);
-      const i = despuesDe === "inicio" ? -1 : bloques.findIndex((b) => b.attrs?.id === despuesDe);
-      if (i < 0 && despuesDe !== "inicio") throw new ToolError(`no hay un bloque con id ${despuesDe}`);
+      const { ids } = estado(doc);
+      const i = despuesDe === "inicio" ? -1 : ids.indexOf(despuesDe);
+      if (i < 0 && despuesDe !== "inicio") throw noExiste(despuesDe);
       const nuevo = nuevosBloques(markdown);
-      aplicar(doc, origen, (a) => ({
+      const finales = aplicar(doc, origen, (a) => ({
         bloques: [...a.bloques.slice(0, i + 1), ...nuevo.bloques, ...a.bloques.slice(i + 1)],
         objetos: nuevo.objetos,
       }));
-      return hecho(`${nuevo.bloques.length} bloque${nuevo.bloques.length > 1 ? "s" : ""} insertado${nuevo.bloques.length > 1 ? "s" : ""}`);
+      return hecho(
+        `${nuevo.bloques.length} bloque${nuevo.bloques.length > 1 ? "s" : ""} insertado${nuevo.bloques.length > 1 ? "s" : ""}`,
+        finales.slice(i + 1, i + 1 + nuevo.bloques.length),
+      );
     },
 
     async borrarBloque(id, hash) {
       const doc = await abierto();
-      const { bloques, objetos } = estado(doc);
-      const i = bloques.findIndex((b) => b.attrs?.id === id);
-      if (i < 0) throw new ToolError(`no hay un bloque con id ${id}`);
-      if (hashDeBloque(bloques[i], objetos) !== hash) throw rechazo(doc, "Ese bloque", [bloques[i]]);
+      const { bloques, ids, objetos } = estado(doc);
+      const i = ids.indexOf(id);
+      if (i < 0) throw noExiste(id);
+      if (hashDeBloque(bloques[i], objetos) !== hash) throw rechazo(doc, "Ese bloque", [id]);
       aplicar(doc, origen, (a) => ({ bloques: [...a.bloques.slice(0, i), ...a.bloques.slice(i + 1)] }));
-      return hecho("bloque borrado");
+      return hecho("bloque borrado", []);
     },
 
     async moverSeccion(seccion, antesDe) {
       const doc = await abierto();
-      const { bloques } = estado(doc);
-      const r = rangoDeSeccion(bloques, seccion);
+      const { bloques, ids } = estado(doc);
+      const r = rangoDeSeccion(bloques, ids, seccion);
       if (!r) throw new ToolError(`no hay una sección con id ${seccion}`);
       const parte = bloques.slice(r[0], r[1]);
       const resto = [...bloques.slice(0, r[0]), ...bloques.slice(r[1])];
+      const idsResto = [...ids.slice(0, r[0]), ...ids.slice(r[1])];
       let k = resto.length;
       if (antesDe) {
-        k = resto.findIndex((b) => b.attrs?.id === antesDe);
+        k = idsResto.indexOf(antesDe);
         if (k < 0) throw new ToolError(`no hay un bloque con id ${antesDe} fuera de la sección que mueves`);
       }
-      aplicar(doc, origen, () => ({ bloques: [...resto.slice(0, k), ...parte, ...resto.slice(k)] }));
-      return hecho(`sección «${textoDe(parte[0])}» movida`);
+      const finales = aplicar(doc, origen, () => ({ bloques: [...resto.slice(0, k), ...parte, ...resto.slice(k)] }));
+      return hecho(`sección «${textoDe(parte[0])}» movida`, finales.slice(k, k + parte.length));
     },
 
     async cambiarObjeto(id, hash, fuente) {
       const doc = await abierto();
-      const { bloques, objetos } = estado(doc);
-      const b = bloques.find((x) => x.attrs?.id === id);
+      const { bloques, ids, objetos } = estado(doc);
+      const b = bloques[ids.indexOf(id)];
       if (!b || (b.type !== "grafica" && b.type !== "diagrama")) {
         throw new ToolError(`no hay una gráfica ni un diagrama con id ${id}`);
       }
-      if (hashDeBloque(b, objetos) !== hash) throw rechazo(doc, b.type === "grafica" ? "Esa gráfica" : "Ese diagrama", [b]);
+      if (hashDeBloque(b, objetos) !== hash) throw rechazo(doc, b.type === "grafica" ? "Esa gráfica" : "Ese diagrama", [id]);
       if (b.type === "grafica") {
         try {
           JSON.parse(fuente);
@@ -249,7 +254,7 @@ export function operacionesDeDocumento(
         }
       }
       cambiarObjeto(doc, origen, String(b.attrs?.ref), fuente);
-      return hecho(b.type === "grafica" ? "gráfica actualizada" : "diagrama actualizado");
+      return hecho(b.type === "grafica" ? "gráfica actualizada" : "diagrama actualizado", [id]);
     },
   };
 }

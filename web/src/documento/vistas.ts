@@ -1,5 +1,5 @@
 import type * as Y from "yjs";
-import type { Extensions, AnyExtension } from "@tiptap/core";
+import type { Extensions, AnyExtension, Editor } from "@tiptap/core";
 import type { Node as PMNode } from "@tiptap/pm/model";
 import { graficaSvg } from "./grafica";
 import { diagramaSeguro } from "./svg-seguro";
@@ -20,12 +20,24 @@ interface Objeto {
   fuente: string;
 }
 
-function vistaDeObjeto(objetos: Y.Map<Objeto>, clase: string, dibujar: (fuente: string) => string, aviso: string) {
-  return ({ node }: { node: PMNode }) => {
+function vistaDeObjeto(
+  objetos: Y.Map<Objeto>,
+  clase: string,
+  dibujar: (fuente: string) => string,
+  aviso: string,
+  alAbrir?: (ref: string) => void,
+) {
+  return ({ node, editor }: { node: PMNode; editor: Editor }) => {
     const dom = document.createElement("figure");
     dom.className = clase;
     dom.contentEditable = "false";
     let ref = String(node.attrs.ref ?? "");
+    // Doble clic abre sus datos (un clic solo la selecciona, para moverla o borrarla).
+    if (alAbrir) {
+      dom.addEventListener("dblclick", () => {
+        if (editor.isEditable) alAbrir(ref);
+      });
+    }
     const pintar = () => {
       const obj = objetos.get(ref);
       const html = obj ? dibujar(obj.fuente) : "";
@@ -65,12 +77,19 @@ function vistaDeObjeto(objetos: Y.Map<Objeto>, clase: string, dibujar: (fuente: 
 
 export function conVistas(
   extensiones: Extensions,
-  opts: { objetos: Y.Map<Objeto>; urlImagen: (nombre: string) => string; escribiendo: string },
+  opts: {
+    objetos: Y.Map<Objeto>;
+    urlImagen: (nombre: string) => string;
+    escribiendo: string;
+    /** Abrir los datos de una gráfica para editarlos. */
+    alAbrirGrafica?: (ref: string) => void;
+  },
 ): Extensions {
   const vistas: Record<string, (ext: AnyExtension) => AnyExtension> = {
     grafica: (ext) =>
       ext.extend({
-        addNodeView: () => vistaDeObjeto(opts.objetos, "doc-grafica", (f) => graficaSvg(f) ?? "", "No se pudo dibujar esta gráfica."),
+        addNodeView: () =>
+          vistaDeObjeto(opts.objetos, "doc-grafica", (f) => graficaSvg(f) ?? "", "No se pudo dibujar esta gráfica.", opts.alAbrirGrafica),
       }),
     diagrama: (ext) =>
       ext.extend({
@@ -78,9 +97,21 @@ export function conVistas(
       }),
     pendiente: (ext) =>
       ext.extend({
-        addNodeView: () => ({ node }: { node: PMNode }) => {
+        addNodeView: () => ({ node, editor, getPos }: { node: PMNode; editor: Editor; getPos: () => number | undefined }) => {
           const dom = document.createElement("div");
           dom.className = "doc-pendiente";
+          // Clic en una sección pendiente: la escribes tú. Se vuelve un párrafo vacío con el cursor adentro.
+          dom.addEventListener("mousedown", (e) => {
+            const pos = getPos();
+            if (!editor.isEditable || pos === undefined) return;
+            e.preventDefault();
+            editor
+              .chain()
+              .focus()
+              .insertContentAt({ from: pos, to: pos + node.nodeSize }, { type: "paragraph" })
+              .setTextSelection(pos + 1)
+              .run();
+          });
           dom.contentEditable = "false";
           dom.setAttribute("aria-busy", "true");
           const que = document.createElement("span");

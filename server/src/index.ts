@@ -77,7 +77,16 @@ import { leerVariables, modificarVariables, type Variable } from "./engine/env.j
 import { accionDeTool, type Accion } from "./engine/actividad.js";
 import { WORKSPACES_ROOT } from "./engine/workspace.js";
 import { imagenDelDocumento, CARPETA_DOCUMENTO, esDocumento } from "./engine/documento.js";
-import { documentosVivos, exportarMarkdown, tituloDe, responderSync, aplicarDeCliente } from "./engine/doc-vivo.js";
+import {
+  documentosVivos,
+  exportarMarkdown,
+  tituloDe,
+  responderSync,
+  aplicarDeCliente,
+  aplicarAwareness,
+  quitarAwarenessDe,
+  cambiosDePersonasDesde,
+} from "./engine/doc-vivo.js";
 import { operacionesDeDocumento } from "./agent/tools/documento.js";
 
 /**
@@ -1945,6 +1954,7 @@ io.on("connection", (socket) => {
       try {
         // Lo que el documento tenga en memoria va a disco antes: volver atrás
         // restaura archivos, y lo no guardado se perdería sin quedar en el historial.
+        await commitEdicionesHumanas(room);
         await documentosVivos.flush(room.id);
         const newHash = file
           ? await revertFile(room.workspace.dir, hash, file, { author })
@@ -2109,14 +2119,31 @@ io.on("connection", (socket) => {
     },
   );
 
-  socket.on("doc:update", async ({ update, generacion }: { update?: unknown; generacion?: unknown }) => {
+  socket.on(
+    "doc:update",
+    async (
+      { update, generacion }: { update?: unknown; generacion?: unknown },
+      /** Confirma que entró: es lo que deja a la vista decir "guardado". */
+      confirmar?: (r: { ok: boolean }) => void,
+    ) => {
+      const ack = (ok: boolean) => typeof confirmar === "function" && confirmar({ ok });
+      const room = joinedRoom;
+      const member = room?.members.get(socket.id);
+      if (!room || !member) return ack(false);
+      const doc = await documentosVivos.abrir(room.id, room.workspace.dir);
+      if (!doc) return ack(false);
+      const r = aplicarDeCliente(doc, update, generacion, { autor: member.name, socketId: socket.id });
+      if (r === "recargar") socket.emit("doc:recargar", { generacion: doc.generacion });
+      if (r === "ok") edicionHumana(room, member.name);
+      ack(r === "ok");
+    },
+  );
+
+  socket.on("doc:awareness", async ({ update }: { update?: unknown }) => {
     const room = joinedRoom;
-    const member = room?.members.get(socket.id);
-    if (!room || !member) return;
-    const doc = await documentosVivos.abrir(room.id, room.workspace.dir);
-    if (!doc) return;
-    const r = aplicarDeCliente(doc, update, generacion, { autor: member.name, socketId: socket.id });
-    if (r === "recargar") socket.emit("doc:recargar", { generacion: doc.generacion });
+    if (!room || !room.members.has(socket.id)) return;
+    const doc = documentosVivos.obtener(room.id);
+    if (doc) aplicarAwareness(doc, update, socket.id);
   });
 
   socket.on("disconnect", () => {
@@ -2124,6 +2151,8 @@ io.on("connection", (socket) => {
     if (joinedRoom) {
       removeMember(joinedRoom, socket.id);
       joinedRoom.selections.delete(socket.id);
+      const docDeLaSala = documentosVivos.obtener(joinedRoom.id);
+      if (docDeLaSala) quitarAwarenessDe(docDeLaSala, socket.id);
       // Sin nadie y sin agentes trabajando, el documento se guarda y suelta la memoria.
       const sala = joinedRoom;
       if (sala.members.size === 0 && sala.agents.list().every((a) => a.state === "idle")) {
@@ -2134,6 +2163,48 @@ io.on("connection", (socket) => {
     }
   });
 });
+
+// Los cursores y la presencia en el documento, igual: a todos menos a quien los mandó.
+documentosVivos.alCambiarAwareness = (doc, update, socketId) => {
+  const destino = socketId ? io.to(doc.roomId).except(socketId) : io.to(doc.roomId);
+  destino.emit("doc:awareness", { update });
+};
+
+/**
+ * Lo que las personas escriben en el documento entra al historial como un
+ * punto propio, "Erick editó el documento", a los 30 segundos de que dejan de
+ * escribir. Antes de un turno de agente y antes de volver atrás se adelanta:
+ * así cada punto dice de quién es lo que trae.
+ */
+const ESPERA_COMMIT_HUMANO_MS = 30_000;
+const edicionesPendientes = new Map<string, { autores: Set<string>; timer: NodeJS.Timeout }>();
+
+function edicionHumana(room: Room, autor: string): void {
+  const p = edicionesPendientes.get(room.id) ?? { autores: new Set<string>(), timer: undefined as unknown as NodeJS.Timeout };
+  clearTimeout(p.timer);
+  p.autores.add(autor);
+  p.timer = setTimeout(() => void commitEdicionesHumanas(room), ESPERA_COMMIT_HUMANO_MS);
+  edicionesPendientes.set(room.id, p);
+}
+
+async function commitEdicionesHumanas(room: Room): Promise<void> {
+  const p = edicionesPendientes.get(room.id);
+  if (!p) return;
+  edicionesPendientes.delete(room.id);
+  clearTimeout(p.timer);
+  await documentosVivos.flush(room.id);
+  const autores = [...p.autores];
+  const quien = autores.length === 1 ? autores[0] : `${autores.slice(0, -1).join(", ")} y ${autores[autores.length - 1]}`;
+  try {
+    const hash = await commitAll(room.workspace.dir, {
+      message: `${quien} ${autores.length === 1 ? "editó" : "editaron"} el documento`,
+      author: autores.join(", "),
+    });
+    if (hash) io.to(room.id).emit("history:new", { hash, agentId: null, message: `${quien} editó el documento` });
+  } catch (err) {
+    console.error(`[sala ${room.id}] no se pudo guardar en el historial lo que editaron:`, err);
+  }
+}
 
 // Cada cambio del documento se reparte a la sala, menos a quien lo mandó.
 documentosVivos.alCambiar = (doc, update, origen) => {
@@ -2312,6 +2383,9 @@ async function runAgentTurn(
     return;
   }
 
+  // Lo que las personas escribieron antes de este turno queda como su propio
+  // punto del historial, no mezclado con lo que haga el agente.
+  await commitEdicionesHumanas(room);
   const turn = await startTurn(room.workspace.dir, { roomId: room.id, agentId, task });
   // Si la sala despertó tras un reinicio, el historial vive en la BD.
   let history = room.histories.get(agentId);
@@ -2351,7 +2425,9 @@ async function runAgentTurn(
       // Y con qué verla: su estructura y sus filas, siempre en solo lectura.
       leerBase: await lecturaDeLaSala(room.id),
       // El documento de la sala: el agente lo lee y lo cambia por bloque.
-      documento: operacionesDeDocumento(room.id, room.workspace.dir, agent.name),
+      documento: operacionesDeDocumento(room.id, room.workspace.dir, agent.name, (bloques) =>
+        io.to(room.id).emit("doc:agente", { agente: agent.name, color: agent.color, bloques }),
+      ),
       messages: history,
       // Qué están haciendo los demás, para que no repita su trabajo. Se calcula
       // AL EMPEZAR el turno: es una foto del momento, no una suscripción.
@@ -2478,6 +2554,8 @@ async function runAgentTurn(
     room.agents.finish(agentId);
     ultimaAccion.get(room.id)?.delete(agentId);
     io.to(room.id).emit("agents", { agents: room.agents.list() });
+    // Ya no está escribiendo en ningún lado del documento.
+    io.to(room.id).emit("doc:agente", { agente: agent.name, color: agent.color, bloques: [] });
   }
 }
 
@@ -2501,7 +2579,35 @@ async function conContextoDeOtros(room: Room, agentId: string, task: string): Pr
     return undefined;
   });
   const resumen = resumenDeOtros(room.agents, agentId, archivos, ultimosMensajes(room), desdeTuUltimoTurno);
-  return resumen ? `${resumen}\n\n${task}` : task;
+  const delDocumento = await cambiosDelDocumento(room, agentId);
+  return [resumen, delDocumento, task].filter(Boolean).join("\n\n");
+}
+
+/** Cuándo empezó el último turno de cada agente (sala:agente). */
+const ultimoTurno = new Map<string, number>();
+
+/**
+ * Lo que las personas cambiaron en el documento desde el último turno de este
+ * agente. Las personas editan en vivo mientras el agente no está: si alguien
+ * corrigió una sección a mano, el agente tiene que saberlo antes de tocarla.
+ */
+async function cambiosDelDocumento(room: Room, agentId: string): Promise<string> {
+  const clave = `${room.id}:${agentId}`;
+  const desde = ultimoTurno.get(clave) ?? 0;
+  ultimoTurno.set(clave, Date.now());
+  const doc = documentosVivos.obtener(room.id);
+  if (!doc) return "";
+  const agentes = new Set(room.agents.list().map((a) => a.name));
+  const cambios = cambiosDePersonasDesde(doc, desde, agentes);
+  if (cambios.size === 0) return "";
+  const lineas = [...cambios].map(([autor, secciones]) => `- ${autor} editó: ${secciones.map((s) => `«${s}»`).join(", ")}`);
+  return [
+    "<documento_editado>",
+    "Personas de la sala editaron el documento a mano desde tu último turno:",
+    ...lineas,
+    "Antes de cambiar esas secciones, léelas con leer_documento y conserva lo que escribieron.",
+    "</documento_editado>",
+  ].join("\n");
 }
 
 /**

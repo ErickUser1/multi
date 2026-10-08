@@ -9,6 +9,8 @@ import {
   exportarMarkdown,
   FRAGMENTO,
   MAX_UPDATE,
+  estado,
+  idDeElemento,
   type DocVivo,
 } from "../engine/doc-vivo.js";
 import { operacionesDeDocumento } from "../agent/tools/documento.js";
@@ -121,18 +123,32 @@ async function main(): Promise<void> {
   parrafo(ana.ydoc, "Hola").insert(0, "¡");
   await agente.escribirSeccion(dos[1], dos[2], "## Dos\n\nLo escribió el agente.");
   entregar();
-  const juntos = texto(doc.ydoc);
+  let juntos = texto(doc.ydoc);
   check("entra lo del agente", juntos.includes("Lo escribió el agente."));
   check("y lo de la persona", juntos.includes("¡Ana: Hola"));
   check("y los navegadores lo ven igual", texto(ana.ydoc) === juntos && texto(beto.ydoc) === juntos);
   check("la exportación lo refleja", exportarMarkdown(doc).includes("¡Ana: Hola mundo. Beto estuvo aquí."));
 
-  console.log("\n3. Lo que no entra");
+  console.log("\n3. Ids de bloque");
+  // El id de un bloque es el de su elemento en Yjs: sigue igual aunque le cambien el texto.
+  const idAntes = estado(doc).ids[estado(doc).bloques.findIndex((x) => JSON.stringify(x).includes("Ana: Hola"))];
+  parrafo(beto.ydoc, "Hola").insert(0, "Otra vez ");
+  entregar();
+  const despues = estado(doc);
+  check("el id de un párrafo no cambia al editarlo", despues.ids[despues.bloques.findIndex((x) => JSON.stringify(x).includes("Otra vez"))] === idAntes);
+  check("y los navegadores ven los mismos ids", (() => {
+    const deAna = ana.ydoc.getXmlFragment(FRAGMENTO).toArray().map((e) => idDeElemento(e as Y.XmlElement));
+    return JSON.stringify(deAna) === JSON.stringify(despues.ids) && new Set(deAna).size === deAna.length;
+  })());
+
+  console.log("\n4. Lo que no entra");
   check("un cambio de una generación vieja pide recargar", aplicarDeCliente(doc, Y.encodeStateAsUpdate(ana.ydoc), doc.generacion - 1, { autor: "Ana" }) === "recargar");
   check("uno gigante se descarta", aplicarDeCliente(doc, new Uint8Array(MAX_UPDATE + 1), doc.generacion, { autor: "Ana" }) === "invalido");
   check("basura se descarta", aplicarDeCliente(doc, new Uint8Array([1, 2, 3, 250, 7]), doc.generacion, { autor: "Ana" }) === "invalido");
   check("algo que no son bytes se descarta", aplicarDeCliente(doc, "hola", doc.generacion, { autor: "Ana" }) === "invalido");
-  check("el documento sigue igual después de todo eso", texto(doc.ydoc) === juntos);
+  const antes = texto(doc.ydoc);
+  check("el documento sigue igual después de todo eso", texto(doc.ydoc) === antes);
+  juntos = antes;
   check("un vector de estado roto igual sincroniza todo", (() => {
     const r = responderSync(doc, new Uint8Array([255, 255, 255]));
     const y = new Y.Doc();

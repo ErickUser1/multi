@@ -1,43 +1,58 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useEditor, EditorContent } from "@tiptap/react";
 import Collaboration from "@tiptap/extension-collaboration";
+import CollaborationCaret from "@tiptap/extension-collaboration-caret";
 import type { Socket } from "socket.io-client";
 import { SERVER_URL } from "../socket";
 import { useTextos } from "../i18n";
 import { crearRenderer } from "./markdown";
 import { extensionesDelDocumento } from "./esquema";
 import { conVistas } from "./vistas";
-import { ProveedorDocumento } from "./proveedor";
+import { ProveedorDocumento, type EstadoDeGuardado } from "./proveedor";
+import { MarcasDeAgentes, llaveMarcas, type DondeEscribe } from "./marcas";
+import { Barra } from "./Barra";
+import { EditorDeGrafica } from "./EditorDeGrafica";
 
 /**
- * El documento de la sala, vivo: lo que cambia cualquiera (el agente, otra
- * persona) aparece aquí en el momento, sin volver a pedirlo.
+ * El documento de la sala, vivo y editable por todos a la vez.
  *
- * Es un editor (TipTap) conectado al Y.Doc de la sala. El documento no es
- * markdown: es el mismo árbol de bloques que guarda el server, así que pintarlo
- * no convierte nada.
- *
- * Por ahora en solo lectura; editar es el paso siguiente.
+ * Es un editor (TipTap) conectado al Y.Doc de la sala: lo que escribe cada
+ * persona y cada agente aparece en el momento en las pantallas de los demás,
+ * con su cursor y su color. No hay "guardar": cada cambio viaja solo.
  */
-export function DocumentoView({ roomId, socket }: { roomId: string; socket: Socket }) {
+export function DocumentoView({
+  roomId,
+  socket,
+  yo,
+}: {
+  roomId: string;
+  socket: Socket;
+  yo: { name: string; color: string };
+}) {
   const { t } = useTextos();
   // Cada recarga del server (volver atrás) estrena proveedor y Y.Doc.
   const [intento, setIntento] = useState(0);
   const [listo, setListo] = useState(false);
   const [noHay, setNoHay] = useState(false);
+  const [guardado, setGuardado] = useState<EstadoDeGuardado>("guardado");
   const [impresion, setImpresion] = useState<string | null>(null);
+  const [graficaAbierta, setGraficaAbierta] = useState<string | null>(null);
+  const abrirGrafica = useRef<(ref: string) => void>(() => {});
+  abrirGrafica.current = setGraficaAbierta;
 
   const proveedor = useMemo(() => {
     void intento;
     return new ProveedorDocumento(socket, {
-      editable: false,
+      editable: true,
       alSincronizar: () => setListo(true),
       alNoHaber: () => setNoHay(true),
       alRecargar: () => {
         setListo(false);
+        setGraficaAbierta(null);
         setIntento((n) => n + 1);
       },
+      alGuardar: setGuardado,
     });
   }, [socket, intento]);
   useEffect(() => () => proveedor.destruir(), [proveedor]);
@@ -49,19 +64,68 @@ export function DocumentoView({ roomId, socket }: { roomId: string; socket: Sock
 
   const editor = useEditor(
     {
-      editable: false,
+      editable: true,
       extensions: [
-        ...conVistas(extensionesDelDocumento({ soloLectura: true }), {
-          objetos: proveedor.ydoc.getMap("objetos"),
-          urlImagen,
-          escribiendo: t.docEscribiendo,
-        }),
+        ...conVistas(
+          // Los ids de los bloques nuevos los pone el server (ver esquema.ts).
+          extensionesDelDocumento(),
+          {
+            objetos: proveedor.ydoc.getMap("objetos"),
+            urlImagen,
+            escribiendo: t.docEscribiendo,
+            alAbrirGrafica: (ref) => abrirGrafica.current(ref),
+          },
+        ),
         Collaboration.configure({ document: proveedor.ydoc, field: "contenido" }),
+        CollaborationCaret.configure({ provider: { awareness: proveedor.awareness }, user: yo }),
+        MarcasDeAgentes.configure({ fragmento: proveedor.ydoc.getXmlFragment("contenido") }),
       ],
-      editorProps: { attributes: { class: "doc-md" } },
+      editorProps: { attributes: { class: "doc-md", spellcheck: "true" } },
     },
     [proveedor],
   );
+
+  // Si cambia mi nombre o color (me renombré), mi cursor también.
+  useEffect(() => {
+    editor?.commands.updateUser?.(yo);
+  }, [editor, yo.name, yo.color]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Dónde escribe cada agente.
+  useEffect(() => {
+    if (!editor) return;
+    const enAgente = (d: DondeEscribe) => {
+      if (!editor.isDestroyed) {
+        editor.view.dispatch(editor.state.tr.setMeta(llaveMarcas, { ...d, etiqueta: `${d.agente} · ${t.docEscribiendo}` }));
+      }
+    };
+    socket.on("doc:agente", enAgente);
+    return () => {
+      socket.off("doc:agente", enAgente);
+    };
+  }, [editor, socket, t]);
+
+  const insertarGrafica = () => {
+    if (!editor) return;
+    const ref = Math.random().toString(36).slice(2, 10);
+    const objetos = proveedor.ydoc.getMap("objetos");
+    // Los datos y el bloque en la MISMA transacción: nadie ve un bloque sin datos.
+    proveedor.ydoc.transact(() => {
+      objetos.set(ref, {
+        tipo: "grafica",
+        fuente: JSON.stringify({
+          tipo: "barras",
+          titulo: "",
+          etiquetas: ["A", "B", "C"],
+          series: [{ nombre: "Serie 1", datos: [3, 5, 2] }],
+        }),
+      });
+      // Después de lo seleccionado, nunca encima: si había una gráfica
+      // seleccionada (la que acabas de editar), insertar no la reemplaza.
+      const { to } = editor.state.selection;
+      editor.chain().focus().insertContentAt(to, { type: "grafica", attrs: { ref } }).run();
+    });
+    setGraficaAbierta(ref);
+  };
 
   // El PDF sale de la exportación en markdown, con el mismo renderer de
   // siempre: lo que se imprime no depende del editor.
@@ -86,6 +150,10 @@ export function DocumentoView({ roomId, socket }: { roomId: string; socket: Sock
   return (
     <div className="documento">
       <div className="doc-barra">
+        {editor && listo && <Barra editor={editor} alInsertarGrafica={insertarGrafica} />}
+        <span className={`doc-guardado ${guardado}`} aria-live="polite">
+          {guardado === "guardado" ? t.docGuardado : guardado === "guardando" ? t.docGuardando : t.docSinConexion}
+        </span>
         <button type="button" className="doc-boton" title={t.docTituloPdf} onClick={() => void imprimir()}>
           {t.docPdf}
         </button>
@@ -96,6 +164,9 @@ export function DocumentoView({ roomId, socket }: { roomId: string; socket: Sock
           <EditorContent editor={editor} />
         </article>
       </div>
+      {graficaAbierta && (
+        <EditorDeGrafica objetos={proveedor.ydoc.getMap("objetos")} ref_={graficaAbierta} alCerrar={() => setGraficaAbierta(null)} />
+      )}
       {/* Para imprimir va una copia fuera de la Sala: la sala recorta lo que no
           cabe en pantalla, y el PDF necesita el documento entero. En pantalla
           esta copia no se ve. */}

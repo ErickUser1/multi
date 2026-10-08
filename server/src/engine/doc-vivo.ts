@@ -1,4 +1,10 @@
 import * as Y from "yjs";
+import {
+  Awareness,
+  applyAwarenessUpdate,
+  encodeAwarenessUpdate,
+  removeAwarenessStates,
+} from "y-protocols/awareness";
 import { readFile, writeFile, rename, mkdir, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
@@ -63,9 +69,18 @@ export interface DocVivo {
   generacion: number;
   /** El último que tocó cada bloque de arriba, para decir quién cambió algo. */
   autorPorBloque: Map<string, { autor: string; en: number }>;
+  /**
+   * Quién está en el documento y dónde tiene el cursor. El server no tiene
+   * cursor propio: solo junta lo de cada navegador para repartirlo y para
+   * borrarlo cuando alguien se va (si no, su cursor se quedaría flotando).
+   */
+  awareness: Awareness;
+  /** Los clientes de awareness que trajo cada socket. */
+  awarenessPorSocket: Map<string, Set<number>>;
 }
 
 type AlCambiar = (doc: DocVivo, update: Uint8Array, origen: Origen | null) => void;
+type AlCambiarAwareness = (doc: DocVivo, update: Uint8Array, socketId: string | null) => void;
 
 const ESPERA_GUARDADO_MS = 1000;
 
@@ -77,6 +92,8 @@ class DocumentosVivos {
   private generaciones = new Map<string, number>();
   /** Lo pone el server: reparte cada cambio a la sala. */
   alCambiar: AlCambiar = () => {};
+  /** Lo pone el server: reparte los cursores. */
+  alCambiarAwareness: AlCambiarAwareness = () => {};
 
   obtener(roomId: string): DocVivo | undefined {
     return this.docs.get(roomId);
@@ -113,6 +130,8 @@ class DocumentosVivos {
   }
 
   private registrar(roomId: string, dir: string, ydoc: Y.Doc): DocVivo {
+    const awareness = new Awareness(ydoc);
+    awareness.setLocalState(null);
     const doc: DocVivo = {
       roomId,
       dir,
@@ -120,14 +139,30 @@ class DocumentosVivos {
       revision: 0,
       generacion: this.generaciones.get(roomId) ?? 0,
       autorPorBloque: new Map(),
+      awareness,
+      awarenessPorSocket: new Map(),
     };
+    awareness.on(
+      "update",
+      ({ added, updated, removed }: { added: number[]; updated: number[]; removed: number[] }, origen: unknown) => {
+        const socketId = typeof origen === "string" && origen !== "server" ? origen : null;
+        if (socketId) {
+          const ids = doc.awarenessPorSocket.get(socketId) ?? new Set<number>();
+          for (const id of [...added, ...updated]) ids.add(id);
+          for (const id of removed) ids.delete(id);
+          doc.awarenessPorSocket.set(socketId, ids);
+        }
+        const cambiados = [...added, ...updated, ...removed];
+        if (cambiados.length) this.alCambiarAwareness(doc, encodeAwarenessUpdate(awareness, cambiados), socketId);
+      },
+    );
     ydoc.on("update", (update: Uint8Array, origen: unknown) => {
       doc.revision++;
       this.programarGuardado(roomId);
       this.alCambiar(doc, update, esOrigen(origen) ? origen : null);
     });
     ydoc.getXmlFragment(FRAGMENTO).observeDeep((eventos, tr) => {
-      if (!esOrigen(tr.origin)) return;
+      if (!esOrigen(tr.origin) || tr.origin.autor === "multi") return;
       const ahora = Date.now();
       for (const id of bloquesTocados(eventos, ydoc.getXmlFragment(FRAGMENTO))) {
         doc.autorPorBloque.set(id, { autor: tr.origin.autor, en: ahora });
@@ -185,6 +220,7 @@ class DocumentosVivos {
     clearTimeout(this.temporizadores.get(roomId));
     this.temporizadores.delete(roomId);
     this.docs.delete(roomId);
+    viejo?.awareness.destroy();
     viejo?.ydoc.destroy();
     return this.abrir(roomId, dir);
   }
@@ -194,6 +230,7 @@ class DocumentosVivos {
     await this.flush(roomId);
     const doc = this.docs.get(roomId);
     this.docs.delete(roomId);
+    doc?.awareness.destroy();
     doc?.ydoc.destroy();
   }
 }
@@ -211,34 +248,43 @@ function bloquesTocados(eventos: Y.YEvent<Y.XmlElement | Y.XmlText>[], raiz: Y.X
     if (e.target === raiz) {
       for (const item of e.changes.added) {
         for (const c of item.content.getContent()) {
-          if (c instanceof Y.XmlElement) {
-            const id = c.getAttribute("id");
-            if (typeof id === "string") ids.add(id);
-          }
+          if (c instanceof Y.XmlElement) ids.add(idDeElemento(c));
         }
       }
       continue;
     }
     let t: Y.AbstractType<unknown> | null = e.target as Y.AbstractType<unknown>;
     while (t && t.parent !== raiz) t = t.parent as Y.AbstractType<unknown> | null;
-    if (t instanceof Y.XmlElement) {
-      const id = t.getAttribute("id");
-      if (typeof id === "string") ids.add(id);
-    }
+    if (t instanceof Y.XmlElement) ids.add(idDeElemento(t));
   }
   return ids;
 }
 
 // ── Leer y cambiar ───────────────────────────────────────────────────────────
 
-/** Los bloques de arriba y los objetos, tal como están ahora. */
-export function estado(doc: DocVivo): { bloques: JSONContent[]; objetos: Objetos } {
-  const raiz = yXmlFragmentToProseMirrorRootNode(doc.ydoc.getXmlFragment(FRAGMENTO), esquemaDelDocumento());
+/**
+ * El id de un bloque: el de su elemento en Yjs (cliente.reloj, en base 36).
+ *
+ * Único por construcción, nadie lo asigna y no viaja como atributo (ver
+ * doc-esquema.ts). Mientras el bloque exista, aunque le cambien el texto, su
+ * id es el mismo; un bloque reemplazado es otro bloque y trae otro.
+ */
+export function idDeElemento(e: Y.XmlElement | Y.AbstractType<unknown>): string {
+  const item = e._item;
+  return item ? `${item.id.client.toString(36)}.${item.id.clock.toString(36)}` : "?";
+}
+
+/** Los bloques de arriba con su id, y los objetos, tal como están ahora. */
+export function estado(doc: DocVivo): { bloques: JSONContent[]; ids: string[]; objetos: Objetos } {
+  const fragmento = doc.ydoc.getXmlFragment(FRAGMENTO);
+  const raiz = yXmlFragmentToProseMirrorRootNode(fragmento, esquemaDelDocumento());
   const objetos: Objetos = {};
   doc.ydoc.getMap<ObjetoDelDocumento>(OBJETOS).forEach((v, k) => {
     objetos[k] = { tipo: v.tipo, fuente: v.fuente };
   });
-  return { bloques: (raiz.toJSON().content ?? []) as JSONContent[], objetos };
+  // Cada hijo del árbol corresponde, en orden, a un elemento del fragmento.
+  const ids = fragmento.toArray().filter((e) => e instanceof Y.XmlElement).map(idDeElemento);
+  return { bloques: (raiz.toJSON().content ?? []) as JSONContent[], ids, objetos };
 }
 
 /**
@@ -249,8 +295,8 @@ export function estado(doc: DocVivo): { bloques: JSONContent[]; objetos: Objetos
 export function aplicar(
   doc: DocVivo,
   origen: Origen,
-  f: (actual: { bloques: JSONContent[]; objetos: Objetos }) => { bloques: JSONContent[]; objetos?: Objetos },
-): void {
+  f: (actual: { bloques: JSONContent[]; ids: string[]; objetos: Objetos }) => { bloques: JSONContent[]; objetos?: Objetos },
+): string[] {
   const actual = estado(doc);
   const nuevo = f(actual);
   const esquema = esquemaDelDocumento();
@@ -262,13 +308,12 @@ export function aplicar(
   doc.ydoc.transact(() => {
     for (const [id, obj] of Object.entries(nuevo.objetos ?? {})) mapa.set(id, obj);
     updateYFragment(doc.ydoc, fragmento, raiz, { mapping: new Map(), isOMark: new Map() } as never);
-    // Los objetos que ya ningún bloque usa se van.
-    const usados = new Set<string>();
-    raiz.descendants((n) => {
-      if (typeof n.attrs.ref === "string") usados.add(n.attrs.ref);
-    });
-    for (const id of [...mapa.keys()]) if (!usados.has(id)) mapa.delete(id);
+    // Los objetos que ya nadie usa NO se borran aquí: una persona pudo haber
+    // creado una gráfica cuyo bloque todavía viene en camino, y borrarle los
+    // datos se los perdería. Un objeto huérfano pesa unos bytes.
   }, origen);
+  // Los ids como quedaron: los bloques que no cambiaron conservan el suyo.
+  return estado(doc).ids;
 }
 
 /** Cambia el contenido de un objeto (los datos de una gráfica, el SVG de un diagrama). */
@@ -316,7 +361,10 @@ function bytes(x: unknown): Uint8Array | null {
  * estado) y recibe lo que le falta, más el vector del server para que le
  * mande lo suyo.
  */
-export function responderSync(doc: DocVivo, vector: unknown): { update: Uint8Array; vector: Uint8Array; generacion: number } {
+export function responderSync(
+  doc: DocVivo,
+  vector: unknown,
+): { update: Uint8Array; vector: Uint8Array; generacion: number; awareness: Uint8Array } {
   const v = bytes(vector);
   let update: Uint8Array;
   try {
@@ -325,7 +373,33 @@ export function responderSync(doc: DocVivo, vector: unknown): { update: Uint8Arr
     // Un vector que no se entiende: se manda todo, que también sincroniza.
     update = Y.encodeStateAsUpdate(doc.ydoc);
   }
-  return { update, vector: Y.encodeStateVector(doc.ydoc), generacion: doc.generacion };
+  return {
+    update,
+    vector: Y.encodeStateVector(doc.ydoc),
+    generacion: doc.generacion,
+    // Quién más está y dónde: sin esto, el que llega no ve los cursores de los
+    // que ya estaban hasta que se muevan.
+    awareness: encodeAwarenessUpdate(doc.awareness, [...doc.awareness.getStates().keys()]),
+  };
+}
+
+/** Un cambio de cursor o de presencia de un navegador. */
+export function aplicarAwareness(doc: DocVivo, update: unknown, socketId: string): boolean {
+  const u = bytes(update);
+  if (!u || u.byteLength > 64 * 1024) return false;
+  try {
+    applyAwarenessUpdate(doc.awareness, u, socketId);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Alguien se fue: sus cursores se borran para todos. */
+export function quitarAwarenessDe(doc: DocVivo, socketId: string): void {
+  const ids = doc.awarenessPorSocket.get(socketId);
+  doc.awarenessPorSocket.delete(socketId);
+  if (ids?.size) removeAwarenessStates(doc.awareness, [...ids], "server");
 }
 
 /**
@@ -385,9 +459,36 @@ async function migrar(ydoc: Y.Doc, dir: string): Promise<void> {
     revision: 0,
     generacion: 0,
     autorPorBloque: new Map(),
+    awareness: new Awareness(ydoc),
+    awarenessPorSocket: new Map(),
   };
   aplicar(temporal, { autor: "multi" }, () => ({ bloques, objetos }));
   const carpeta = join(dir, CARPETA_DOCUMENTO);
   await rm(join(carpeta, "documento.json"), { force: true });
   await rm(join(carpeta, "secciones"), { recursive: true, force: true });
+}
+
+/**
+ * Lo que las personas cambiaron en el documento desde `desde`, por autor y por
+ * sección. Va en el contexto del agente al empezar su turno: si alguien
+ * corrigió el presupuesto a mano, el agente tiene que saberlo antes de tocarlo.
+ */
+export function cambiosDePersonasDesde(doc: DocVivo, desde: number, agentes: Set<string>): Map<string, string[]> {
+  const { bloques, ids } = estado(doc);
+  const seccionDe = new Map<string, string>();
+  let actual = "";
+  bloques.forEach((b, i) => {
+    if (b.type === "heading") actual = textoDe(b);
+    seccionDe.set(ids[i], actual || "(inicio)");
+  });
+  const porAutor = new Map<string, string[]>();
+  for (const [id, { autor, en }] of doc.autorPorBloque) {
+    if (en < desde || agentes.has(autor) || autor === "multi") continue;
+    const seccion = seccionDe.get(id);
+    if (!seccion) continue;
+    const lista = porAutor.get(autor) ?? [];
+    if (!lista.includes(seccion)) lista.push(seccion);
+    porAutor.set(autor, lista);
+  }
+  return porAutor;
 }

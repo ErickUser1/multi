@@ -3026,10 +3026,82 @@ img.av {
 }
 .doc-barra {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
   gap: 8px;
   padding: 8px 12px;
   border-bottom: 1px solid var(--linea);
+}
+/* La barra de formato ocupa lo que sobra y, si no cabe (celular), se desliza
+   de lado en vez de partirse en varias filas. */
+.doc-herramientas {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.doc-herramienta {
+  flex-shrink: 0;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 7px;
+  font: 13px "Segoe UI", system-ui, sans-serif;
+  color: var(--dim);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.doc-herramienta:hover {
+  color: var(--texto);
+  border-color: var(--linea);
+}
+.doc-herramienta.activa {
+  color: var(--texto);
+  background: rgba(255, 255, 255, 0.08);
+}
+.doc-herramienta.negrita {
+  font-weight: 700;
+}
+.doc-herramienta.cursiva {
+  font-style: italic;
+  font-family: Georgia, serif;
+}
+.doc-herramienta.tachado {
+  text-decoration: line-through;
+}
+.doc-sep {
+  flex-shrink: 0;
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background: var(--linea);
+}
+.doc-guardado {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--dim);
+  white-space: nowrap;
+}
+.doc-guardado.sinConexion {
+  color: var(--acento);
+}
+/* En pantallas angostas la barra de formato baja a su propia fila: compartir
+   renglón con el guardado y el PDF la dejaba en tres botones. */
+@media (max-width: 700px) {
+  .doc-barra {
+    flex-wrap: wrap;
+  }
+  .doc-herramientas {
+    order: 3;
+    flex-basis: 100%;
+  }
+  .doc-guardado {
+    margin-right: auto;
+  }
 }
 .doc-boton {
   font: inherit;
@@ -3258,6 +3330,135 @@ img.av {
   .doc-linea {
     animation: none;
   }
+}
+
+/* El cursor de cada persona, con su nombre encima. */
+.doc-hoja .collaboration-carets__caret {
+  position: relative;
+  margin: 0 -1px;
+  border-left: 1px solid;
+  border-right: 1px solid;
+  word-break: normal;
+  pointer-events: none;
+}
+.doc-hoja .collaboration-carets__label {
+  position: absolute;
+  top: -1.4em;
+  left: -1px;
+  padding: 1px 6px;
+  border-radius: 3px 3px 3px 0;
+  font: 600 11px/1.3 "Segoe UI", system-ui, sans-serif;
+  color: #111;
+  white-space: nowrap;
+  user-select: none;
+  pointer-events: none;
+}
+/* Donde está escribiendo un agente: una raya de su color al margen y su nombre. */
+.doc-hoja .doc-agente-aqui {
+  position: relative;
+  box-shadow: -10px 0 0 -7px var(--color-agente);
+}
+.doc-hoja .doc-agente-aqui.con-nombre::before {
+  content: attr(data-etiqueta);
+  position: absolute;
+  top: -1.5em;
+  left: 0;
+  font: 600 11px "Segoe UI", system-ui, sans-serif;
+  color: var(--color-agente);
+}
+/* Una sección pendiente se puede tomar: clic y la escribes tú. */
+.doc-hoja .ProseMirror[contenteditable="true"] .doc-pendiente {
+  cursor: text;
+}
+/* Selección de celdas en tablas, y la gráfica o el diagrama seleccionados. */
+.doc-hoja .selectedCell {
+  background: rgba(127, 176, 255, 0.15);
+}
+.doc-hoja .ProseMirror-selectednode {
+  outline: 2px solid var(--tinta-enlace);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+.doc-hoja .doc-grafica {
+  cursor: pointer;
+}
+/* Los datos de una gráfica, en un diálogo encima de la hoja. */
+.doc-dialogo {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.6);
+}
+.doc-dialogo-caja {
+  width: min(640px, 100%);
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+  background: var(--panel);
+  border: 1px solid var(--linea);
+  border-radius: 6px;
+  padding: 16px;
+  color: var(--texto);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.doc-dialogo-cab {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.doc-grafica-campos {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.doc-grafica-campos label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--dim);
+  flex: 1;
+  min-width: 140px;
+}
+.doc-dialogo input,
+.doc-dialogo select {
+  font: inherit;
+  font-size: 13px;
+  color: var(--texto);
+  background: var(--fondo);
+  border: 1px solid var(--linea);
+  border-radius: 4px;
+  padding: 5px 8px;
+  width: 100%;
+  min-width: 0;
+}
+.doc-grafica-tabla {
+  overflow-x: auto;
+}
+.doc-grafica-tabla table {
+  border-collapse: collapse;
+}
+.doc-grafica-tabla th,
+.doc-grafica-tabla td {
+  padding: 2px;
+  min-width: 90px;
+}
+.doc-grafica-acciones {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.doc-grafica-previa {
+  background: var(--fondo);
+  border-radius: 4px;
+  padding: 8px;
+  --tinta: #e6e6e6;
+  --tinta-dim: #9b9b9b;
+  --tinta-linea: #3a3a3a;
 }
 
 /* La copia para imprimir no se ve en pantalla. */

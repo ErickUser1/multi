@@ -8,30 +8,15 @@
  * No hay paquete compartido en el monorepo, así que demo:doc-vivo falla si las
  * dos copias difieren.
  *
- * Los bloques de arriba llevan un `id` estable: es lo que el agente cita para
- * cambiar uno sin reescribir el resto, y a lo que se anclan los comentarios.
+ * Los bloques NO llevan un atributo id. Su identidad es la de su elemento en
+ * Yjs (cliente.reloj, ver doc-vivo.ts): única por construcción y sin que nadie
+ * la asigne. Un atributo id hacía que y-tiptap, al llegar un cambio remoto al
+ * mismo bloque, "recuperara" el cursor buscando el bloque por sus atributos y
+ * lo dejara en la posición vieja: el texto salía al revés.
  */
 import { Node, mergeAttributes, type Extensions } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
 import { TableKit } from "@tiptap/extension-table";
-import UniqueID from "@tiptap/extension-unique-id";
-import type { Transaction } from "@tiptap/pm/state";
-
-/** Los bloques que llevan id. Las celdas y los items de lista no: se citan por su tabla o su lista. */
-export const TIPOS_CON_ID = [
-  "paragraph",
-  "heading",
-  "bulletList",
-  "orderedList",
-  "blockquote",
-  "codeBlock",
-  "horizontalRule",
-  "table",
-  "imagen",
-  "grafica",
-  "diagrama",
-  "pendiente",
-];
 
 /** Una gráfica: en el texto solo queda la referencia; los datos viven en el mapa de objetos. */
 const Grafica = Node.create({
@@ -106,15 +91,8 @@ const Imagen = Node.create({
 /**
  * Las extensiones que definen el esquema. Quien edita (el navegador) les suma
  * las de colaboración; quien convierte (el server) usa solo estas.
- *
- * - `soloLectura`: no le pone ids a nada (sería una edición que nadie hizo).
- * - `filtroIds`: qué transacciones reciben ids nuevos. Con colaboración, solo
- *   las propias: si cada navegador les pusiera id a los bloques que llegan de
- *   otro, el mismo bloque acabaría con ids distintos en cada lado.
  */
-export function extensionesDelDocumento(
-  opciones: { soloLectura?: boolean; filtroIds?: (tr: Transaction) => boolean } = {},
-): Extensions {
+export function extensionesDelDocumento(): Extensions {
   return [
     StarterKit.configure({
       heading: { levels: [1, 2, 3] },
@@ -131,10 +109,5 @@ export function extensionesDelDocumento(
     Diagrama,
     Pendiente,
     Imagen,
-    UniqueID.configure({
-      types: TIPOS_CON_ID,
-      updateDocument: !opciones.soloLectura,
-      filterTransaction: opciones.filtroIds ?? null,
-    }),
   ];
 }

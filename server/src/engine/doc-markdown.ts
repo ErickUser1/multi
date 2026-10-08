@@ -9,7 +9,7 @@ import {
 } from "prosemirror-markdown";
 import { getSchema, type JSONContent } from "@tiptap/core";
 import type { Node as PMNode, Schema } from "@tiptap/pm/model";
-import { extensionesDelDocumento, TIPOS_CON_ID } from "./doc-esquema.js";
+import { extensionesDelDocumento } from "./doc-esquema.js";
 
 /**
  * Markdown ⇄ bloques del documento.
@@ -186,26 +186,15 @@ function parser(objetos: Objetos): MarkdownParser {
   );
 }
 
-/** Le pone id a todo bloque que lo lleve y no lo tenga. */
-function conIds(nodo: JSONContent): JSONContent {
-  const tipo = nodo.type ?? "";
-  const attrs = TIPOS_CON_ID.includes(tipo) && !nodo.attrs?.id ? { ...nodo.attrs, id: nuevoId() } : nodo.attrs;
-  return {
-    ...nodo,
-    ...(attrs ? { attrs } : {}),
-    ...(nodo.content ? { content: nodo.content.map(conIds) } : {}),
-  };
-}
-
 /**
- * Markdown → bloques (los hijos del documento, ya con id) y los objetos que
- * trajo (gráficas y diagramas). Un markdown vacío da cero bloques.
+ * Markdown → bloques (los hijos del documento) y los objetos que trajo
+ * (gráficas y diagramas). Un markdown vacío da cero bloques.
  */
 export function markdownABloques(markdown: string): { bloques: JSONContent[]; objetos: Objetos } {
   const objetos: Objetos = {};
   const doc = parser(objetos).parse(markdown);
   const json = doc.toJSON() as JSONContent;
-  return { bloques: (json.content ?? []).map(conIds), objetos };
+  return { bloques: json.content ?? [], objetos };
 }
 
 // ── Bloques → markdown ──────────────────────────────────────────────────────
@@ -326,14 +315,15 @@ export function bloqueAMarkdown(bloque: JSONContent, objetos: Objetos): string {
 /**
  * Bloques → markdown.
  *
- * Con `conIds`, cada bloque sale precedido de `⟦id·hash⟧`: es lo que el agente
- * cita para cambiar uno solo. Sin ids es la exportación legible.
+ * Con `ids` (uno por bloque, en orden), cada bloque sale precedido de
+ * `⟦id·hash⟧`: es lo que el agente cita para cambiar uno solo. Sin ids es la
+ * exportación legible.
  */
-export function bloquesAMarkdown(bloques: JSONContent[], objetos: Objetos, opts: { conIds?: boolean } = {}): string {
+export function bloquesAMarkdown(bloques: JSONContent[], objetos: Objetos, opts: { ids?: string[] } = {}): string {
   return bloques
-    .map((b) => {
+    .map((b, i) => {
       const texto = bloqueAMarkdown(b, objetos);
-      return opts.conIds ? `⟦${b.attrs?.id ?? "?"}·${hashDeBloque(b, objetos)}⟧\n${texto}` : texto;
+      return opts.ids ? `⟦${opts.ids[i] ?? "?"}·${hashDeBloque(b, objetos)}⟧\n${texto}` : texto;
     })
     .join("\n\n");
 }

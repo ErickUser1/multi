@@ -489,6 +489,8 @@ function Sala({
   // Documento, software, o null mientras el agente no decide. Un documento lo
   // pinta Multi en el lienzo en vez del preview.
   const [tipo, setTipo] = useState<TipoDeSala | null>(null);
+  // Quién soy en esta sala (nombre y color): con eso se pinta mi cursor en el documento.
+  const [yo, setYo] = useState<Member | null>(null);
   /**
    * Lo que de verdad pasa al escribir. Sola en la sala, escribir despierta al
    * agente aunque el modo diga Multijugador (el server decide igual, ver
@@ -830,6 +832,7 @@ function Sala({
       setNombre(p.nombre ?? null);
       setModo(p.modo ?? "multi");
       setTipo(p.tipo ?? null);
+      setYo(p.you);
       recordarNombre(roomId, p.nombre ?? null);
       setPublicando(p.publicando ?? null);
       setUrlPublicada(p.urlPublicada ?? null);
@@ -2168,7 +2171,11 @@ function Sala({
           {roomId && tipo === "documento" ? (
             socketRef.current && (
               <Suspense fallback={<div className="doc-estado">{t.docCargando}</div>}>
-                <DocumentoView roomId={roomId} socket={socketRef.current} />
+                <DocumentoView
+                  roomId={roomId}
+                  socket={socketRef.current}
+                  yo={{ name: yo?.name ?? name, color: yo?.color ?? "#ff4d1c" }}
+                />
               </Suspense>
             )
           ) : previewReady ? (

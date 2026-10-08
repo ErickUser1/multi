@@ -33,6 +33,7 @@ import {
 } from "./rooms.js";
 import { detectLaunch } from "./engine/preview.js";
 import { getStorage } from "./storage/index.js";
+import { randomUUID } from "node:crypto";
 import { KeyedMutex } from "./engine/keyed-mutex.js";
 import { setCredential, getCredential, clearCredential } from "./keys.js";
 import {
@@ -50,7 +51,9 @@ import {
   tokenDeCookie,
   urlDeAutorizacion,
 } from "./cuentas.js";
-import type { StoredUsuario } from "./storage/types.js";
+import type { StoredUsuario, StoredComentario } from "./storage/types.js";
+import { anclaDeCita, anclaValida, seccionDeBloque } from "./engine/comentarios.js";
+import { ToolError } from "./agent/tools/base.js";
 import {
   guardarAvatar,
   rutaAvatar,
@@ -86,6 +89,7 @@ import {
   aplicarAwareness,
   quitarAwarenessDe,
   cambiosDePersonasDesde,
+  estado,
 } from "./engine/doc-vivo.js";
 import { operacionesDeDocumento } from "./agent/tools/documento.js";
 
@@ -688,6 +692,15 @@ fastify.get<{ Params: { id: string } }>("/rooms/:id/documento", async (req, repl
   return reply
     .header("cache-control", "no-store")
     .send({ titulo: tituloDe(doc), markdown: exportarMarkdown(doc) });
+});
+
+// Los comentarios del documento, para pintarlos al abrirlo. Los nuevos llegan
+// por el socket.
+fastify.get<{ Params: { id: string } }>("/rooms/:id/comentarios", async (req, reply) => {
+  const room = getRoom(req.params.id) ?? (await wakeRoom(req.params.id));
+  if (!room) return reply.code(404).send({ error: "sala no encontrada" });
+  const comentarios = await (await getStorage()).getComentarios(room.id);
+  return reply.header("cache-control", "no-store").send({ comentarios });
 });
 
 // Las imágenes del documento (documento/imagenes/). Solo nombres planos y
@@ -1763,136 +1776,14 @@ io.on("connection", (socket) => {
     });
     ack(true);
 
-    // 2) ¿Es plática o una orden? El agente solo despierta si lo llaman, salvo
-    //    en una sala de una persona, donde escribir ya es pedirle algo.
-    //    La decisión vive en rooms.ts, junto a parseIntent, y ahí se prueba.
-    const intent = intentDeLaSala(parseIntent(text, !!anchor), {
-      modo: room.modo,
-      texto: text,
-      primerAgente: room.agents.list()[0]?.name,
-      personas: room.members.size,
+    // 2) A quién le toca. La misma decisión que un comentario del documento:
+    //    vive en pedirAlAgente para que los dos caminos no se separen.
+    const despacho = await pedirAlAgente(room, socket, member, text, {
+      anchor: anchor ?? null,
+      adjuntos,
+      origen: { tipo: "chat" },
     });
-
-    // Plática entre humanos: nadie despierta. Solo llega aquí con dos o más
-    // personas en la sala; quien está sola nunca le habla a la nada (ver
-    // intentDeLaSala), que es lo que antes se remendaba con una pista.
-    if (intent.kind === "talk") return;
-
-    // El turno corre con la key de QUIEN lo pide: cada quien paga lo suyo.
-    const provider = providerFor(socket.id);
-    if (!provider) {
-      // Solo a esta persona: que le falte key a alguien no es asunto de la sala.
-      socket.emit("error:key", {
-        message:
-          "Para pedirle algo a un agente necesitas tu propia API key de Anthropic. Pégala arriba y vuelve a intentar.",
-      });
-      return;
-    }
-
-    // Anclaje: prependemos el elemento como texto legible (cuidado 3).
-    const withAnchor = (t: string) => (anchor ? `${anchorText(anchor)}\n\n${t}` : t);
-
-    // Los adjuntos se anuncian como texto SIEMPRE, vea o no vea el modelo. Con
-    // el nombre le basta para pedir `usar_adjunto` y meterlo en la app; verlo
-    // solo hace falta para hablar de lo que hay dentro.
-    // El id va junto al nombre porque es lo que `usar_adjunto` resuelve sin
-    // ambigüedad. Con solo el nombre, dos capturas llamadas "imagen.png" serían
-    // indistinguibles y el agente copiaría la que no era.
-    const withAdjuntos = (t: string) =>
-      adjuntos.length
-        ? `${adjuntos
-            .map((a) => `[${esPdf(a) ? "documento" : "imagen"} adjunto: ${a.nombre} — usar_adjunto("${a.id}", …)]`)
-            .join("\n")}\n\n${t}`
-        : t;
-
-    // El contenido solo viaja si el proveedor puede con él. Al que no ve
-    // mandárselo es un 400 seguro, y el turno moriría por algo que no hacía
-    // falta para la tarea.
-    //
-    // Los PDFs se agrupan con las imágenes porque comparten la misma condición
-    // (`ve`) y el mismo camino: van en el mensaje del turno que los trajo, no en
-    // el historial, que se reenvía completo y los cobraría cada vuelta.
-    let imagenes: Extract<ContentBlock, { type: "image" | "documento" }>[] = [];
-    if (adjuntos.length && vePorSocket(socket.id)) {
-      const leidas = await Promise.all(
-        adjuntos.map(async (a) => ({
-          leido: await leerAdjunto(room.workspace.dir, a.id),
-          esPdf: esPdf(a),
-        })),
-      );
-      imagenes = leidas
-        .filter((x): x is { leido: { data: string; mediaType: string }; esPdf: boolean } =>
-          x.leido !== null,
-        )
-        .map((x) => ({
-          type: x.esPdf ? ("documento" as const) : ("image" as const),
-          mediaType: x.leido.mediaType,
-          data: x.leido.data,
-        }));
-    }
-
-    const prepara = (t: string) => withAdjuntos(withAnchor(t));
-
-    if (intent.kind === "address") {
-      // "@agente-2 ..." → join a ese agente (coalescing, no arranca otro loop).
-      const target = room.agents.findByMention(intent.agentName);
-      if (!target) {
-        systemMsg(room, `no existe "${intent.agentName}" en esta sala`);
-        return;
-      }
-
-      // Interrumpir si está trabajando: cualquiera en la sala puede corregir el
-      // rumbo sin esperar. Si tu compa le pidió el front rojo y tú ves que va
-      // mal, decir "mejor azul" tiene que parar lo que hace AHORA — esperar 30
-      // segundos a que termine algo que ya sabes que está mal es tiempo tirado.
-      // Lo que alcanzó a escribir se queda en disco (el turno se marca fallido);
-      // el mensaje nuevo arranca un turno fresco sobre ese estado.
-      if (target.state !== "idle") {
-        room.coordinator.interrupt(`${room.id}:${target.id}`);
-        // Se dice que va a RETOMAR, no solo que se detuvo: sin eso el chat mostraba
-        // "X interrumpió a agente-1" y después, sin aviso, un comando distinto —
-        // parecía que el agente se había quedado callado y arrancado por su cuenta.
-        systemMsg(
-          room,
-          `${member.name} redirigió a ${target.name} — retomando con lo nuevo`,
-          member.color,
-        );
-      }
-
-      void dispatchAgent(room, target.id, prepara(intent.task), provider, imagenes);
-    } else {
-      // "@agente ..." = quiero uno NUEVO, siempre. Es la forma de lanzar trabajo
-      // en paralelo, y el menú lo ofrece con esas palabras ("lanzar otro").
-      // Reutilizar al que estuviera libre hacía que el botón mintiera: pedías
-      // otro agente y te contestaba el mismo.
-      //
-      // Para seguirle hablando a uno existente se le menciona por su nombre
-      // (@agente-1), que el menú lista arriba con lo que hizo.
-      //
-      // Excepción: un mensaje anclado sin @ no expresa "quiero otro agente" —
-      // solo señala un elemento y pide algo. Ahí sí conviene el que ya está.
-      const soloAnclado = !text.trim().startsWith("@");
-      const libre = soloAnclado
-        ? room.agents.list().find((a) => a.state === "idle")
-        : undefined;
-
-      if (libre) {
-        void dispatchAgent(room, libre.id, prepara(intent.task), provider, imagenes);
-      } else {
-        const agent = room.agents.spawn(intent.task);
-        if (!agent) {
-          systemMsg(
-            room,
-            `ya hay ${MAX_AGENTS_PER_ROOM} agentes trabajando; espera a que alguno termine`,
-          );
-          return;
-        }
-        io.to(room.id).emit("agents", { agents: room.agents.list() });
-        // Que quede claro que nació uno nuevo, en vez de que aparezca sin más.
-        systemMsg(room, `entró ${agent.name} a la sala`, agent.color);
-        void dispatchAgent(room, agent.id, prepara(intent.task), provider, imagenes);
-      }
-    }
+    if (!despacho) return;
 
     // Al mandar mensaje anclado, limpiar la selección de este miembro (cuidado 4).
     if (anchor) {
@@ -2139,6 +2030,76 @@ io.on("connection", (socket) => {
     },
   );
 
+  /**
+   * Un comentario en el documento: uno nuevo (con su ancla) o una respuesta en
+   * un hilo. Si va dirigido a un agente (con la regla del chat: en una sala de
+   * una persona no hace falta la arroba), el agente contesta en el hilo.
+   */
+  socket.on(
+    "comentario",
+    async (
+      { id, hilo, ancla, cita, texto }: { id?: unknown; hilo?: unknown; ancla?: unknown; cita?: unknown; texto?: unknown },
+      confirmar?: (r: { ok: boolean }) => void,
+    ) => {
+      const ack = (ok: boolean) => typeof confirmar === "function" && confirmar({ ok });
+      const room = joinedRoom;
+      const member = room?.members.get(socket.id);
+      if (!room || !member) return ack(false);
+      const contenido = typeof texto === "string" ? texto.trim() : "";
+      if (!contenido) return ack(true);
+      // Un reintento de algo que ya llegó: se confirma y no se repite.
+      if (typeof id === "string" && id && yaRecibido(room.id, `c:${id}`)) return ack(true);
+      const doc = await documentosVivos.abrir(room.id, room.workspace.dir);
+      if (!doc) return ack(true);
+
+      let raiz: StoredComentario | undefined;
+      let anclaOk: ReturnType<typeof anclaValida> = null;
+      if (typeof hilo === "string" && hilo) {
+        raiz = await hiloDe(room, hilo);
+        if (!raiz) return ack(true);
+      } else {
+        anclaOk = anclaValida(ancla);
+        if (!anclaOk) return ack(true);
+      }
+      const c = await publicarComentario(room, {
+        hiloId: raiz?.id ?? "",
+        ancla: anclaOk ? JSON.stringify(anclaOk) : null,
+        cita: !raiz && typeof cita === "string" ? cita.slice(0, 500) : null,
+        autor: member.name,
+        color: member.color,
+        rol: "human",
+        usuarioId: member.usuarioId ?? null,
+        texto: contenido,
+      });
+      ack(true);
+
+      const bloque = raiz ? (JSON.parse(raiz.ancla ?? "{}") as { bloque?: string }).bloque ?? "" : anclaOk!.bloque;
+      const seccion = seccionDeBloque(doc, bloque);
+      const citado = raiz?.cita ?? c.cita ?? "";
+      // En el chat, una línea: quien no tiene abierto el documento se entera.
+      systemMsg(room, `${member.name} comentó en «${seccion}»: ${contenido.slice(0, 140)}`, member.color);
+
+      await pedirAlAgente(room, socket, member, contenido, {
+        anchor: null,
+        adjuntos: [],
+        origen: { tipo: "comentario", hilo: c.hiloId, bloque, seccion },
+        contexto:
+          `[Comentario de ${member.name} en el documento, sección «${seccion}», ` +
+          `sobre el texto «${citado.slice(0, 300)}» (bloque ${bloque}, hilo ${c.hiloId})]\n` +
+          `Contesta con la tool comentar en el hilo ${c.hiloId}, no en el chat. Si te piden un cambio, ` +
+          `hazlo en el documento y di en el hilo, en una línea, qué cambiaste.`,
+      });
+    },
+  );
+
+  socket.on("comentario:resolver", async ({ hilo, resuelto }: { hilo?: unknown; resuelto?: unknown }) => {
+    const room = joinedRoom;
+    if (!room || !room.members.has(socket.id) || typeof hilo !== "string") return;
+    if (!(await hiloDe(room, hilo))) return;
+    await (await getStorage()).resolverHilo(room.id, hilo, resuelto === true);
+    io.to(room.id).emit("comentario:resuelto", { hilo, resuelto: resuelto === true });
+  });
+
   socket.on("doc:awareness", async ({ update }: { update?: unknown }) => {
     const room = joinedRoom;
     if (!room || !room.members.has(socket.id)) return;
@@ -2211,6 +2172,259 @@ documentosVivos.alCambiar = (doc, update, origen) => {
   const destino = origen?.socketId ? io.to(doc.roomId).except(origen.socketId) : io.to(doc.roomId);
   destino.emit("doc:update", { update, generacion: doc.generacion });
 };
+
+/** De dónde vino un pedido al agente: el chat, o un comentario del documento. */
+type OrigenDelPedido =
+  | { tipo: "chat" }
+  | { tipo: "comentario"; hilo: string; bloque: string; seccion: string };
+
+/**
+ * Le pide algo a un agente con las reglas del chat: plática o pedido según el
+ * modo de la sala y la arroba, a quién va dirigido, interrumpir si está
+ * ocupado, crear uno nuevo si hace falta, y con la key de quien lo pide.
+ *
+ * Lo usan el chat y los comentarios del documento. Es UNA sola función a
+ * propósito: si cada camino tuviera su copia, la regla de "en una sala de una
+ * persona no hace falta la arroba" se arreglaría en uno y en el otro no.
+ *
+ * Devuelve si despertó a alguien.
+ */
+async function pedirAlAgente(
+  room: Room,
+  socket: { id: string; emit: (evento: string, datos: unknown) => unknown },
+  member: { name: string; color: string },
+  text: string,
+  opts: { anchor: SelectedElement | null; adjuntos: Adjunto[]; origen: OrigenDelPedido; contexto?: string },
+): Promise<boolean> {
+  const { anchor, adjuntos } = opts;
+  // 2) ¿Es plática o una orden? El agente solo despierta si lo llaman, salvo
+  //    en una sala de una persona, donde escribir ya es pedirle algo.
+  //    La decisión vive en rooms.ts, junto a parseIntent, y ahí se prueba.
+  const intent = intentDeLaSala(parseIntent(text, !!anchor), {
+    modo: room.modo,
+    texto: text,
+    primerAgente: room.agents.list()[0]?.name,
+    personas: room.members.size,
+  });
+
+  // Plática entre humanos: nadie despierta. Solo llega aquí con dos o más
+  // personas en la sala; quien está sola nunca le habla a la nada (ver
+  // intentDeLaSala), que es lo que antes se remendaba con una pista.
+  if (intent.kind === "talk") return false;
+
+  // El turno corre con la key de QUIEN lo pide: cada quien paga lo suyo.
+  const provider = providerFor(socket.id);
+  if (!provider) {
+    // Solo a esta persona: que le falte key a alguien no es asunto de la sala.
+    socket.emit("error:key", {
+      message:
+        "Para pedirle algo a un agente necesitas tu propia API key de Anthropic. Pégala arriba y vuelve a intentar.",
+    });
+    return false;
+  }
+
+  // Anclaje: prependemos el elemento como texto legible (cuidado 3).
+  const withAnchor = (t: string) => (anchor ? `${anchorText(anchor)}\n\n${t}` : t);
+
+  // Los adjuntos se anuncian como texto SIEMPRE, vea o no vea el modelo. Con
+  // el nombre le basta para pedir `usar_adjunto` y meterlo en la app; verlo
+  // solo hace falta para hablar de lo que hay dentro.
+  // El id va junto al nombre porque es lo que `usar_adjunto` resuelve sin
+  // ambigüedad. Con solo el nombre, dos capturas llamadas "imagen.png" serían
+  // indistinguibles y el agente copiaría la que no era.
+  const withAdjuntos = (t: string) =>
+    adjuntos.length
+      ? `${adjuntos
+          .map((a) => `[${esPdf(a) ? "documento" : "imagen"} adjunto: ${a.nombre} — usar_adjunto("${a.id}", …)]`)
+          .join("\n")}\n\n${t}`
+      : t;
+
+  // El contenido solo viaja si el proveedor puede con él. Al que no ve
+  // mandárselo es un 400 seguro, y el turno moriría por algo que no hacía
+  // falta para la tarea.
+  //
+  // Los PDFs se agrupan con las imágenes porque comparten la misma condición
+  // (`ve`) y el mismo camino: van en el mensaje del turno que los trajo, no en
+  // el historial, que se reenvía completo y los cobraría cada vuelta.
+  let imagenes: Extract<ContentBlock, { type: "image" | "documento" }>[] = [];
+  if (adjuntos.length && vePorSocket(socket.id)) {
+    const leidas = await Promise.all(
+      adjuntos.map(async (a) => ({
+        leido: await leerAdjunto(room.workspace.dir, a.id),
+        esPdf: esPdf(a),
+      })),
+    );
+    imagenes = leidas
+      .filter((x): x is { leido: { data: string; mediaType: string }; esPdf: boolean } =>
+        x.leido !== null,
+      )
+      .map((x) => ({
+        type: x.esPdf ? ("documento" as const) : ("image" as const),
+        mediaType: x.leido.mediaType,
+        data: x.leido.data,
+      }));
+  }
+
+  // Un comentario llega con su contexto: dónde está y en qué hilo contestar.
+  const prepara = (t: string) => (opts.contexto ? `${opts.contexto}\n\n` : "") + withAdjuntos(withAnchor(t));
+
+  if (intent.kind === "address") {
+    // "@agente-2 ..." → join a ese agente (coalescing, no arranca otro loop).
+    const target = room.agents.findByMention(intent.agentName);
+    if (!target) {
+      systemMsg(room, `no existe "${intent.agentName}" en esta sala`);
+      return false;
+    }
+
+    // Interrumpir si está trabajando: cualquiera en la sala puede corregir el
+    // rumbo sin esperar. Si tu compa le pidió el front rojo y tú ves que va
+    // mal, decir "mejor azul" tiene que parar lo que hace AHORA — esperar 30
+    // segundos a que termine algo que ya sabes que está mal es tiempo tirado.
+    // Lo que alcanzó a escribir se queda en disco (el turno se marca fallido);
+    // el mensaje nuevo arranca un turno fresco sobre ese estado.
+    if (target.state !== "idle") {
+      room.coordinator.interrupt(`${room.id}:${target.id}`);
+      // Se dice que va a RETOMAR, no solo que se detuvo: sin eso el chat mostraba
+      // "X interrumpió a agente-1" y después, sin aviso, un comando distinto —
+      // parecía que el agente se había quedado callado y arrancado por su cuenta.
+      systemMsg(
+        room,
+        `${member.name} redirigió a ${target.name} — retomando con lo nuevo`,
+        member.color,
+      );
+    }
+
+    void dispatchAgent(room, target.id, prepara(intent.task), provider, imagenes, opts.origen);
+  } else {
+    // "@agente ..." = quiero uno NUEVO, siempre. Es la forma de lanzar trabajo
+    // en paralelo, y el menú lo ofrece con esas palabras ("lanzar otro").
+    // Reutilizar al que estuviera libre hacía que el botón mintiera: pedías
+    // otro agente y te contestaba el mismo.
+    //
+    // Para seguirle hablando a uno existente se le menciona por su nombre
+    // (@agente-1), que el menú lista arriba con lo que hizo.
+    //
+    // Excepción: un mensaje anclado sin @ no expresa "quiero otro agente" —
+    // solo señala un elemento y pide algo. Ahí sí conviene el que ya está.
+    const soloAnclado = !text.trim().startsWith("@");
+    const libre = soloAnclado
+      ? room.agents.list().find((a) => a.state === "idle")
+      : undefined;
+
+    if (libre) {
+      void dispatchAgent(room, libre.id, prepara(intent.task), provider, imagenes, opts.origen);
+    } else {
+      const agent = room.agents.spawn(intent.task);
+      if (!agent) {
+        systemMsg(
+          room,
+          `ya hay ${MAX_AGENTS_PER_ROOM} agentes trabajando; espera a que alguno termine`,
+        );
+        return false;
+      }
+      io.to(room.id).emit("agents", { agents: room.agents.list() });
+      // Que quede claro que nació uno nuevo, en vez de que aparezca sin más.
+      systemMsg(room, `entró ${agent.name} a la sala`, agent.color);
+      void dispatchAgent(room, agent.id, prepara(intent.task), provider, imagenes, opts.origen);
+    }
+  }
+  return true;
+}
+
+/** Guarda un comentario y lo reparte a la sala. */
+async function publicarComentario(
+  room: Room,
+  c: Pick<StoredComentario, "hiloId" | "autor" | "color" | "rol" | "texto"> &
+    Partial<Pick<StoredComentario, "id" | "ancla" | "cita" | "usuarioId">>,
+): Promise<StoredComentario> {
+  const id = c.id ?? randomUUID();
+  const comentario: StoredComentario = {
+    id,
+    roomId: room.id,
+    hiloId: c.hiloId || id,
+    ancla: c.ancla ?? null,
+    cita: c.cita ?? null,
+    autor: c.autor,
+    color: c.color,
+    rol: c.rol,
+    usuarioId: c.usuarioId ?? null,
+    texto: c.texto.slice(0, 4000),
+    creado: Date.now(),
+    resuelto: false,
+  };
+  await (await getStorage()).addComentario(comentario);
+  io.to(room.id).emit("comentario:nuevo", comentario);
+  return comentario;
+}
+
+/** Los comentarios de una sala, para saber si un hilo existe. */
+async function hiloDe(room: Room, hilo: string): Promise<StoredComentario | undefined> {
+  const todos = await (await getStorage()).getComentarios(room.id);
+  return todos.find((c) => c.id === hilo && c.hiloId === c.id);
+}
+
+/**
+ * Lo que un agente puede hacer con los comentarios: contestar en un hilo o
+ * abrir uno sobre una frase. Cuando abre uno, el chat lo dice en una línea,
+ * como cuando lo hace una persona.
+ */
+function operacionesDeComentarios(
+  room: Room,
+  autor: string,
+  color: string,
+  alComentar: () => void,
+): import("./agent/tools/comentarios.js").OperacionesDeComentarios {
+  return {
+    async responder(hilo, texto) {
+      if (!(await hiloDe(room, hilo))) throw new ToolError(`no hay un hilo con id ${hilo}`);
+      await publicarComentario(room, { hiloId: hilo, autor, color, rol: "agent", texto });
+      alComentar();
+      return "respuesta publicada en el hilo";
+    },
+    async nuevo(bloque, cita, texto) {
+      const doc = await documentosVivos.abrir(room.id, room.workspace.dir);
+      if (!doc) throw new ToolError("esta sala no tiene documento");
+      const ancla = anclaDeCita(doc, bloque, cita);
+      if (!ancla) {
+        throw new ToolError(`esa cita no está tal cual en el bloque ${bloque}: copia un pedazo exacto de su texto (lee el documento)`);
+      }
+      const c = await publicarComentario(room, { hiloId: "", ancla: JSON.stringify(ancla), cita, autor, color, rol: "agent", texto });
+      alComentar();
+      systemMsg(room, `${autor} comentó en «${seccionDeBloque(doc, bloque)}»: ${texto.slice(0, 140)}`, color);
+      return `comentario abierto (hilo ${c.id})`;
+    },
+  };
+}
+
+/** Si un turno que vino de un comentario cambió el párrafo comentado, el hilo lo dice. */
+async function notasDeCambios(
+  room: Room,
+  agente: string,
+  hilos: Extract<OrigenDelPedido, { tipo: "comentario" }>[],
+  desde: number,
+): Promise<void> {
+  const doc = documentosVivos.obtener(room.id);
+  if (!doc) return;
+  const vistos = new Set<string>();
+  for (const h of hilos) {
+    if (vistos.has(h.hilo)) continue;
+    vistos.add(h.hilo);
+    const a = doc.autorPorBloque.get(h.bloque);
+    // Cambió el párrafo, o lo reemplazó por otro (el bloque ya no existe y el
+    // agente sí tocó el documento en este turno).
+    const tocoAlgo = [...doc.autorPorBloque.values()].some((x) => x.autor === agente && x.en >= desde);
+    const cambio = (a && a.autor === agente && a.en >= desde) || (tocoAlgo && !estado(doc).ids.includes(h.bloque));
+    if (cambio) {
+      await publicarComentario(room, {
+        hiloId: h.hilo,
+        autor: "sistema",
+        color: "#a9abd0",
+        rol: "system",
+        texto: `${agente} cambió este párrafo.`,
+      });
+    }
+  }
+}
 
 /** Emite un mensaje a la sala Y lo persiste, para que sobreviva al reinicio. */
 async function say(
@@ -2291,6 +2505,13 @@ function yaRecibido(roomId: string, id: string): boolean {
 const pendingImagenes = new Map<string, Extract<ContentBlock, { type: "image" | "documento" }>[]>();
 
 /**
+ * De dónde vino cada pedido de la cola: del chat o de un comentario. Viaja junto
+ * al texto por lo mismo que las imágenes: el turno que los atiende tiene que
+ * saber si su respuesta va al chat o al hilo del comentario.
+ */
+const pendingOrigenes = new Map<string, OrigenDelPedido[]>();
+
+/**
  * Despacha trabajo a UN agente. El coordinador garantiza un solo drain activo
  * por agentId — pero agentes distintos corren EN PARALELO (esa es la clave).
  * Si el agente ya está corriendo, el mensaje se acumula y se atiende en UNA
@@ -2302,11 +2523,13 @@ async function dispatchAgent(
   userText: string,
   provider: ModelProvider,
   imagenes: Extract<ContentBlock, { type: "image" | "documento" }>[] = [],
+  origen: OrigenDelPedido = { tipo: "chat" },
 ): Promise<void> {
   const key = `${room.id}:${agentId}`;
   const queue = pendingByAgent.get(key) ?? [];
   queue.push(userText);
   pendingByAgent.set(key, queue);
+  pendingOrigenes.set(key, [...(pendingOrigenes.get(key) ?? []), origen]);
   if (imagenes.length) {
     pendingImagenes.set(key, [...(pendingImagenes.get(key) ?? []), ...imagenes]);
   }
@@ -2323,9 +2546,11 @@ async function dispatchAgent(
     const task = pending.join("\n\n");
     const imgs = pendingImagenes.get(key) ?? [];
     pendingImagenes.set(key, []);
+    const origenes = pendingOrigenes.get(key) ?? [];
+    pendingOrigenes.set(key, []);
 
     try {
-      await runAgentTurn(room, agentId, task, signal, provider, imgs);
+      await runAgentTurn(room, agentId, task, signal, provider, imgs, origenes);
     } catch (err) {
       // Si el turno se cortó, lo que se sacó de la cola NO se ejecutó: se
       // devuelve al frente para que lo atienda el turno siguiente.
@@ -2341,6 +2566,7 @@ async function dispatchAgent(
       if (imgs.length) {
         pendingImagenes.set(key, [...imgs, ...(pendingImagenes.get(key) ?? [])]);
       }
+      pendingOrigenes.set(key, [...origenes, ...(pendingOrigenes.get(key) ?? [])]);
       throw err;
     }
   });
@@ -2354,6 +2580,7 @@ async function runAgentTurn(
   signal: AbortSignal,
   provider: ModelProvider,
   imagenes: Extract<ContentBlock, { type: "image" | "documento" }>[] = [],
+  origenes: OrigenDelPedido[] = [],
 ): Promise<void> {
   const agent = room.agents.get(agentId);
   if (!agent) return;
@@ -2387,6 +2614,9 @@ async function runAgentTurn(
   // punto del historial, no mezclado con lo que haga el agente.
   await commitEdicionesHumanas(room);
   const turn = await startTurn(room.workspace.dir, { roomId: room.id, agentId, task });
+  const inicioDelTurno = Date.now();
+  // Si contestó con la tool comentar, su texto final no se duplica en el hilo.
+  let comento = false;
   // Si la sala despertó tras un reinicio, el historial vive en la BD.
   let history = room.histories.get(agentId);
   if (!history) {
@@ -2424,6 +2654,10 @@ async function runAgentTurn(
       ejecutarSql: await sqlDeLaSala(room.id),
       // Y con qué verla: su estructura y sus filas, siempre en solo lectura.
       leerBase: await lecturaDeLaSala(room.id),
+      // Contestar y abrir comentarios en el documento.
+      comentarios: operacionesDeComentarios(room, agent.name, agent.color, () => {
+        comento = true;
+      }),
       // El documento de la sala: el agente lo lee y lo cambia por bloque.
       documento: operacionesDeDocumento(room.id, room.workspace.dir, agent.name, (bloques) =>
         io.to(room.id).emit("doc:agente", { agente: agent.name, color: agent.color, bloques }),
@@ -2487,12 +2721,37 @@ async function runAgentTurn(
       return;
     }
 
-    await say(room, {
-      from: agent.name,
-      color: agent.color,
-      role: "agent",
-      text: result.finalText,
-    });
+    // Si el turno vino solo de comentarios, la respuesta es del hilo, no del
+    // chat: en el chat queda una línea que dice dónde contestó.
+    const hilos = origenes.filter((o): o is Extract<OrigenDelPedido, { tipo: "comentario" }> => o.tipo === "comentario");
+    const deComentarios = origenes.length > 0 && hilos.length === origenes.length;
+    if (deComentarios) {
+      const ultimo = hilos[hilos.length - 1];
+      if (!comento && result.finalText.trim()) {
+        await publicarComentario(room, {
+          hiloId: ultimo.hilo,
+          autor: agent.name,
+          color: agent.color,
+          rol: "agent",
+          texto: result.finalText,
+        });
+      }
+      await say(room, {
+        from: agent.name,
+        color: agent.color,
+        role: "agent",
+        text: `Contesté en el comentario de «${ultimo.seccion}».`,
+      });
+    } else {
+      await say(room, {
+        from: agent.name,
+        color: agent.color,
+        role: "agent",
+        text: result.finalText,
+      });
+    }
+    // Lo que cambió por un comentario queda dicho en su hilo.
+    await notasDeCambios(room, agent.name, hilos, inicioDelTurno);
 
     /**
      * La sala se bautiza sola con lo primero que le pidieron.

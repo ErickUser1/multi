@@ -11,6 +11,7 @@ import type {
   StoredMessage,
   StoredRoom,
   StoredUsuario,
+  StoredComentario,
 } from "./types.js";
 
 /**
@@ -174,6 +175,26 @@ export class SqliteStorage implements Storage {
     } catch {
       // ya la tiene
     }
+
+    // Los comentarios del documento. Aparte de los mensajes: viven anclados a
+    // un texto y en hilos, no en la línea del chat.
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS comentarios (
+        id          TEXT PRIMARY KEY,
+        room_id     TEXT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+        hilo_id     TEXT NOT NULL,
+        ancla       TEXT,
+        cita        TEXT,
+        autor       TEXT NOT NULL,
+        color       TEXT NOT NULL,
+        rol         TEXT NOT NULL,
+        usuario_id  TEXT,
+        texto       TEXT NOT NULL,
+        creado      INTEGER NOT NULL,
+        resuelto    INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE INDEX IF NOT EXISTS comentarios_sala_idx ON comentarios(room_id, creado);
+    `);
   }
 
   /**
@@ -520,6 +541,41 @@ export class SqliteStorage implements Storage {
 
   async borrarConexionSupabase(roomId: string): Promise<void> {
     this.db.prepare(`DELETE FROM supabase_salas WHERE room_id = ?`).run(roomId);
+  }
+
+  async getComentarios(roomId: string): Promise<StoredComentario[]> {
+    const filas = this.db
+      .prepare(`SELECT * FROM comentarios WHERE room_id = ? ORDER BY creado ASC, rowid ASC`)
+      .all(roomId) as Record<string, unknown>[];
+    return filas.map((r) => ({
+      id: String(r.id),
+      roomId: String(r.room_id),
+      hiloId: String(r.hilo_id),
+      ancla: r.ancla ? String(r.ancla) : null,
+      cita: r.cita ? String(r.cita) : null,
+      autor: String(r.autor),
+      color: String(r.color),
+      rol: String(r.rol) as StoredComentario["rol"],
+      usuarioId: r.usuario_id ? String(r.usuario_id) : null,
+      texto: String(r.texto),
+      creado: Number(r.creado),
+      resuelto: Number(r.resuelto) === 1,
+    }));
+  }
+
+  async addComentario(c: StoredComentario): Promise<void> {
+    this.db
+      .prepare(
+        `INSERT INTO comentarios (id, room_id, hilo_id, ancla, cita, autor, color, rol, usuario_id, texto, creado, resuelto)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(c.id, c.roomId, c.hiloId, c.ancla, c.cita, c.autor, c.color, c.rol, c.usuarioId, c.texto, c.creado, c.resuelto ? 1 : 0);
+  }
+
+  async resolverHilo(roomId: string, hiloId: string, resuelto: boolean): Promise<void> {
+    this.db
+      .prepare(`UPDATE comentarios SET resuelto = ? WHERE room_id = ? AND id = ?`)
+      .run(resuelto ? 1 : 0, roomId, hiloId);
   }
 
   async close(): Promise<void> {

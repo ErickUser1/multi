@@ -20,7 +20,7 @@ import {
 } from "./socket.js";
 import { AgentList, textoDeEstado } from "./AgentList.js";
 import { FiltroChat } from "./FiltroChat.js";
-import { MentionMenu, opcionesDeMencion } from "./MentionMenu.js";
+import { MentionMenu, useMenciones } from "./MentionMenu.js";
 import { Historial } from "./Historial.js";
 // El panel ya no se monta, pero la key guardada del navegador se sigue
 // mandando al conectar: quien la había configurado no debe quedarse fuera.
@@ -682,9 +682,9 @@ function Sala({
   }, []);
   const [orphans, setOrphans] = useState<OrphanTurn[]>([]);
   /** Query del menú de menciones (null = cerrado). */
-  const [mention, setMention] = useState<string | null>(null);
+  // El menú de menciones de la caja del chat (el mismo que usan los comentarios).
+  const menciones = useMenciones(agents);
   /** Qué opción del menú de menciones está resaltada: la que toma un Tab o un Enter. */
-  const [mentionSel, setMentionSel] = useState(0);
   /** Se incrementa cuando el historial cambia, para que el scrubber recargue. */
   const [histVersion, setHistVersion] = useState(0);
   /** Qué tab del escenario se ve. */
@@ -1376,7 +1376,7 @@ function Sala({
     }
     setDraft("");
     setPendientes([]);
-    setMention(null);
+    menciones.cerrar();
     if (mySelection) {
       setMySelection(null);
       postToInspector({ type: "selection:clear" }); // cuidado 4
@@ -1388,17 +1388,11 @@ function Sala({
   // Menú de menciones: se abre al escribir "@" al inicio de una palabra.
   const onDraftChange = (value: string) => {
     setDraft(value);
-    const m = value.match(/(?:^|\s)@([a-z0-9-]*)$/i);
-    setMention(m ? m[1] : null);
-    // Lo escrito cambia qué se ofrece: se vuelve a la primera opción.
-    setMentionSel(0);
+    menciones.alCambiar(value);
   };
 
-  const opcionesMencion = mention !== null ? opcionesDeMencion(agents, mention) : [];
-
   const pickMention = (name: string) => {
-    setDraft((d) => d.replace(/(?:^|\s)@([a-z0-9-]*)$/i, (full) => `${full.startsWith(" ") ? " " : ""}@${name} `));
-    setMention(null);
+    setDraft((d) => menciones.elegir(d, name));
   };
 
   /** El humano decide qué hacer con el trabajo que quedó a medias por un crash. */
@@ -1825,8 +1819,8 @@ function Sala({
             </div>
           )}
           <div className="input-wrap">
-            {mention !== null && (
-              <MentionMenu opciones={opcionesMencion} seleccion={mentionSel} onPick={pickMention} />
+            {menciones.abierto && (
+              <MentionMenu opciones={menciones.opciones} seleccion={menciones.sel} onPick={pickMention} />
             )}
             {/* Arrastrar y pegar ya funcionaban, pero no se ven: nadie adivina
                 que puede soltar un archivo aquí. Y en el teléfono no existe
@@ -1878,26 +1872,18 @@ function Sala({
                 // en cualquier chat: Tab o Enter aceptan la resaltada y las
                 // flechas la mueven. Antes Tab sacaba el cursor de la caja y
                 // Enter mandaba el "@ag" a medias, que no despierta a nadie.
-                if (mention !== null && opcionesMencion.length > 0) {
-                  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-                    e.preventDefault();
-                    const n = opcionesMencion.length;
-                    setMentionSel((i) => (i + (e.key === "ArrowDown" ? 1 : n - 1)) % n);
-                    return;
-                  }
-                  if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) {
-                    e.preventDefault();
-                    pickMention(opcionesMencion[Math.min(mentionSel, opcionesMencion.length - 1)].name);
-                    return;
-                  }
+                const delMenu = menciones.alTeclear(e);
+                if (typeof delMenu === "string") {
+                  pickMention(delMenu);
+                  return;
                 }
+                if (delMenu) return;
                 // Enter manda, Shift+Enter hace salto de línea. Es lo que hace
                 // cualquier chat, y sin esto un textarea se traga el enter.
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
                   send();
                 }
-                if (e.key === "Escape") setMention(null);
               }}
             />
               <div className="caja-acciones">
@@ -2175,6 +2161,7 @@ function Sala({
                   roomId={roomId}
                   socket={socketRef.current}
                   yo={{ name: yo?.name ?? name, color: yo?.color ?? "#ff4d1c" }}
+                  agents={agents}
                 />
               </Suspense>
             )

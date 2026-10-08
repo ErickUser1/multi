@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { Agent } from "./socket.js";
 
 /**
@@ -91,4 +92,54 @@ function hintDe(a: Agent): string {
 function truncate(s: string, n = 34): string {
   const clean = s.replace(/\s+/g, " ").trim();
   return clean.length > n ? `${clean.slice(0, n)}…` : clean;
+}
+
+/**
+ * El manejo de teclado y de texto del menú de menciones, para cualquier caja:
+ * la del chat y la de los comentarios del documento usan el mismo. "@" al
+ * inicio de una palabra abre el menú; flechas lo mueven; Tab o Enter aceptan.
+ */
+export function useMenciones(agents: Agent[]) {
+  const [mention, setMention] = useState<string | null>(null);
+  const [sel, setSel] = useState(0);
+  const opciones = mention !== null ? opcionesDeMencion(agents, mention) : [];
+
+  /** Llamar con cada cambio del texto. */
+  const alCambiar = (valor: string) => {
+    const m = valor.match(/(?:^|\s)@([a-z0-9-]*)$/i);
+    setMention(m ? m[1] : null);
+    // Lo escrito cambia qué se ofrece: se vuelve a la primera opción.
+    setSel(0);
+  };
+
+  /** El texto con la mención escogida ya puesta. */
+  const elegir = (valor: string, nombre: string): string => {
+    setMention(null);
+    return valor.replace(/(?:^|\s)@([a-z0-9-]*)$/i, (full) => `${full.startsWith(" ") ? " " : ""}@${nombre} `);
+  };
+
+  /**
+   * Con el menú abierto, el teclado es del menú. Devuelve el nombre escogido
+   * (Tab/Enter), true si el evento ya se usó (flechas), o false si no es suyo.
+   */
+  const alTeclear = (e: { key: string; shiftKey: boolean; preventDefault: () => void }): string | boolean => {
+    if (e.key === "Escape") {
+      setMention(null);
+      return false;
+    }
+    if (mention === null || opciones.length === 0) return false;
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      const n = opciones.length;
+      setSel((i) => (i + (e.key === "ArrowDown" ? 1 : n - 1)) % n);
+      return true;
+    }
+    if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) {
+      e.preventDefault();
+      return opciones[Math.min(sel, opciones.length - 1)].name;
+    }
+    return false;
+  };
+
+  return { abierto: mention !== null, opciones, sel, alCambiar, elegir, alTeclear, cerrar: () => setMention(null) };
 }

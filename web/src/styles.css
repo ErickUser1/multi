@@ -3494,7 +3494,6 @@ img.av {
 .doc-comentar {
   position: absolute;
   z-index: 5;
-  transform: translateY(-110%);
   font: 600 12px "Segoe UI", system-ui, sans-serif;
   color: #111;
   background: #ffc400;
@@ -3504,129 +3503,153 @@ img.av {
   cursor: pointer;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
 }
-.com-panel {
-  width: 300px;
-  flex-shrink: 0;
-  border-left: 1px solid var(--linea);
-  overflow-y: auto;
-  padding: 12px;
+/* El hilo flota junto a su texto, dentro de la hoja: se desplaza con ella. */
+.doc-scroll {
+  position: relative;
+}
+.com-tarjeta {
+  position: absolute;
+  z-index: 6;
+  max-width: calc(100% - 24px);
+  background: var(--panel);
+  border: 1px solid var(--linea);
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+  padding: 12px 12px 10px;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  font: 13px/1.45 "Segoe UI", system-ui, sans-serif;
+  font: 14px/1.45 "Segoe UI", system-ui, sans-serif;
+  color: var(--texto);
 }
-.com-cab {
+.com-tarjeta-acciones {
+  position: absolute;
+  top: 8px;
+  right: 8px;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  gap: 2px;
 }
-.com-enlace {
-  font: inherit;
-  font-size: 12px;
+.com-icono {
+  width: 28px;
+  height: 28px;
+  font: 16px "Segoe UI", system-ui, sans-serif;
   color: var(--dim);
   background: none;
   border: 0;
-  cursor: pointer;
-  text-decoration: underline;
-}
-.com-vacio {
-  color: var(--dim);
-  margin: 0;
-}
-.com-hilo {
-  border: 1px solid var(--linea);
   border-radius: 6px;
-  padding: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
   cursor: pointer;
 }
-.com-hilo.activo {
-  border-color: #ffc400;
-  cursor: default;
-}
-.com-hilo.resuelto {
-  opacity: 0.6;
-}
-.com-cita {
-  margin: 0;
-  padding-left: 8px;
-  border-left: 2px solid #ffc400;
-  color: var(--dim);
-  font-style: italic;
-  overflow-wrap: anywhere;
-}
-.com-cita.borrada {
-  text-decoration: line-through;
-}
-.com-aviso {
-  margin: 0;
-  font-size: 12px;
-  color: var(--acento);
+.com-icono:hover {
+  color: var(--texto);
+  background: rgba(255, 255, 255, 0.08);
 }
 .com-mensaje {
   display: flex;
   flex-direction: column;
+  gap: 4px;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
+}
+/* Lo primero de la tarjeta deja sitio a los botones de arriba (✓ y ×). */
+.com-tarjeta-acciones + .com-mensaje .com-mensaje-cab,
+.com-tarjeta-acciones + .com-aviso,
+.com-tarjeta-acciones + .com-caja {
+  margin-right: 64px;
+}
+.com-mensaje-cab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.com-avatar {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font: 700 11px "Segoe UI", system-ui, sans-serif;
+  color: #111;
+}
+.com-autor {
+  font-weight: 600;
+}
+.com-hora {
+  font-size: 12px;
+  color: var(--dim);
 }
 .com-mensaje.system {
   font-size: 12px;
   color: var(--dim);
   font-style: italic;
 }
-.com-autor {
-  font-weight: 600;
+.com-plegadas {
+  align-self: flex-start;
+  font: inherit;
+  font-size: 13px;
+  color: var(--dim);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+.com-plegadas:hover {
+  color: var(--texto);
+}
+.com-aviso {
+  margin: 0;
   font-size: 12px;
+  color: var(--acento);
+}
+.com-cita-borrada {
+  text-decoration: line-through;
+  color: var(--dim);
 }
 .com-caja {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
+  border: 1px solid var(--linea);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--fondo);
+}
+.com-caja:focus-within {
+  border-color: #4f9dff;
 }
 .com-caja textarea {
   font: inherit;
   color: var(--texto);
-  background: var(--fondo);
-  border: 1px solid var(--linea);
-  border-radius: 4px;
-  padding: 6px 8px;
-  resize: vertical;
+  background: none;
+  border: 0;
+  outline: none;
+  resize: none;
+  padding: 0;
+  min-height: 22px;
 }
 .com-caja .mention-menu {
   bottom: 100%;
   top: auto;
 }
-.com-caja-acciones,
-.com-acciones {
+.com-caja-pie {
   display: flex;
   justify-content: flex-end;
-  gap: 6px;
 }
-.doc-boton.principal {
-  background: var(--texto);
+.com-enviar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 0;
+  font: 700 15px "Segoe UI", system-ui, sans-serif;
   color: var(--fondo);
-  border-color: var(--texto);
+  background: var(--texto);
+  cursor: pointer;
 }
-.doc-boton:disabled {
-  opacity: 0.5;
+.com-enviar:disabled {
+  background: var(--linea);
+  color: var(--dim);
   cursor: default;
-}
-/* En pantallas angostas el panel sube desde abajo, encima de la hoja. */
-@media (max-width: 900px) {
-  .com-panel {
-    position: absolute;
-    inset: auto 0 0 0;
-    width: auto;
-    max-height: 55%;
-    background: var(--panel);
-    border-left: 0;
-    border-top: 1px solid var(--linea);
-    box-shadow: 0 -6px 18px rgba(0, 0, 0, 0.5);
-    z-index: 6;
-  }
 }
 
 /* La copia para imprimir no se ve en pantalla. */

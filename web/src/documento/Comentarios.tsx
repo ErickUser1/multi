@@ -24,30 +24,36 @@ export interface Hilo {
   sinTexto: boolean;
 }
 
+function hora(ms: number): string {
+  const d = new Date(ms);
+  const hoy = new Date();
+  const mismaFecha = d.toDateString() === hoy.toDateString();
+  return mismaFecha
+    ? d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+    : d.toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
 /**
- * Una caja para escribir un comentario, con el mismo menú de menciones del
- * chat: en una sala de varias personas, `@agente-1 …` le habla al agente.
+ * La caja para escribir, con el mismo menú de menciones del chat. A quién le
+ * habla lo decide la regla del chat: en una sala de una persona, al agente; en
+ * multijugador, al agente solo si lo mencionan con @.
  */
 function Caja({
   agents,
   placeholder,
   alEnviar,
-  alCancelar,
-  enfocar,
+  alEscapar,
 }: {
   agents: Agent[];
   placeholder: string;
   alEnviar: (texto: string) => void;
-  alCancelar?: () => void;
-  enfocar?: boolean;
+  alEscapar: () => void;
 }) {
   const { t } = useTextos();
   const [texto, setTexto] = useState("");
   const menciones = useMenciones(agents);
   const ref = useRef<HTMLTextAreaElement>(null);
-  useEffect(() => {
-    if (enfocar) ref.current?.focus();
-  }, [enfocar]);
+  useEffect(() => ref.current?.focus(), []);
   const enviar = () => {
     if (!texto.trim()) return;
     alEnviar(texto.trim());
@@ -60,12 +66,15 @@ function Caja({
       )}
       <textarea
         ref={ref}
-        rows={2}
+        rows={1}
         value={texto}
         placeholder={placeholder}
         onChange={(e) => {
           setTexto(e.target.value);
           menciones.alCambiar(e.target.value);
+          // Crece con lo escrito, hasta un tope.
+          e.target.style.height = "auto";
+          e.target.style.height = `${Math.min(e.target.scrollHeight, 160)}px`;
         }}
         onKeyDown={(e) => {
           const delMenu = menciones.alTeclear(e);
@@ -78,125 +87,114 @@ function Caja({
             e.preventDefault();
             enviar();
           }
-          if (e.key === "Escape") alCancelar?.();
+          if (e.key === "Escape") alEscapar();
         }}
       />
-      <div className="com-caja-acciones">
-        {alCancelar && (
-          <button type="button" className="doc-boton" onClick={alCancelar}>
-            {t.docCancelar}
-          </button>
-        )}
-        <button type="button" className="doc-boton principal" disabled={!texto.trim()} onClick={enviar}>
-          {t.docEnviar}
+      <div className="com-caja-pie">
+        <button type="button" className="com-enviar" disabled={!texto.trim()} onClick={enviar} aria-label={t.docEnviar} title={t.docEnviar}>
+          ↑
         </button>
       </div>
     </div>
   );
 }
 
+function Mensaje({ c }: { c: Comentario }) {
+  if (c.rol === "system") return <div className="com-mensaje system">{c.texto}</div>;
+  return (
+    <div className="com-mensaje">
+      <div className="com-mensaje-cab">
+        <span className="com-avatar" style={{ background: c.color }}>
+          {c.rol === "agent" ? "AI" : (c.autor[0] ?? "?").toUpperCase()}
+        </span>
+        <span className="com-autor">{c.autor}</span>
+        <span className="com-hora">{hora(c.creado)}</span>
+      </div>
+      <div className="com-texto">{c.texto}</div>
+    </div>
+  );
+}
+
 /**
- * Los hilos de comentarios del documento, en el orden en que aparecen en la
- * hoja. Un clic en un hilo resalta su texto; responder y resolver, aquí mismo.
+ * Un hilo de comentarios, flotando junto a su texto (como en Google Docs o
+ * Claude): se abre al tocar el resaltado, se cierra con la × o tocando fuera,
+ * y ✓ lo resuelve. Las respuestas de en medio se pliegan: se ve el primero y
+ * el último, que es lo que importa para seguir la conversación.
+ *
+ * Sin `hilo` es un comentario nuevo sobre lo seleccionado.
  */
-export function Comentarios({
-  hilos,
-  activo,
-  borrador,
+export function TarjetaComentario({
+  hilo,
+  pos,
   agents,
-  alActivar,
-  alComentar,
-  alCancelarBorrador,
-  alResponder,
+  soloYo,
+  alCerrar,
+  alEnviar,
   alResolver,
 }: {
-  hilos: Hilo[];
-  activo: string | null;
-  borrador: { cita: string } | null;
+  hilo: Hilo | null;
+  pos: { top: number; left: number; ancho: number };
   agents: Agent[];
-  alActivar: (hilo: string) => void;
-  alComentar: (texto: string) => void;
-  alCancelarBorrador: () => void;
-  alResponder: (hilo: string, texto: string) => void;
-  alResolver: (hilo: string, resuelto: boolean) => void;
+  /** Sala de una persona: lo que se escribe le habla al agente, sin @. */
+  soloYo: boolean;
+  alCerrar: () => void;
+  alEnviar: (texto: string) => void;
+  alResolver?: (resuelto: boolean) => void;
 }) {
   const { t } = useTextos();
-  const [verResueltos, setVerResueltos] = useState(false);
-  const visibles = hilos.filter((h) => verResueltos || !h.raiz.resuelto);
-  const resueltos = hilos.filter((h) => h.raiz.resuelto).length;
-  const tarjetas = useRef(new Map<string, HTMLElement>());
-
-  useEffect(() => {
-    if (activo) tarjetas.current.get(activo)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-  }, [activo]);
+  const [verTodas, setVerTodas] = useState(false);
+  const respuestas = hilo?.respuestas ?? [];
+  const plegadas = !verTodas && respuestas.length > 1 ? respuestas.length - 1 : 0;
+  const visibles = plegadas ? respuestas.slice(-1) : respuestas;
 
   return (
-    <aside className="com-panel" aria-label={t.docComentarios}>
-      <div className="com-cab">
-        <strong>{t.docComentarios}</strong>
-        {resueltos > 0 && (
-          <button type="button" className="com-enlace" onClick={() => setVerResueltos((v) => !v)}>
-            {verResueltos ? t.docOcultarResueltos : t.docVerResueltos(resueltos)}
+    <div
+      className="com-tarjeta"
+      role="dialog"
+      aria-label={t.docComentarios}
+      style={{ top: pos.top, left: pos.left, width: pos.ancho }}
+      onMouseDown={(e) => e.stopPropagation()}
+    >
+      <div className="com-tarjeta-acciones">
+        {hilo && alResolver && (
+          <button
+            type="button"
+            className="com-icono"
+            title={hilo.raiz.resuelto ? t.docReabrir : t.docResolver}
+            aria-label={hilo.raiz.resuelto ? t.docReabrir : t.docResolver}
+            onClick={() => alResolver(!hilo.raiz.resuelto)}
+          >
+            {hilo.raiz.resuelto ? "↺" : "✓"}
           </button>
         )}
+        <button type="button" className="com-icono" title={t.docCerrar} aria-label={t.docCerrar} onClick={alCerrar}>
+          ×
+        </button>
       </div>
 
-      {borrador && (
-        <div className="com-hilo activo nuevo">
-          <blockquote className="com-cita">{borrador.cita}</blockquote>
-          <Caja agents={agents} placeholder={t.docEscribeComentario} alEnviar={alComentar} alCancelar={alCancelarBorrador} enfocar />
-        </div>
-      )}
-
-      {visibles.length === 0 && !borrador && <p className="com-vacio">{t.docSinComentarios}</p>}
-
-      {visibles.map((h) => (
-        <div
-          key={h.raiz.id}
-          ref={(el) => {
-            if (el) tarjetas.current.set(h.raiz.id, el);
-            else tarjetas.current.delete(h.raiz.id);
-          }}
-          className={`com-hilo ${activo === h.raiz.id ? "activo" : ""} ${h.raiz.resuelto ? "resuelto" : ""}`}
-          onClick={() => alActivar(h.raiz.id)}
-        >
-          {h.raiz.cita && (
-            <blockquote className={`com-cita ${h.sinTexto ? "borrada" : ""}`} title={h.sinTexto ? t.docTextoBorrado : undefined}>
-              {h.raiz.cita}
-            </blockquote>
+      {hilo ? (
+        <>
+          {hilo.sinTexto && hilo.raiz.cita && (
+            <p className="com-aviso">
+              {t.docTextoBorrado} <span className="com-cita-borrada">«{hilo.raiz.cita}»</span>
+            </p>
           )}
-          {h.sinTexto && <p className="com-aviso">{t.docTextoBorrado}</p>}
-          {[h.raiz, ...h.respuestas].map((c) => (
-            <div key={c.id} className={`com-mensaje ${c.rol}`}>
-              {c.rol !== "system" && (
-                <span className="com-autor" style={{ color: c.color }}>
-                  {c.autor}
-                </span>
-              )}
-              <span className="com-texto">{c.texto}</span>
-            </div>
+          <Mensaje c={hilo.raiz} />
+          {plegadas > 0 && (
+            <button type="button" className="com-plegadas" onClick={() => setVerTodas(true)}>
+              {t.docMostrarRespuestas(plegadas)}
+            </button>
+          )}
+          {visibles.map((c) => (
+            <Mensaje key={c.id} c={c} />
           ))}
-          {activo === h.raiz.id && (
-            <>
-              {!h.raiz.resuelto && (
-                <Caja agents={agents} placeholder={t.docResponder} alEnviar={(texto) => alResponder(h.raiz.id, texto)} />
-              )}
-              <div className="com-acciones">
-                <button
-                  type="button"
-                  className="doc-boton"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    alResolver(h.raiz.id, !h.raiz.resuelto);
-                  }}
-                >
-                  {h.raiz.resuelto ? t.docReabrir : t.docResolver}
-                </button>
-              </div>
-            </>
+          {!hilo.raiz.resuelto && (
+            <Caja agents={agents} placeholder={soloYo ? t.docResponderSolo : t.docResponderMulti} alEnviar={alEnviar} alEscapar={alCerrar} />
           )}
-        </div>
-      ))}
-    </aside>
+        </>
+      ) : (
+        <Caja agents={agents} placeholder={soloYo ? t.docComentarSolo : t.docComentarMulti} alEnviar={alEnviar} alEscapar={alCerrar} />
+      )}
+    </div>
   );
 }

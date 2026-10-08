@@ -3,26 +3,28 @@ import { existsSync } from "node:fs";
 import { join, extname } from "node:path";
 
 /**
- * El documento de una sala: archivos dentro del workspace, no una base aparte.
+ * Dónde vive el documento de una sala y lo que se sirve de él.
  *
  * ```
  * documento/
- *   documento.json          { "titulo": "...", "secciones": [{ "id": "...", "archivo": "01-intro.md" }] }
- *   secciones/01-intro.md   markdown de la sección
- *   imagenes/…
+ *   doc.yjs        el documento vivo (ver doc-vivo.ts)
+ *   documento.md   su exportación, regenerada en cada guardado
+ *   imagenes/…     las imágenes, archivos de verdad
  * ```
  *
- * Archivos y no una tabla por tres razones. El agente los toca con las mismas
- * tools de siempre, así que los candados y la escritura condicional por archivo
- * ya cubren a dos agentes escribiendo secciones distintas a la vez. El historial
- * por turno y "volver atrás" salen gratis del git de la sala. Y el zip que se
- * descarga hoy ya los incluye.
+ * Dentro del workspace y no en una base aparte: el historial por turno y
+ * "volver atrás" salen del git de la sala, y el zip que se descarga los incluye.
  *
- * Una sección por archivo a propósito: dos agentes en el mismo archivo se
- * esperan; en archivos distintos trabajan a la vez.
+ * El formato anterior (documento.json + secciones/*.md, un archivo por sección)
+ * solo se lee para convertirlo al vivo la primera vez que se abre.
  */
 
 export const CARPETA_DOCUMENTO = "documento";
+/** El documento vivo: el estado de Yjs. Es la fuente de verdad (ver doc-vivo.ts). */
+export const ARCHIVO_YJS = "doc.yjs";
+/** Su exportación en markdown, regenerada en cada guardado: diffs legibles en el historial. */
+export const ARCHIVO_MD = "documento.md";
+/** El índice del formato anterior (#109). Solo se lee para migrarlo. */
 const INDICE = "documento.json";
 const SECCIONES = "secciones";
 export const CARPETA_IMAGENES = "imagenes";
@@ -53,6 +55,13 @@ export interface DocumentoLeido {
 
 /** ¿Esta sala es un documento? Lo dice el disco, no una columna aparte. */
 export function esDocumento(workspaceDir: string): boolean {
+  return (
+    existsSync(join(workspaceDir, CARPETA_DOCUMENTO, ARCHIVO_YJS)) || esDocumentoViejo(workspaceDir)
+  );
+}
+
+/** ¿Es un documento del formato anterior, de archivos markdown por sección? */
+export function esDocumentoViejo(workspaceDir: string): boolean {
   return existsSync(join(workspaceDir, CARPETA_DOCUMENTO, INDICE));
 }
 
@@ -64,53 +73,6 @@ export function esDocumento(workspaceDir: string): boolean {
  */
 export function nombreSeguro(nombre: string): boolean {
   return /^[a-z0-9][a-z0-9_.-]{0,80}$/i.test(nombre) && !nombre.includes("..");
-}
-
-export function slug(texto: string): string {
-  const base = texto
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 40);
-  return base || "seccion";
-}
-
-export interface SeccionNueva {
-  titulo: string;
-  intencion: string;
-}
-
-/**
- * Los archivos de un documento recién empezado: el índice y una sección
- * pendiente por parte. Devuelve rutas relativas al workspace y su contenido;
- * quién y cómo los escribe es cosa de quien llama (la tool usa la escritura
- * condicional, la demo escribe directo).
- */
-export function archivosDelEsqueleto(titulo: string, secciones: SeccionNueva[]): { ruta: string; contenido: string }[] {
-  const usados = new Set<string>();
-  const indice: SeccionDelIndice[] = [];
-  const archivos: { ruta: string; contenido: string }[] = [];
-
-  secciones.forEach((s, i) => {
-    let id = slug(s.titulo);
-    while (usados.has(id)) id = `${id}-${i + 1}`;
-    usados.add(id);
-    const archivo = `${String(i + 1).padStart(2, "0")}-${id}.md`;
-    indice.push({ id, archivo });
-    const intencion = s.intencion.replace(/-->/g, "—").trim();
-    archivos.push({
-      ruta: `${CARPETA_DOCUMENTO}/${SECCIONES}/${archivo}`,
-      contenido: `## ${s.titulo.trim()}\n\n<!-- pendiente: ${intencion} -->\n`,
-    });
-  });
-
-  archivos.unshift({
-    ruta: `${CARPETA_DOCUMENTO}/${INDICE}`,
-    contenido: JSON.stringify({ titulo: titulo.trim(), secciones: indice }, null, 2) + "\n",
-  });
-  return archivos;
 }
 
 /**

@@ -257,21 +257,30 @@ Una sala es de uno de dos tipos, y lo decides tú con el primer pedido:
   de descarga.
 Si es ambiguo ("un reporte de ventas" puede ser documento o tablero), elige lo más
 probable y dilo en una línea: "Lo armé como documento; si querías un tablero
-interactivo, dime". La decisión queda para toda la sala. Si ya existe
-documento/documento.json, la sala ES un documento: trabaja ahí.
+interactivo, dime". La decisión queda para toda la sala. Si ya existe la carpeta
+documento/, la sala ES un documento: trabaja ahí con leer_documento.
 
 Cómo se trabaja un documento:
 - Primero el esqueleto. Tu PRIMERA tool es iniciar_documento, con el título y una
   sección por parte, cada una con lo que va a decir. Es lo primero que ve la gente,
   y ve el documento llenarse. No investigues ni planees antes: piensa con el
   esqueleto ya puesto.
-- Luego llena cada sección reemplazando su archivo completo en documento/secciones/
-  con write_file. Empieza por "## Título de la sección". La marca
-  <!-- pendiente: … --> desaparece al escribirla.
+- El documento NO son archivos: vive en Multi y las personas lo editan en vivo,
+  varias a la vez, mientras tú trabajas. No escribas nada en documento/ con
+  write_file ni con bash (se pierde). Se trabaja con sus tools:
+    * leer_documento: el documento en markdown, cada bloque precedido de ⟦id·huella⟧,
+      y un índice de secciones con su id y su huella_seccion.
+    * escribir_seccion: llena o reescribe una sección completa (así se llenan las
+      PENDIENTES). Empieza con "## Título de la sección".
+    * reemplazar_bloque, insertar_bloques, borrar_bloque: para cambiar una parte sin
+      tocar lo demás. Prefiérelas cuando la sección ya está escrita: las personas
+      pudieron haberle corregido algo, y reescribirla entera se lo borraría.
+    * mover_seccion, cambiar_grafica, cambiar_diagrama.
+  Cada cambio pide la huella de lo que leíste. Si alguien lo tocó mientras tanto, se
+  rechaza y te dice quién: vuelve a leer y haz tu cambio sobre lo nuevo, respetando
+  lo que esa persona escribió.
 - Si hay otros agentes en la sala, cada quien su sección: lee el índice y toma una
-  que siga pendiente. Archivos distintos se escriben a la vez sin esperarse.
-- Para agregar, quitar o reordenar secciones, edita documento/documento.json (la
-  lista "secciones", en orden) y crea o borra el archivo.
+  que siga pendiente.
 - Markdown normal: títulos ###, listas, negritas, citas, tablas con | col | col |.
 - Gráficas con datos, en un bloque de código "grafica" con JSON:
   \`\`\`grafica
@@ -285,15 +294,17 @@ Cómo se trabaja un documento:
   data-id corto y estable. El documento se ve oscuro en pantalla y blanco en el
   PDF: textos y líneas con fill/stroke="currentColor", y los rellenos con un color
   y fill-opacity baja (fill="#ff4d1c" fill-opacity="0.18") para que se lean en los dos.
-- Imágenes: guárdalas en documento/imagenes/ (un adjunto, con usar_adjunto) y
-  enlázalas como ![descripción](imagenes/nombre.png).
+- Imágenes: guárdalas en documento/imagenes/ (un adjunto, con usar_adjunto; esa
+  carpeta sí es de archivos) y ponlas en un bloque aparte como
+  ![descripción](imagenes/nombre.png).
 - No inventes datos. Si algo es un supuesto o una estimación, dilo en el texto. Si
   falta un dato que solo la persona tiene (un monto, un nombre, una fecha), déjalo
   marcado en el texto como *Pendiente: …* en vez de rellenarlo.
 - El contenido va en el documento, no en el chat. Mientras escribes, di en una línea
   qué sección empiezas ("Ahora el presupuesto"). Al terminar, una línea de cierre:
   que está listo, que pueden editarlo directo o pedirte cambios, y qué datos dejaste
-  pendientes. Antes de cerrar, revisa que no haya quedado ninguna sección pendiente.
+  pendientes. Antes de cerrar, revisa con leer_documento que no haya quedado ninguna
+  sección PENDIENTE.
 </documentos>
 
 <para_entregar>
@@ -423,6 +434,8 @@ export async function runAgent(opts: {
   ejecutarSql?: ToolContext["ejecutarSql"];
   /** Leer la base de la sala en solo lectura (tool ver_base). */
   leerBase?: ToolContext["leerBase"];
+  /** El documento vivo de la sala, si lo hay o si el agente lo crea. */
+  documento?: ToolContext["documento"];
   /**
    * El historial tal como va, para que sobreviva si el turno LANZA.
    *
@@ -453,6 +466,7 @@ export async function runAgent(opts: {
     runner: opts.runner,
     ejecutarSql: opts.ejecutarSql,
     leerBase: opts.leerBase,
+    documento: opts.documento,
     emit: callbacks.onToolEvent,
     agentId: opts.agentId,
     onWaitStart: opts.onWaitStart,

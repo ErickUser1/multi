@@ -62,6 +62,7 @@ export const writeTool: Tool = {
     const rel = reqString(input, "path");
     const content = reqString(input, "content");
     const p = safePath(ctx.workspaceDir, rel);
+    noEsDelDocumento(ctx, p);
     await noPisarLoQueNoViste(ctx, p, rel);
     // write es incondicional (crear/sobrescribir a propósito): expected undefined.
     // Igual pasa por el mutex → nunca dos escrituras simultáneas a la misma ruta.
@@ -98,6 +99,7 @@ export const editTool: Tool = {
     const replaceAll = optBool(input, "replace_all");
     const p = safePath(ctx.workspaceDir, rel);
 
+    noEsDelDocumento(ctx, p);
     if (!existsSync(p)) throw new ToolError(`no existe el archivo: ${rel}`);
     if (oldStr === newStr) throw new ToolError("old_string y new_string son iguales");
 
@@ -241,6 +243,20 @@ async function noPisarLoQueNoViste(ctx: ToolContext, p: string, rel: string): Pr
       `conserva lo suyo y adáptalo a tu cambio (con edit_file si solo cambias una parte). ` +
       `Después de leerlo, esta misma escritura va a pasar.`,
   );
+}
+
+/**
+ * El documento de la sala no se escribe como archivo: vive en Yjs y lo que hay
+ * en documento/ es lo que Multi guarda de él (se sobrescribe al siguiente
+ * cambio). Solo las imágenes son archivos de verdad.
+ */
+function noEsDelDocumento(ctx: ToolContext, p: string): void {
+  const rel = relative(ctx.workspaceDir, p).split(/[\\/]/);
+  if (rel[0] === "documento" && rel[1] !== "imagenes") {
+    throw new ToolError(
+      "el documento no se escribe como archivo: usa leer_documento y escribir_seccion, reemplazar_bloque o insertar_bloques",
+    );
+  }
 }
 
 async function casWrite(

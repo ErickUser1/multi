@@ -43,6 +43,11 @@ export interface ToolContext {
    * garantiza que no escribe es Supabase (`read_only`), no la tool.
    */
   leerBase?: (sql: string) => Promise<unknown>;
+  /**
+   * Leer y cambiar el documento vivo de la sala (ver doc-vivo.ts). Capacidad y
+   * no acceso al Y.Doc: las tools no saben de salas ni de sockets.
+   */
+  documento?: import("./documento.js").OperacionesDeDocumento;
 }
 
 export type ToolEvent =

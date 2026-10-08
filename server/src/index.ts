@@ -76,7 +76,9 @@ import { fileMutation } from "./engine/file-mutation.js";
 import { leerVariables, modificarVariables, type Variable } from "./engine/env.js";
 import { accionDeTool, type Accion } from "./engine/actividad.js";
 import { WORKSPACES_ROOT } from "./engine/workspace.js";
-import { leerDocumento, imagenDelDocumento, CARPETA_DOCUMENTO } from "./engine/documento.js";
+import { imagenDelDocumento, CARPETA_DOCUMENTO, esDocumento } from "./engine/documento.js";
+import { documentosVivos, exportarMarkdown, tituloDe, responderSync, aplicarDeCliente } from "./engine/doc-vivo.js";
+import { operacionesDeDocumento } from "./agent/tools/documento.js";
 
 /**
  * Lo último que hizo cada agente que está trabajando, por sala.
@@ -663,7 +665,8 @@ fastify.get<{ Params: { id: string; adjuntoId: string } }>(
 );
 
 /**
- * El documento de la sala, ya leído: título y secciones con su markdown.
+ * El documento de la sala en markdown: lo que se imprime y se descarga. El
+ * documento vivo viaja por el socket (doc:sync1); esto es su exportación.
  *
  * Va bajo `/rooms` porque el proxy del preview deja pasar ese prefijo. 404 si
  * la sala no es un documento.
@@ -671,9 +674,11 @@ fastify.get<{ Params: { id: string; adjuntoId: string } }>(
 fastify.get<{ Params: { id: string } }>("/rooms/:id/documento", async (req, reply) => {
   const room = getRoom(req.params.id) ?? (await wakeRoom(req.params.id));
   if (!room) return reply.code(404).send({ error: "sala no encontrada" });
-  const doc = await leerDocumento(room.workspace.dir);
+  const doc = await documentosVivos.abrir(room.id, room.workspace.dir);
   if (!doc) return reply.code(404).send({ error: "esta sala no es un documento" });
-  return reply.header("cache-control", "no-store").send(doc);
+  return reply
+    .header("cache-control", "no-store")
+    .send({ titulo: tituloDe(doc), markdown: exportarMarkdown(doc) });
 });
 
 // Las imágenes del documento (documento/imagenes/). Solo nombres planos y
@@ -1938,9 +1943,18 @@ io.on("connection", (socket) => {
       const member = room.members.get(socket.id);
       const author = member?.name ?? "alguien";
       try {
+        // Lo que el documento tenga en memoria va a disco antes: volver atrás
+        // restaura archivos, y lo no guardado se perdería sin quedar en el historial.
+        await documentosVivos.flush(room.id);
         const newHash = file
           ? await revertFile(room.workspace.dir, hash, file, { author })
           : await revertTo(room.workspace.dir, hash, { author });
+        // El archivo del documento cambió por debajo: se recarga y los clientes
+        // tiran su copia (otra generación).
+        if (documentosVivos.obtener(room.id) || esDocumento(room.workspace.dir)) {
+          const doc = await documentosVivos.recargar(room.id, room.workspace.dir);
+          io.to(room.id).emit("doc:recargar", { generacion: doc?.generacion ?? -1 });
+        }
         systemMsg(
           room,
           file
@@ -2070,16 +2084,62 @@ io.on("connection", (socket) => {
     }
   });
 
+  /**
+   * El documento vivo, por el mismo socket de la sala.
+   *
+   * Es el protocolo de sincronía de Yjs en dos pasos: el cliente dice qué
+   * tiene (su vector de estado) y el server le manda lo que le falta, más su
+   * propio vector para que el cliente le mande lo suyo. Después, cada cambio
+   * viaja como `doc:update` en los dos sentidos.
+   *
+   * La `generacion` separa un documento de su versión recargada (volver atrás):
+   * lo que llegue de una generación vieja es de un Y.Doc que ya no existe.
+   */
+  socket.on(
+    "doc:sync1",
+    async (
+      { vector }: { vector?: unknown },
+      responder?: (r: { update: Uint8Array; vector: Uint8Array; generacion: number } | { noHay: true }) => void,
+    ) => {
+      const room = joinedRoom;
+      if (!room || typeof responder !== "function" || !room.members.has(socket.id)) return;
+      const doc = await documentosVivos.abrir(room.id, room.workspace.dir);
+      if (!doc) return responder({ noHay: true });
+      responder(responderSync(doc, vector));
+    },
+  );
+
+  socket.on("doc:update", async ({ update, generacion }: { update?: unknown; generacion?: unknown }) => {
+    const room = joinedRoom;
+    const member = room?.members.get(socket.id);
+    if (!room || !member) return;
+    const doc = await documentosVivos.abrir(room.id, room.workspace.dir);
+    if (!doc) return;
+    const r = aplicarDeCliente(doc, update, generacion, { autor: member.name, socketId: socket.id });
+    if (r === "recargar") socket.emit("doc:recargar", { generacion: doc.generacion });
+  });
+
   socket.on("disconnect", () => {
     clearCredential(socket.id); // la key del server se va con el socket
     if (joinedRoom) {
       removeMember(joinedRoom, socket.id);
       joinedRoom.selections.delete(socket.id);
+      // Sin nadie y sin agentes trabajando, el documento se guarda y suelta la memoria.
+      const sala = joinedRoom;
+      if (sala.members.size === 0 && sala.agents.list().every((a) => a.state === "idle")) {
+        void documentosVivos.cerrar(sala.id);
+      }
       socket.to(joinedRoom.id).emit("presence", { members: membersList(joinedRoom) });
       socket.to(joinedRoom.id).emit("cursor:gone", { socketId: socket.id });
     }
   });
 });
+
+// Cada cambio del documento se reparte a la sala, menos a quien lo mandó.
+documentosVivos.alCambiar = (doc, update, origen) => {
+  const destino = origen?.socketId ? io.to(doc.roomId).except(origen.socketId) : io.to(doc.roomId);
+  destino.emit("doc:update", { update, generacion: doc.generacion });
+};
 
 /** Emite un mensaje a la sala Y lo persiste, para que sobreviva al reinicio. */
 async function say(
@@ -2290,6 +2350,8 @@ async function runAgentTurn(
       ejecutarSql: await sqlDeLaSala(room.id),
       // Y con qué verla: su estructura y sus filas, siempre en solo lectura.
       leerBase: await lecturaDeLaSala(room.id),
+      // El documento de la sala: el agente lo lee y lo cambia por bloque.
+      documento: operacionesDeDocumento(room.id, room.workspace.dir, agent.name),
       messages: history,
       // Qué están haciendo los demás, para que no repita su trabajo. Se calcula
       // AL EMPEZAR el turno: es una foto del momento, no una suscripción.
@@ -2344,6 +2406,7 @@ async function runAgentTurn(
     if (result.interrumpido) {
       // Sin mensaje del agente: quien interrumpió ya está escribiendo lo suyo, y
       // un "me interrumpieron" en el chat solo estorba. Lo escrito se conserva.
+      await documentosVivos.flush(room.id);
       await commitTurn(room.workspace.dir, turn, { summary: "(interrumpido)" });
       return;
     }
@@ -2372,6 +2435,7 @@ async function runAgentTurn(
     }
 
     // Canal 2: el turno cierra con UN commit (unidad de sentido del scrubber).
+    await documentosVivos.flush(room.id);
     const hash = await commitTurn(room.workspace.dir, turn, { summary: result.finalText });
     if (hash) io.to(room.id).emit("history:new", { hash, agentId, message: turn.task });
 
@@ -2400,6 +2464,7 @@ async function runAgentTurn(
     // Se commitea igual, para que el trabajo aparezca en la línea de tiempo y se
     // pueda volver a él. El turno sigue marcado como fallido: `state` dice cómo
     // terminó, `commit` dice dónde quedó lo hecho.
+    await documentosVivos.flush(room.id);
     const hash = await failTurnConCommit(room.workspace.dir, turn, {
       summary: `${turn.task.slice(0, 60)} (se cortó)`,
     });
@@ -2538,6 +2603,8 @@ async function shutdown(signal: string): Promise<void> {
   if (shuttingDown) return;
   shuttingDown = true;
   console.log(`\n[${signal}] apagando previews de las salas…`);
+  // Lo último que alguien escribió en un documento no se pierde con el reinicio.
+  await documentosVivos.flushTodos();
   await stopAllPreviews();
   await fastify.close();
   process.exit(0);

@@ -4,7 +4,7 @@ import { bashTool } from "./bash.js";
 import { usarAdjuntoTool } from "./adjuntos.js";
 import { sqlTool } from "./sql.js";
 import { verBaseTool } from "./ver-base.js";
-import { iniciarDocumentoTool } from "./documento.js";
+import { documentoTools } from "./documento.js";
 
 export * from "./base.js";
 
@@ -15,7 +15,7 @@ export const allTools: Tool[] = [
   usarAdjuntoTool,
   sqlTool,
   verBaseTool,
-  iniciarDocumentoTool,
+  ...documentoTools,
 ];
 
 /** Registro por nombre, para despachar los tool_use. */

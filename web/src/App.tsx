@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { DocumentoView } from "./documento/DocumentoView";
+import { useEffect, useMemo, useRef, useState, useCallback, lazy, Suspense } from "react";
+
+// El documento trae su editor (y Yjs): solo se descarga en salas que son documento.
+const DocumentoView = lazy(() => import("./documento/DocumentoView").then((m) => ({ default: m.DocumentoView })));
 import type { Socket } from "socket.io-client";
 import {
   connectSocket,
@@ -487,9 +489,6 @@ function Sala({
   // Documento, software, o null mientras el agente no decide. Un documento lo
   // pinta Multi en el lienzo en vez del preview.
   const [tipo, setTipo] = useState<TipoDeSala | null>(null);
-  // Sube con cada archivo que cambia dentro de documento/: la vista lo vuelve a
-  // pedir. Junto con histVersion cubre los turnos y el "volver atrás".
-  const [docCambios, setDocCambios] = useState(0);
   /**
    * Lo que de verdad pasa al escribir. Sola en la sala, escribir despierta al
    * agente aunque el modo diga Multijugador (el server decide igual, ver
@@ -971,8 +970,7 @@ function Sala({
       setFalloElArranque(false);
     });
     // Tocó un archivo: está construyendo de verdad, no solo contestando.
-    socket.on("file:changed", ({ path }: { path?: string }) => {
-      if (path?.startsWith("documento/")) setDocCambios((n) => n + 1);
+    socket.on("file:changed", () => {
       setArmando(true);
       // Volvió a escribir: lo está arreglando, así que el aviso de fallo sobra.
       setFalloElArranque(false);
@@ -2168,7 +2166,11 @@ function Sala({
             </div>
           )}
           {roomId && tipo === "documento" ? (
-            <DocumentoView roomId={roomId} version={docCambios + histVersion} />
+            socketRef.current && (
+              <Suspense fallback={<div className="doc-estado">{t.docCargando}</div>}>
+                <DocumentoView roomId={roomId} socket={socketRef.current} />
+              </Suspense>
+            )
           ) : previewReady ? (
             <>
               {/* El ancho va en el marco, no en el iframe, y el iframe NUNCA se
@@ -2518,6 +2520,8 @@ interface AccionAgente {
     | "verBase"
     | "adjunto"
     | "documento"
+    | "leerDocumento"
+    | "escribirDocumento"
     | "crearProyecto"
     | "instalar"
     | "compilar"
@@ -2553,6 +2557,10 @@ function fraseDeAccion(a: AccionAgente, t: Textos): string {
       return t.actAdjunto;
     case "documento":
       return t.actDocumento;
+    case "leerDocumento":
+      return t.actLeerDocumento;
+    case "escribirDocumento":
+      return t.actEscribirDocumento;
     case "crearProyecto":
       return t.actCrearProyecto;
     case "instalar":

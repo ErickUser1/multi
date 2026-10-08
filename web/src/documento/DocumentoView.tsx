@@ -62,6 +62,13 @@ export function DocumentoView({
   // Sube cuando cambia el documento: el orden de los hilos y si su texto sigue ahí.
   const [cambiosDoc, setCambiosDoc] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
+  // El comentario que acabo de mandar y todavía no vuelve del server.
+  const pendiente = useRef<{ id: string; enviado: number } | null>(null);
+  // Lo último de los comentarios y de mi nombre, para los avisos del socket.
+  const comentariosRef = useRef<Comentario[]>([]);
+  comentariosRef.current = comentarios;
+  const yoRef = useRef(yo.name);
+  yoRef.current = yo.name;
   const activar = useRef<(hilo: string) => void>(() => {});
 
   const proveedor = useMemo(() => {
@@ -136,7 +143,25 @@ export function DocumentoView({
       .then((r) => (r.ok ? r.json() : { comentarios: [] }))
       .then((d: { comentarios: Comentario[] }) => vivo && setComentarios(d.comentarios))
       .catch(() => {});
-    const enNuevo = (c: Comentario) => setComentarios((cs) => (cs.some((x) => x.id === c.id) ? cs : [...cs, c]));
+    const enNuevo = (c: Comentario) => {
+      setComentarios((cs) => (cs.some((x) => x.id === c.id) ? cs : [...cs, c]));
+      const raiz = c.id === c.hiloId;
+      // Mi comentario nuevo: su tarjeta se abre en cuanto llega. Se reconoce
+      // por el id que mandé, y si el server le puso otro (uno viejo que no lo
+      // respeta), por ser mío y recién enviado.
+      const p = pendiente.current;
+      if (raiz && p && c.autor === yoRef.current && (c.id === p.id || Date.now() - p.enviado < 15_000)) {
+        pendiente.current = null;
+        setAbierto({ tipo: "hilo", hilo: c.id });
+        return;
+      }
+      // Alguien (el agente, otra persona) contesta en un hilo que abrí yo: se
+      // abre solo, si no estoy viendo otro.
+      if (!raiz && c.autor !== yoRef.current) {
+        const mia = comentariosRef.current.find((x) => x.id === c.hiloId && x.autor === yoRef.current);
+        if (mia) setAbierto((a) => a ?? { tipo: "hilo", hilo: c.hiloId });
+      }
+    };
     const enResuelto = ({ hilo, resuelto }: { hilo: string; resuelto: boolean }) =>
       setComentarios((cs) => cs.map((c) => (c.id === hilo ? { ...c, resuelto } : c)));
     socket.on("comentario:nuevo", enNuevo);
@@ -289,6 +314,7 @@ export function DocumentoView({
     if (!abierto) return;
     const id = crypto.randomUUID();
     if (abierto.tipo === "nuevo") {
+      pendiente.current = { id, enviado: Date.now() };
       socket.emit("comentario", { id, ancla: abierto.ancla, cita: abierto.cita, texto });
       // El hilo nuevo se queda abierto: llega con este mismo id.
       setAbierto({ tipo: "hilo", hilo: id });

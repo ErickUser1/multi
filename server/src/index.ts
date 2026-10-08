@@ -2062,6 +2062,9 @@ io.on("connection", (socket) => {
         if (!anclaOk) return ack(true);
       }
       const c = await publicarComentario(room, {
+        // El id que trae el navegador se respeta si es un uuid: así quien lo
+        // escribió puede dejar abierto su hilo antes de que vuelva del server.
+        id: typeof id === "string" && /^[0-9a-f-]{36}$/i.test(id) ? id : undefined,
         hiloId: raiz?.id ?? "",
         ancla: anclaOk ? JSON.stringify(anclaOk) : null,
         cita: !raiz && typeof cita === "string" ? cita.slice(0, 500) : null,
@@ -2079,6 +2082,8 @@ io.on("connection", (socket) => {
       // En el chat, una línea: quien no tiene abierto el documento se entera.
       systemMsg(room, `${member.name} comentó en «${seccion}»: ${contenido.slice(0, 140)}`, member.color);
 
+      // La misma regla que el chat: en una sala de una persona el comentario
+      // le habla al agente; en multijugador, solo si lo mencionan con @.
       await pedirAlAgente(room, socket, member, contenido, {
         anchor: null,
         adjuntos: [],

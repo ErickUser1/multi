@@ -2162,6 +2162,7 @@ function Sala({
                   socket={socketRef.current}
                   yo={{ name: yo?.name ?? name, color: yo?.color ?? "#ff4d1c" }}
                   agents={agents}
+                  soloYo={modo === "solo" || members.length <= 1}
                 />
               </Suspense>
             )

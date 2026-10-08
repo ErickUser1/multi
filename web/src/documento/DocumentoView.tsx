@@ -13,7 +13,7 @@ import { ProveedorDocumento, type EstadoDeGuardado } from "./proveedor";
 import { MarcasDeAgentes, llaveMarcas, type DondeEscribe } from "./marcas";
 import { Barra } from "./Barra";
 import { EditorDeGrafica } from "./EditorDeGrafica";
-import { Comentarios, type Comentario, type Hilo } from "./Comentarios";
+import { TarjetaComentario, type Comentario, type Hilo } from "./Comentarios";
 import { ResaltadoDeComentarios, llaveResaltado } from "./resaltado";
 import { anclaDeSeleccion, rangoDeAncla, type Ancla } from "./anclas";
 import type { Agent } from "../socket";
@@ -30,11 +30,14 @@ export function DocumentoView({
   socket,
   yo,
   agents,
+  soloYo,
 }: {
   roomId: string;
   socket: Socket;
   yo: { name: string; color: string };
   agents: Agent[];
+  /** Estoy solo en la sala: comentar le habla al agente por defecto. */
+  soloYo: boolean;
 }) {
   const { t } = useTextos();
   // Cada recarga del server (volver atrás) estrena proveedor y Y.Doc.
@@ -47,16 +50,18 @@ export function DocumentoView({
   const abrirGrafica = useRef<(ref: string) => void>(() => {});
   abrirGrafica.current = setGraficaAbierta;
 
-  // Comentarios: los hilos, cuál está activo, y el que se está escribiendo.
+  // Comentarios: los hilos, y la tarjeta abierta (un hilo, o uno nuevo sobre
+  // lo seleccionado). La tarjeta flota junto a su texto, dentro de la hoja.
   const [comentarios, setComentarios] = useState<Comentario[]>([]);
-  const [activo, setActivo] = useState<string | null>(null);
-  const [borrador, setBorrador] = useState<{ ancla: Ancla; cita: string } | null>(null);
-  const [panel, setPanel] = useState(() => window.matchMedia?.("(min-width: 1100px)").matches ?? true);
+  const [abierto, setAbierto] = useState<
+    { tipo: "hilo"; hilo: string } | { tipo: "nuevo"; ancla: Ancla; cita: string } | null
+  >(null);
+  const [posTarjeta, setPosTarjeta] = useState<{ top: number; left: number; ancho: number } | null>(null);
   // Dónde va el botón "Comentar" (junto a lo seleccionado), o null si no hay selección.
   const [botonComentar, setBotonComentar] = useState<{ top: number; left: number } | null>(null);
   // Sube cuando cambia el documento: el orden de los hilos y si su texto sigue ahí.
   const [cambiosDoc, setCambiosDoc] = useState(0);
-  const cuerpoRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const activar = useRef<(hilo: string) => void>(() => {});
 
   const proveedor = useMemo(() => {
@@ -143,81 +148,132 @@ export function DocumentoView({
     };
   }, [roomId, socket, proveedor]);
 
+  /**
+   * Dónde poner algo junto a una posición del documento, en coordenadas del
+   * contenido que se desplaza: lo que se pone ahí se mueve con el texto.
+   */
+  const junto = (pos: number, ancho: number): { top: number; left: number } | null => {
+    const caja = scrollRef.current;
+    if (!editor || !caja) return null;
+    const c = editor.view.coordsAtPos(pos);
+    const r = caja.getBoundingClientRect();
+    const left = Math.max(12, Math.min(c.left - r.left + caja.scrollLeft - 16, r.width - ancho - 12));
+    return { top: c.bottom - r.top + caja.scrollTop + 6, left };
+  };
+
   // El editor avisa cuando cambia el documento o la selección.
   useEffect(() => {
     if (!editor) return;
     const enCambio = () => setCambiosDoc((n) => n + 1);
     const enSeleccion = () => {
       const a = anclaDeSeleccion(editor.state);
-      const cuerpo = cuerpoRef.current;
-      if (!a || !cuerpo || !editor.isFocused) return setBotonComentar(null);
-      const coords = editor.view.coordsAtPos(editor.state.selection.to);
-      const caja = cuerpo.getBoundingClientRect();
-      setBotonComentar({ top: coords.top - caja.top, left: Math.min(coords.right - caja.left + 8, caja.width - 120) });
+      if (!a || !editor.isFocused) return setBotonComentar(null);
+      const p = junto(editor.state.selection.to, 110);
+      setBotonComentar(p ? { top: p.top - 4, left: p.left } : null);
     };
+    const enBlur = () => setTimeout(() => setBotonComentar(null), 150);
     editor.on("update", enCambio);
     editor.on("selectionUpdate", enSeleccion);
-    editor.on("blur", () => setTimeout(() => setBotonComentar(null), 150));
+    editor.on("blur", enBlur);
     return () => {
       editor.off("update", enCambio);
       editor.off("selectionUpdate", enSeleccion);
+      editor.off("blur", enBlur);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor]);
 
-  // Los hilos, en el orden en que aparece su texto en la hoja.
-  const hilos: Hilo[] = useMemo(() => {
-    void cambiosDoc;
-    const raices = comentarios.filter((c) => c.id === c.hiloId);
-    const lista = raices.map((raiz) => {
-      let ancla: Ancla | null = null;
-      try {
-        ancla = raiz.ancla ? (JSON.parse(raiz.ancla) as Ancla) : null;
-      } catch {
-        ancla = null;
-      }
-      const rango = editor && ancla ? rangoDeAncla(editor.state, ancla) : null;
-      return {
-        raiz,
-        ancla,
-        desde: rango?.from ?? Number.MAX_SAFE_INTEGER,
-        sinTexto: !!ancla && !rango,
-        respuestas: comentarios.filter((c) => c.hiloId === raiz.id && c.id !== raiz.id),
-      };
-    });
-    lista.sort((a, b) => a.desde - b.desde || a.raiz.creado - b.raiz.creado);
-    return lista;
-  }, [comentarios, editor, cambiosDoc]);
-
-  // El resaltado en la hoja sigue a los hilos abiertos y al activo.
-  useEffect(() => {
-    if (!editor || editor.isDestroyed) return;
-    const visibles = hilos
-      .filter((h) => !h.raiz.resuelto)
-      .flatMap((h) => {
-        try {
-          return h.raiz.ancla ? [{ hilo: h.raiz.id, ancla: JSON.parse(h.raiz.ancla) as Ancla }] : [];
-        } catch {
-          return [];
-        }
-      });
-    editor.view.dispatch(editor.state.tr.setMeta(llaveResaltado, { hilos: visibles, activo }));
-  }, [editor, hilos, activo]);
-
-  activar.current = (hilo: string) => {
-    setActivo(hilo);
-    setPanel(true);
+  const anclaDe = (c: Comentario | undefined): Ancla | null => {
+    try {
+      return c?.ancla ? (JSON.parse(c.ancla) as Ancla) : null;
+    } catch {
+      return null;
+    }
   };
 
-  /** Activar un hilo desde el panel: la hoja se mueve a su texto. */
-  const irAHilo = (hilo: string) => {
-    setActivo(hilo);
-    const raiz = comentarios.find((c) => c.id === hilo);
-    if (!editor || !raiz?.ancla) return;
-    try {
-      const r = rangoDeAncla(editor.state, JSON.parse(raiz.ancla) as Ancla);
-      if (r) (editor.view.domAtPos(r.from).node as HTMLElement).parentElement?.scrollIntoView({ block: "center", behavior: "smooth" });
-    } catch {
-      /* el ancla no se entiende: el hilo se ve igual */
+  // Los hilos, en el orden en que aparece su texto en la hoja.
+  const hilos: (Hilo & { desde: number })[] = useMemo(() => {
+    void cambiosDoc;
+    const lista = comentarios
+      .filter((c) => c.id === c.hiloId)
+      .map((raiz) => {
+        const ancla = anclaDe(raiz);
+        const rango = editor && ancla ? rangoDeAncla(editor.state, ancla) : null;
+        return {
+          raiz,
+          desde: rango?.from ?? Number.MAX_SAFE_INTEGER,
+          sinTexto: !!ancla && !rango,
+          respuestas: comentarios.filter((c) => c.hiloId === raiz.id && c.id !== raiz.id),
+        };
+      });
+    lista.sort((a, b) => a.desde - b.desde || a.raiz.creado - b.raiz.creado);
+    return lista;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [comentarios, editor, cambiosDoc]);
+  const abiertos = hilos.filter((h) => !h.raiz.resuelto);
+  const hiloAbierto = abierto?.tipo === "hilo" ? hilos.find((h) => h.raiz.id === abierto.hilo) ?? null : null;
+
+  // El resaltado en la hoja: los hilos sin resolver, y más fuerte el abierto.
+  useEffect(() => {
+    if (!editor || editor.isDestroyed) return;
+    const visibles = abiertos.flatMap((h) => {
+      const ancla = anclaDe(h.raiz);
+      return ancla ? [{ hilo: h.raiz.id, ancla }] : [];
+    });
+    editor.view.dispatch(
+      editor.state.tr.setMeta(llaveResaltado, { hilos: visibles, activo: abierto?.tipo === "hilo" ? abierto.hilo : null }),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editor, hilos, abierto]);
+
+  // La tarjeta se pone debajo de su texto, y lo sigue si el texto se mueve.
+  useEffect(() => {
+    if (!abierto || !editor) return setPosTarjeta(null);
+    const ancho = Math.min(340, (scrollRef.current?.clientWidth ?? 360) - 24);
+    let hasta: number | null = null;
+    if (abierto.tipo === "nuevo") {
+      hasta = rangoDeAncla(editor.state, abierto.ancla)?.to ?? editor.state.selection.to;
+    } else {
+      const ancla = anclaDe(hiloAbierto?.raiz);
+      hasta = ancla ? rangoDeAncla(editor.state, ancla)?.to ?? null : null;
+    }
+    // Un hilo cuyo texto ya no existe se abre arriba de la hoja.
+    const p = hasta !== null ? junto(hasta, ancho) : { top: (scrollRef.current?.scrollTop ?? 0) + 12, left: 12 };
+    setPosTarjeta(p ? { ...p, ancho } : null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [abierto, hiloAbierto?.raiz.id, cambiosDoc, editor]);
+
+  // Si cambia el ancho (girar el celular, mover el divisor), la tarjeta y el
+  // botón se vuelven a acomodar.
+  useEffect(() => {
+    const alCambiar = () => setCambiosDoc((n) => n + 1);
+    window.addEventListener("resize", alCambiar);
+    return () => window.removeEventListener("resize", alCambiar);
+  }, []);
+
+  // Clic fuera de la tarjeta (y fuera de un texto comentado) la cierra.
+  useEffect(() => {
+    if (!abierto) return;
+    const fuera = (e: MouseEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t?.closest?.(".com-tarjeta, .doc-comentar, .doc-comentado, .com-boton")) return;
+      setAbierto(null);
+    };
+    document.addEventListener("mousedown", fuera);
+    return () => document.removeEventListener("mousedown", fuera);
+  }, [abierto]);
+
+  // Tocar un texto comentado abre su hilo.
+  activar.current = (hilo: string) => setAbierto({ tipo: "hilo", hilo });
+
+  /** El botón de la barra: va al siguiente hilo sin resolver, en orden del documento. */
+  const siguienteHilo = () => {
+    if (!abiertos.length || !editor) return;
+    const actual = abierto?.tipo === "hilo" ? abiertos.findIndex((h) => h.raiz.id === abierto.hilo) : -1;
+    const h = abiertos[(actual + 1) % abiertos.length];
+    setAbierto({ tipo: "hilo", hilo: h.raiz.id });
+    if (h.desde !== Number.MAX_SAFE_INTEGER) {
+      (editor.view.domAtPos(h.desde).node as HTMLElement).parentElement?.scrollIntoView({ block: "center", behavior: "smooth" });
     }
   };
 
@@ -225,16 +281,20 @@ export function DocumentoView({
     if (!editor) return;
     const a = anclaDeSeleccion(editor.state);
     if (!a) return;
-    setBorrador(a);
-    setActivo(null);
-    setPanel(true);
+    setAbierto({ tipo: "nuevo", ...a });
     setBotonComentar(null);
   };
 
-  const enviarComentario = (texto: string) => {
-    if (!borrador) return;
-    socket.emit("comentario", { id: crypto.randomUUID(), ancla: borrador.ancla, cita: borrador.cita, texto });
-    setBorrador(null);
+  const enviar = (texto: string) => {
+    if (!abierto) return;
+    const id = crypto.randomUUID();
+    if (abierto.tipo === "nuevo") {
+      socket.emit("comentario", { id, ancla: abierto.ancla, cita: abierto.cita, texto });
+      // El hilo nuevo se queda abierto: llega con este mismo id.
+      setAbierto({ tipo: "hilo", hilo: id });
+    } else {
+      socket.emit("comentario", { id, hilo: abierto.hilo, texto });
+    }
   };
 
   const insertarGrafica = () => {
@@ -286,12 +346,13 @@ export function DocumentoView({
         {editor && listo && <Barra editor={editor} alInsertarGrafica={insertarGrafica} />}
         <button
           type="button"
-          className={`doc-boton com-boton ${panel ? "activo" : ""}`}
-          aria-pressed={panel}
-          onClick={() => setPanel((p) => !p)}
+          className="doc-boton com-boton"
+          title={t.docSiguienteComentario}
+          disabled={abiertos.length === 0}
+          onClick={siguienteHilo}
         >
           {t.docComentarios}
-          {hilos.filter((h) => !h.raiz.resuelto).length > 0 && ` · ${hilos.filter((h) => !h.raiz.resuelto).length}`}
+          {abiertos.length > 0 && ` · ${abiertos.length}`}
         </button>
         <span className={`doc-guardado ${guardado}`} aria-live="polite">
           {guardado === "guardado" ? t.docGuardado : guardado === "guardando" ? t.docGuardando : t.docSinConexion}
@@ -300,40 +361,43 @@ export function DocumentoView({
           {t.docPdf}
         </button>
       </div>
-      <div className="doc-cuerpo" ref={cuerpoRef}>
-        <div className="doc-scroll">
+      <div className="doc-cuerpo">
+        <div className="doc-scroll" ref={scrollRef}>
           {!listo && <div className="doc-estado">{t.docCargando}</div>}
           <article className="doc-hoja" hidden={!listo}>
             <EditorContent editor={editor} />
           </article>
+          {botonComentar && (
+            <button
+              type="button"
+              className="doc-comentar"
+              style={{ top: botonComentar.top, left: botonComentar.left }}
+              // mousedown: con click, el editor pierde la selección antes.
+              onMouseDown={(e) => {
+                e.preventDefault();
+                empezarComentario();
+              }}
+            >
+              {t.docComentar}
+            </button>
+          )}
+          {posTarjeta && abierto && (abierto.tipo === "nuevo" || hiloAbierto) && (
+            <TarjetaComentario
+              key={abierto.tipo === "hilo" ? abierto.hilo : "nuevo"}
+              hilo={hiloAbierto}
+              pos={posTarjeta}
+              agents={agents}
+              soloYo={soloYo}
+              alCerrar={() => setAbierto(null)}
+              alEnviar={enviar}
+              alResolver={(resuelto) => {
+                if (abierto.tipo !== "hilo") return;
+                socket.emit("comentario:resolver", { hilo: abierto.hilo, resuelto });
+                if (resuelto) setAbierto(null);
+              }}
+            />
+          )}
         </div>
-        {botonComentar && (
-          <button
-            type="button"
-            className="doc-comentar"
-            style={{ top: botonComentar.top, left: botonComentar.left }}
-            // mousedown: con click, el editor pierde la selección antes.
-            onMouseDown={(e) => {
-              e.preventDefault();
-              empezarComentario();
-            }}
-          >
-            {t.docComentar}
-          </button>
-        )}
-        {panel && (
-          <Comentarios
-            hilos={hilos}
-            activo={activo}
-            borrador={borrador}
-            agents={agents}
-            alActivar={irAHilo}
-            alComentar={enviarComentario}
-            alCancelarBorrador={() => setBorrador(null)}
-            alResponder={(hilo, texto) => socket.emit("comentario", { id: crypto.randomUUID(), hilo, texto })}
-            alResolver={(hilo, resuelto) => socket.emit("comentario:resolver", { hilo, resuelto })}
-          />
-        )}
       </div>
       {graficaAbierta && (
         <EditorDeGrafica objetos={proveedor.ydoc.getMap("objetos")} ref_={graficaAbierta} alCerrar={() => setGraficaAbierta(null)} />

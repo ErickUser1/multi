@@ -23,6 +23,7 @@ export type TipoDeAccion =
   | "documento"
   | "leerDocumento"
   | "escribirDocumento"
+  | "comentar"
   | "crearProyecto"
   | "instalar"
   | "compilar"
@@ -61,6 +62,8 @@ export function accionDeTool(nombre: string, input: Record<string, unknown>): Ac
       return { tipo: "verBase", detalle: texto("consulta") || undefined };
     case "iniciar_documento":
       return { tipo: "documento", detalle: texto("titulo") || undefined };
+    case "comentar":
+      return { tipo: "comentar" };
     case "leer_documento":
       return { tipo: "leerDocumento" };
     case "escribir_seccion":

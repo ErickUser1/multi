@@ -3461,6 +3461,174 @@ img.av {
   --tinta-linea: #3a3a3a;
 }
 
+/* ── Comentarios del documento ─────────────────────────────────────────── */
+.doc-cuerpo {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  position: relative;
+}
+.doc-cuerpo .doc-scroll {
+  flex: 1;
+  min-width: 0;
+}
+.com-boton.activo {
+  border-color: var(--dim);
+}
+/* El texto comentado: subrayado del color del acento, más fuerte el activo. */
+.doc-hoja .doc-comentado {
+  background: rgba(255, 196, 0, 0.14);
+  border-bottom: 2px solid rgba(255, 196, 0, 0.55);
+  cursor: pointer;
+}
+.doc-hoja .doc-comentado.activo {
+  background: rgba(255, 196, 0, 0.3);
+  border-bottom-color: #ffc400;
+}
+.doc-hoja figure.doc-comentado {
+  outline: 2px solid rgba(255, 196, 0, 0.55);
+  outline-offset: 3px;
+  border-bottom: 0;
+}
+/* El botón que aparece junto a lo seleccionado. */
+.doc-comentar {
+  position: absolute;
+  z-index: 5;
+  transform: translateY(-110%);
+  font: 600 12px "Segoe UI", system-ui, sans-serif;
+  color: #111;
+  background: #ffc400;
+  border: 0;
+  border-radius: 4px;
+  padding: 5px 10px;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+.com-panel {
+  width: 300px;
+  flex-shrink: 0;
+  border-left: 1px solid var(--linea);
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font: 13px/1.45 "Segoe UI", system-ui, sans-serif;
+}
+.com-cab {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.com-enlace {
+  font: inherit;
+  font-size: 12px;
+  color: var(--dim);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.com-vacio {
+  color: var(--dim);
+  margin: 0;
+}
+.com-hilo {
+  border: 1px solid var(--linea);
+  border-radius: 6px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  cursor: pointer;
+}
+.com-hilo.activo {
+  border-color: #ffc400;
+  cursor: default;
+}
+.com-hilo.resuelto {
+  opacity: 0.6;
+}
+.com-cita {
+  margin: 0;
+  padding-left: 8px;
+  border-left: 2px solid #ffc400;
+  color: var(--dim);
+  font-style: italic;
+  overflow-wrap: anywhere;
+}
+.com-cita.borrada {
+  text-decoration: line-through;
+}
+.com-aviso {
+  margin: 0;
+  font-size: 12px;
+  color: var(--acento);
+}
+.com-mensaje {
+  display: flex;
+  flex-direction: column;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.com-mensaje.system {
+  font-size: 12px;
+  color: var(--dim);
+  font-style: italic;
+}
+.com-autor {
+  font-weight: 600;
+  font-size: 12px;
+}
+.com-caja {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.com-caja textarea {
+  font: inherit;
+  color: var(--texto);
+  background: var(--fondo);
+  border: 1px solid var(--linea);
+  border-radius: 4px;
+  padding: 6px 8px;
+  resize: vertical;
+}
+.com-caja .mention-menu {
+  bottom: 100%;
+  top: auto;
+}
+.com-caja-acciones,
+.com-acciones {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.doc-boton.principal {
+  background: var(--texto);
+  color: var(--fondo);
+  border-color: var(--texto);
+}
+.doc-boton:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+/* En pantallas angostas el panel sube desde abajo, encima de la hoja. */
+@media (max-width: 900px) {
+  .com-panel {
+    position: absolute;
+    inset: auto 0 0 0;
+    width: auto;
+    max-height: 55%;
+    background: var(--panel);
+    border-left: 0;
+    border-top: 1px solid var(--linea);
+    box-shadow: 0 -6px 18px rgba(0, 0, 0, 0.5);
+    z-index: 6;
+  }
+}
+
 /* La copia para imprimir no se ve en pantalla. */
 .doc-impresion {
   display: none;

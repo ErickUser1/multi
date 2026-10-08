@@ -134,6 +134,32 @@ export interface SalaDeUsuario {
   nombre?: string | null;
 }
 
+/**
+ * Un comentario del documento. La raíz de un hilo tiene `hiloId === id` y
+ * lleva el ancla; las respuestas solo apuntan a su hilo.
+ */
+export interface StoredComentario {
+  id: string;
+  roomId: string;
+  hiloId: string;
+  /**
+   * Dónde está, como JSON: `{ bloque, inicio, fin }` con posiciones relativas
+   * de Yjs (siguen a su texto aunque editen alrededor), o `{ objeto }` para
+   * una gráfica o un diagrama. null en las respuestas.
+   */
+  ancla: string | null;
+  /** El texto comentado, tal como estaba: se muestra si el ancla se pierde. */
+  cita: string | null;
+  autor: string;
+  color: string;
+  rol: "human" | "agent" | "system";
+  usuarioId: string | null;
+  texto: string;
+  creado: number;
+  /** Solo en la raíz. */
+  resuelto: boolean;
+}
+
 export interface Storage {
   /** Crea el esquema si hace falta. */
   init(): Promise<void>;
@@ -236,6 +262,12 @@ export interface Storage {
   borrarConexionSupabase(roomId: string): Promise<void>;
   /** Las salas que tienen una conexión guardada, para retomar las que quedaron a medias. */
   salasConSupabase(): Promise<string[]>;
+
+  /** Los comentarios del documento de una sala, en orden. */
+  getComentarios(roomId: string): Promise<StoredComentario[]>;
+  addComentario(c: StoredComentario): Promise<void>;
+  /** Resuelve o reabre un hilo (su raíz). */
+  resolverHilo(roomId: string, hiloId: string, resuelto: boolean): Promise<void>;
 
   close(): Promise<void>;
 }

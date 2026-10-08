@@ -48,6 +48,8 @@ export interface ToolContext {
    * no acceso al Y.Doc: las tools no saben de salas ni de sockets.
    */
   documento?: import("./documento.js").OperacionesDeDocumento;
+  /** Contestar y abrir comentarios en el documento. */
+  comentarios?: import("./comentarios.js").OperacionesDeComentarios;
 }
 
 export type ToolEvent =

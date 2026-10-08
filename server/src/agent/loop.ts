@@ -305,6 +305,14 @@ Cómo se trabaja un documento:
   que está listo, que pueden editarlo directo o pedirte cambios, y qué datos dejaste
   pendientes. Antes de cerrar, revisa con leer_documento que no haya quedado ninguna
   sección PENDIENTE.
+
+Comentarios del documento (como en Google Docs):
+- Un pedido que llega de un comentario trae su hilo. Contesta SOLO en ese hilo, con la
+  tool comentar, y breve. Si te piden un cambio, hazlo en el documento y di en el hilo,
+  en una línea, qué cambiaste. No repitas la respuesta en el chat.
+- Tú también puedes abrir un comentario (comentar con bloque y cita) cuando algo
+  necesita a una persona: un dato que solo ella tiene, una decisión, una duda. Es mejor
+  que dejarlo enterrado en el texto o en el chat.
 </documentos>
 
 <para_entregar>
@@ -436,6 +444,8 @@ export async function runAgent(opts: {
   leerBase?: ToolContext["leerBase"];
   /** El documento vivo de la sala, si lo hay o si el agente lo crea. */
   documento?: ToolContext["documento"];
+  /** Los comentarios del documento. */
+  comentarios?: ToolContext["comentarios"];
   /**
    * El historial tal como va, para que sobreviva si el turno LANZA.
    *
@@ -467,6 +477,7 @@ export async function runAgent(opts: {
     ejecutarSql: opts.ejecutarSql,
     leerBase: opts.leerBase,
     documento: opts.documento,
+    comentarios: opts.comentarios,
     emit: callbacks.onToolEvent,
     agentId: opts.agentId,
     onWaitStart: opts.onWaitStart,

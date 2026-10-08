@@ -35,6 +35,7 @@
     "demo:respetar": "tsx src/demos/respetar.ts",
     "demo:documento": "tsx src/demos/documento.ts",
     "demo:doc-sync": "tsx src/demos/doc-sync.ts",
+    "demo:comentarios": "tsx src/demos/comentarios.ts",
     "demo:publicar": "tsx src/demos/publicar.ts",
     "demo:cuentas": "tsx src/demos/cuentas.ts",
     "demo:cripto": "tsx src/demos/cripto.ts",

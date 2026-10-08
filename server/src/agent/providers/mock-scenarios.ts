@@ -27,6 +27,30 @@ function primeraPendiente(leido: string): { id: string; huella: string; titulo: 
 export function createDevMock(): MockProvider {
   return new MockProvider()
     .scenario({
+      // Un comentario del documento: lee, corrige el párrafo comentado y
+      // contesta en el hilo. Con "sin tool" contesta solo con texto, para
+      // probar que la respuesta igual cae en el hilo.
+      match: (t) => t.startsWith("[Comentario de"),
+      reply: (t) =>
+        /sin tool/i.test(t)
+          ? [{ type: "text", text: "Respuesta sin la tool: va al hilo igual." }]
+          : [{ type: "tool_use", id: "", name: "leer_documento", input: {} }],
+      seguir: (resultado, t) => {
+        const bloque = t.match(/\(bloque (\S+), hilo (\S+)\)/);
+        if (!bloque) return null;
+        const [, id, hilo] = bloque;
+        if (resultado.startsWith("revisión")) {
+          const huella = resultado.match(new RegExp(`⟦${id.replace(".", "\\.")}·([0-9a-f]+)⟧`))?.[1];
+          if (!huella) return null;
+          return [{ type: "tool_use", id: "", name: "reemplazar_bloque", input: { id, huella, markdown: "Texto corregido por el agente." } }];
+        }
+        if (resultado.startsWith("bloque reemplazado")) {
+          return [{ type: "tool_use", id: "", name: "comentar", input: { hilo, texto: "Listo, corregí el párrafo." } }];
+        }
+        return null;
+      },
+    })
+    .scenario({
       // Un documento: esqueleto primero y luego cada sección, leyendo los ids
       // de lo que devuelve la tool anterior, como lo hace el agente real.
       match: (t) => /propuesta|documento|reporte/i.test(t),

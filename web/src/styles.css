@@ -3098,6 +3098,12 @@ img.av {
   line-height: 1.3;
   margin: 1.4em 0 0.5em;
 }
+.doc-md h1 {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 30px;
+  line-height: 1.2;
+  margin: 0 0 28px;
+}
 .doc-md h2 {
   font-size: 22px;
 }
@@ -3152,6 +3158,11 @@ img.av {
   text-align: left;
   vertical-align: top;
 }
+/* En el editor cada celda lleva su párrafo: sin su margen, la fila mide una línea. */
+.doc-md td > p,
+.doc-md th > p {
+  margin: 0;
+}
 .doc-md th {
   background: var(--tinta-fondo);
   font-family: "Segoe UI", system-ui, sans-serif;
@@ -3167,9 +3178,23 @@ img.av {
   margin: 2em 0;
 }
 .doc-grafica,
-.doc-diagrama {
+.doc-diagrama,
+.doc-imagen {
   margin: 0 0 1.2em;
   text-align: center;
+}
+/* El editor del documento: sin el contorno de foco del navegador (la hoja ya
+   dice dónde estás) y con el primer título pegado arriba. */
+.doc-hoja .ProseMirror {
+  outline: none;
+}
+.doc-hoja .ProseMirror > :first-child {
+  margin-top: 0;
+}
+.doc-imagen img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 3px;
 }
 .doc-grafica svg,
 .doc-diagrama svg {

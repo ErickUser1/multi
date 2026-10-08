@@ -23,6 +23,12 @@ type Scenario = {
   match: (userText: string) => boolean;
   /** Bloques que "genera" el assistant (texto y/o tool_use). */
   reply: (userText: string) => ContentBlock[];
+  /**
+   * Opcional: qué hace después de ver el resultado de su última tool. null (o
+   * no tenerlo) cierra el turno. Es lo que deja simular un agente que lee algo
+   * y actúa sobre lo leído (los ids del documento, por ejemplo).
+   */
+  seguir?: (resultado: string, userText: string) => ContentBlock[] | null;
 };
 
 export class MockProvider implements ModelProvider {
@@ -53,7 +59,20 @@ export class MockProvider implements ModelProvider {
     let content: ContentBlock[];
     let stopReason: "tool_use" | "end_turn";
 
-    if (hasToolResults) {
+    const resultado = hasToolResults
+      ? lastMsg.content
+          .filter((c): c is Extract<ContentBlock, { type: "tool_result" }> => c.type === "tool_result")
+          .map((c) => (typeof c.content === "string" ? c.content : JSON.stringify(c.content)))
+          .join("\n")
+      : "";
+    const siguiente = hasToolResults
+      ? this.scenarios.find((s) => s.match(userText))?.seguir?.(resultado, userText) ?? null
+      : null;
+
+    if (siguiente) {
+      content = siguiente;
+      stopReason = content.some((c) => c.type === "tool_use") ? "tool_use" : "end_turn";
+    } else if (hasToolResults) {
       content = [{ type: "text", text: "Listo, ya quedó." }];
       stopReason = "end_turn";
     } else {

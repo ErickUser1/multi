@@ -21,6 +21,8 @@ export type TipoDeAccion =
   | "verBase"
   | "adjunto"
   | "documento"
+  | "leerDocumento"
+  | "escribirDocumento"
   | "crearProyecto"
   | "instalar"
   | "compilar"
@@ -59,6 +61,16 @@ export function accionDeTool(nombre: string, input: Record<string, unknown>): Ac
       return { tipo: "verBase", detalle: texto("consulta") || undefined };
     case "iniciar_documento":
       return { tipo: "documento", detalle: texto("titulo") || undefined };
+    case "leer_documento":
+      return { tipo: "leerDocumento" };
+    case "escribir_seccion":
+    case "reemplazar_bloque":
+    case "insertar_bloques":
+    case "borrar_bloque":
+    case "mover_seccion":
+    case "cambiar_grafica":
+    case "cambiar_diagrama":
+      return { tipo: "escribirDocumento" };
     case "usar_adjunto":
       return { tipo: "adjunto", detalle: texto("destino") || undefined };
     case "bash":

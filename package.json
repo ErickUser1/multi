@@ -46,6 +46,7 @@
     "demo:candados": "npm run demo:candados -w server",
     "demo:respetar": "npm run demo:respetar -w server",
     "demo:documento": "npm run demo:documento -w server",
+    "demo:doc-sync": "npm run demo:doc-sync -w server",
     "demo:modo-persistido": "npm run demo:modo-persistido -w server",
     "demo:sala-al-escribir": "npm run demo:sala-al-escribir -w server",
     "demo:carga": "npm run demo:carga -w server --",

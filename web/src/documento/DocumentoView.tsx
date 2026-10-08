@@ -1,117 +1,113 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
+import { useEditor, EditorContent } from "@tiptap/react";
+import Collaboration from "@tiptap/extension-collaboration";
+import type { Socket } from "socket.io-client";
 import { SERVER_URL } from "../socket";
 import { useTextos } from "../i18n";
 import { crearRenderer } from "./markdown";
-
-interface Seccion {
-  id: string;
-  archivo: string;
-  markdown: string;
-  /** Qué va a ir aquí mientras nadie la escribe; null si ya tiene contenido. */
-  pendiente: string | null;
-}
-
-interface Documento {
-  titulo: string;
-  secciones: Seccion[];
-}
+import { extensionesDelDocumento } from "./esquema";
+import { conVistas } from "./vistas";
+import { ProveedorDocumento } from "./proveedor";
 
 /**
- * El documento de la sala, pintado por Multi y no por un proyecto en el iframe.
+ * El documento de la sala, vivo: lo que cambia cualquiera (el agente, otra
+ * persona) aparece aquí en el momento, sin volver a pedirlo.
  *
- * Por eso abre al instante (no hay dev server que levantar) y por eso, más
- * adelante, los comentarios se pueden anclar a una frase: aquí sí se sabe qué
- * hay en cada línea.
+ * Es un editor (TipTap) conectado al Y.Doc de la sala. El documento no es
+ * markdown: es el mismo árbol de bloques que guarda el server, así que pintarlo
+ * no convierte nada.
  *
- * `version` lo sube la Sala cada vez que algo pudo cambiar el documento (un
- * archivo bajo documento/, un turno que cerró, volver atrás en el historial):
- * es la señal para volver a pedirlo.
+ * Por ahora en solo lectura; editar es el paso siguiente.
  */
-export function DocumentoView({ roomId, version }: { roomId: string; version: number }) {
+export function DocumentoView({ roomId, socket }: { roomId: string; socket: Socket }) {
   const { t } = useTextos();
-  const [doc, setDoc] = useState<Documento | null>(null);
-  const [error, setError] = useState(false);
-  const pidiendo = useRef(0);
+  // Cada recarga del server (volver atrás) estrena proveedor y Y.Doc.
+  const [intento, setIntento] = useState(0);
+  const [listo, setListo] = useState(false);
+  const [noHay, setNoHay] = useState(false);
+  const [impresion, setImpresion] = useState<string | null>(null);
 
-  useEffect(() => {
-    const yo = ++pidiendo.current;
-    // Varios file:changed seguidos (el esqueleto son varios archivos) se
-    // juntan en una sola petición.
-    const espera = setTimeout(() => {
-      fetch(`${SERVER_URL}/rooms/${roomId}/documento`)
-        .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
-        .then((d: Documento) => {
-          // Solo la respuesta más reciente pinta: una lenta no pisa a una nueva.
-          if (yo !== pidiendo.current) return;
-          setDoc(d);
-          setError(false);
-        })
-        .catch(() => {
-          if (yo === pidiendo.current) setError(true);
-        });
-    }, 120);
-    return () => clearTimeout(espera);
-  }, [roomId, version]);
+  const proveedor = useMemo(() => {
+    void intento;
+    return new ProveedorDocumento(socket, {
+      editable: false,
+      alSincronizar: () => setListo(true),
+      alNoHaber: () => setNoHay(true),
+      alRecargar: () => {
+        setListo(false);
+        setIntento((n) => n + 1);
+      },
+    });
+  }, [socket, intento]);
+  useEffect(() => () => proveedor.destruir(), [proveedor]);
 
-  const render = useMemo(
-    () =>
-      crearRenderer((nombre) => `${SERVER_URL}/rooms/${roomId}/documento/imagenes/${encodeURIComponent(nombre)}`),
+  const urlImagen = useMemo(
+    () => (nombre: string) => `${SERVER_URL}/rooms/${roomId}/documento/imagenes/${encodeURIComponent(nombre)}`,
     [roomId],
   );
 
-  if (!doc) {
-    return <div className="doc-estado">{error ? t.docSinLeer : t.docCargando}</div>;
-  }
+  const editor = useEditor(
+    {
+      editable: false,
+      extensions: [
+        ...conVistas(extensionesDelDocumento({ soloLectura: true }), {
+          objetos: proveedor.ydoc.getMap("objetos"),
+          urlImagen,
+          escribiendo: t.docEscribiendo,
+        }),
+        Collaboration.configure({ document: proveedor.ydoc, field: "contenido" }),
+      ],
+      editorProps: { attributes: { class: "doc-md" } },
+    },
+    [proveedor],
+  );
 
-  const hoja = <Hoja doc={doc} render={render} escribiendo={t.docEscribiendo} />;
+  // El PDF sale de la exportación en markdown, con el mismo renderer de
+  // siempre: lo que se imprime no depende del editor.
+  const imprimir = async () => {
+    const r = await fetch(`${SERVER_URL}/rooms/${roomId}/documento`).catch(() => null);
+    if (!r?.ok) return;
+    const { markdown } = (await r.json()) as { markdown: string };
+    setImpresion(crearRenderer(urlImagen)(markdown));
+  };
+  useEffect(() => {
+    if (impresion === null) return;
+    // Un cuadro después: que la copia ya esté en la página cuando se abra el diálogo.
+    const id = requestAnimationFrame(() => {
+      window.print();
+      setImpresion(null);
+    });
+    return () => cancelAnimationFrame(id);
+  }, [impresion]);
+
+  if (noHay) return <div className="doc-estado">{t.docSinLeer}</div>;
 
   return (
     <div className="documento">
       <div className="doc-barra">
-        <button
-          type="button"
-          className="doc-boton"
-          title={t.docTituloPdf}
-          onClick={() => window.print()}
-        >
+        <button type="button" className="doc-boton" title={t.docTituloPdf} onClick={() => void imprimir()}>
           {t.docPdf}
         </button>
       </div>
-      <div className="doc-scroll">{hoja}</div>
+      <div className="doc-scroll">
+        {!listo && <div className="doc-estado">{t.docCargando}</div>}
+        <article className="doc-hoja" hidden={!listo}>
+          <EditorContent editor={editor} />
+        </article>
+      </div>
       {/* Para imprimir va una copia fuera de la Sala: la sala recorta lo que no
-          cabe en pantalla, y el PDF necesita el documento entero, página tras
-          página. En pantalla esta copia no se ve. */}
-      {createPortal(<div className="doc-impresion">{hoja}</div>, document.body)}
+          cabe en pantalla, y el PDF necesita el documento entero. En pantalla
+          esta copia no se ve. */}
+      {impresion !== null &&
+        createPortal(
+          <div className="doc-impresion">
+            <article className="doc-hoja">
+              <div className="doc-md" dangerouslySetInnerHTML={{ __html: impresion }} />
+            </article>
+          </div>,
+          document.body,
+        )}
     </div>
-  );
-}
-
-function Hoja({
-  doc,
-  render,
-  escribiendo,
-}: {
-  doc: Documento;
-  render: (md: string) => string;
-  escribiendo: string;
-}) {
-  return (
-    <article className="doc-hoja">
-      {doc.titulo && <h1 className="doc-titulo">{doc.titulo}</h1>}
-      {doc.secciones.map((s) => (
-        <section key={s.id} className="doc-seccion" data-seccion={s.id}>
-          {s.markdown && <div className="doc-md" dangerouslySetInnerHTML={{ __html: render(s.markdown) }} />}
-          {s.pendiente !== null && (
-            <div className="doc-pendiente" aria-busy="true">
-              <span className="doc-pendiente-que">{s.pendiente || escribiendo}</span>
-              <span className="doc-linea" />
-              <span className="doc-linea" />
-              <span className="doc-linea corta" />
-            </div>
-          )}
-        </section>
-      ))}
-    </article>
   );
 }

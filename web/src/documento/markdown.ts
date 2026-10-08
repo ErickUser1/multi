@@ -1,6 +1,7 @@
 import MarkdownIt from "markdown-it";
 import DOMPurify from "dompurify";
 import { graficaSvg } from "./grafica";
+import { diagramaSeguro } from "./svg-seguro";
 
 /**
  * Markdown → HTML para el documento, con lo que Multi le agrega: gráficas y
@@ -14,17 +15,6 @@ import { graficaSvg } from "./grafica";
  * - El HTML final pasa OTRA vez por DOMPurify. Si algo se coló por una regla
  *   de aquí, ahí se cae.
  */
-
-const SVG_PROHIBIDO = {
-  USE_PROFILES: { svg: true, svgFilters: true },
-  FORBID_TAGS: ["script", "foreignObject", "image", "use", "a", "style", "iframe", "animate", "set"],
-  FORBID_ATTR: ["href", "xlink:href", "style"],
-};
-
-function diagramaSeguro(svg: string): string {
-  const limpio = DOMPurify.sanitize(svg, SVG_PROHIBIDO);
-  return limpio.trim().startsWith("<svg") ? limpio : "";
-}
 
 export function crearRenderer(urlImagen: (nombre: string) => string): (md: string) => string {
   const md = new MarkdownIt({ html: false, linkify: true, typographer: true, breaks: false });

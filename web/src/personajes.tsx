@@ -19,8 +19,8 @@ import dave from "./personajes/dave.webp";
  */
 const PERSONAJES = [
   { nombre: "Steve", imagen: steve },
-  { nombre: "Lenny", imagen: lenny },
   { nombre: "Dave", imagen: dave },
+  { nombre: "Lenny", imagen: lenny },
   { nombre: "Bob", imagen: bob },
   { nombre: "Chip", imagen: chip },
 ];

@@ -1,5 +1,6 @@
 import type { Agent } from "./socket.js";
 import { useTextos, type Textos } from "./i18n.js";
+import { AvatarVivo, personajeDe } from "./personajes.js";
 
 /**
  * Lista de agentes de la sala — tres estados visualmente distintos:
@@ -34,7 +35,11 @@ function AgentRow({ agent }: { agent: Agent }) {
   const { t } = useTextos();
   return (
     <div className={`agent-row agent-${agent.state}`}>
-      <span className="agent-dot" style={{ background: agent.color }} />
+      {personajeDe(agent.name) ? (
+        <AvatarVivo agent={agent} nombre={agent.name} color={agent.color} className="av-mini" />
+      ) : (
+        <span className="agent-dot" style={{ background: agent.color }} />
+      )}
       <span className="agent-name" style={{ color: agent.color }}>
         {agent.name}
       </span>

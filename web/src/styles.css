@@ -887,6 +887,17 @@ img.av {
   object-fit: cover;
 }
 
+/* El personaje de un agente: la imagen ya trae su silueta, así que no se
+   recorta en círculo ni lleva el fondo de color de las iniciales. */
+img.av.av-personaje {
+  object-fit: contain;
+  border-radius: 0;
+  background: none;
+}
+.presencia img.av.av-personaje {
+  border: 0;
+}
+
 /* La foto dentro del chip de la barra, más chica que un avatar de mensaje. */
 .cuenta-foto {
   width: 22px;

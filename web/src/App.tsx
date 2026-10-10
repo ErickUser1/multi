@@ -19,6 +19,7 @@ import {
   type OrphanTurn,
 } from "./socket.js";
 import { AgentList, textoDeEstado } from "./AgentList.js";
+import { AvatarDeAgente } from "./personajes.js";
 import { FiltroChat } from "./FiltroChat.js";
 import { MentionMenu, useMenciones } from "./MentionMenu.js";
 import { Historial } from "./Historial.js";
@@ -1725,9 +1726,7 @@ function Sala({
             const color = agent?.color ?? "#ffc37a";
             return (
               <div className="msg" key={agentId}>
-                <div className="av" style={{ background: color, color: "#3d2a12" }}>
-                  AI
-                </div>
+                <AvatarDeAgente nombre={agent?.name ?? agentId} color={color} />
                 <div className="msg-cuerpo">
                   <div className="msg-cab">
                     <span className="quien" style={{ color }}>
@@ -2015,7 +2014,7 @@ function Sala({
                 onClick={() => alternarFiltro(a.name)}
                 title={filtro.has(a.name) ? t.quitarDelFiltro(a.name) : t.filtrarPor(a.name)}
               >
-                <Avatar color={a.color} inicial="AI" textoOscuro />
+                <AvatarDeAgente nombre={a.name} color={a.color} />
               </button>
             ))}
             <CuentaPanel
@@ -2391,7 +2390,6 @@ function Avatar(props: {
   color: string;
   inicial: string;
   titulo?: string;
-  textoOscuro?: boolean;
 }) {
   const [fallo, setFallo] = useState(false);
   // La foto puede ser una URL de Google o una que subió la persona a este
@@ -2412,7 +2410,7 @@ function Avatar(props: {
   return (
     <div
       className="av"
-      style={{ background: props.color, color: props.textoOscuro ? "#3d2a12" : "#fff" }}
+      style={{ background: props.color, color: "#fff" }}
       title={props.titulo}
     >
       {props.inicial}
@@ -2429,7 +2427,7 @@ function ChatRow({
   seguido?: boolean;
   roomId: string;
 }) {
-  const initial = msg.from.slice(0, msg.role === "agent" ? 2 : 1).toUpperCase();
+  const initial = msg.from.slice(0, 1).toUpperCase();
 
   /**
    * Las imágenes se piden al server por su URL en vez de venir en el mensaje.
@@ -2470,14 +2468,9 @@ function ChatRow({
 
   return (
     <div className={`msg ${msg.role === "system" ? "msg-system" : ""}`}>
-      {msg.role !== "system" && (
-        <Avatar
-          foto={msg.role === "agent" ? null : msg.foto}
-          color={msg.color}
-          inicial={msg.role === "agent" ? "AI" : initial}
-          titulo={msg.from}
-          textoOscuro={msg.role === "agent"}
-        />
+      {msg.role === "agent" && <AvatarDeAgente nombre={msg.from} color={msg.color} titulo={msg.from} />}
+      {msg.role === "human" && (
+        <Avatar foto={msg.foto} color={msg.color} inicial={initial} titulo={msg.from} />
       )}
       <div className="msg-cuerpo">
         {msg.role !== "system" && (

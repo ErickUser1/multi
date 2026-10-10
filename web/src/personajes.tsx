@@ -12,8 +12,10 @@ import dave from "./personajes/dave.webp";
  * sala verían a personajes distintos hablando, y "dile a Steve" dejaría de
  * significar algo.
  *
- * Los agentes sin personaje todavía (del 6 en adelante, por ahora) se quedan
- * con el círculo de color de siempre.
+ * Del 6 en adelante se repiten en el mismo orden (agente-6 vuelve a ser Steve).
+ * No es raro llegar ahí: cada "@agente" lanza uno nuevo, así que una sala con
+ * actividad pasa de cinco agentes en una sola sesión. El nombre sigue siendo
+ * distinto y lo dice al lado, y los de números cercanos nunca coinciden.
  */
 const PERSONAJES = [
   { nombre: "Steve", imagen: steve },
@@ -26,10 +28,13 @@ const PERSONAJES = [
 function personajeDe(nombreDelAgente: string) {
   const m = /^agente-(\d+)$/.exec(nombreDelAgente);
   if (!m) return null;
-  return PERSONAJES[Number(m[1]) - 1] ?? null;
+  return PERSONAJES[(Number(m[1]) - 1) % PERSONAJES.length] ?? null;
 }
 
-/** La carita de un agente: su personaje, o el círculo de color con "AI" si todavía no tiene. */
+/**
+ * La carita de un agente: su personaje, o el círculo de color con "AI" para un
+ * nombre que no sea `agente-N`.
+ */
 export function AvatarDeAgente(props: { nombre: string; color: string; titulo?: string }) {
   const personaje = personajeDe(props.nombre);
   if (!personaje) {

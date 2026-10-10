@@ -1,4 +1,5 @@
 import steve from "./personajes/steve.webp";
+import bob from "./personajes/bob.webp";
 
 /**
  * Los personajes de los agentes: cada agente de la sala tiene una cara.
@@ -8,10 +9,13 @@ import steve from "./personajes/steve.webp";
  * sala verían a personajes distintos hablando, y "dile a Steve" dejaría de
  * significar algo.
  *
- * Los agentes sin personaje todavía (del 2 en adelante, por ahora) se quedan
+ * Los agentes sin personaje todavía (del 3 en adelante, por ahora) se quedan
  * con el círculo de color de siempre.
  */
-const PERSONAJES = [{ nombre: "Steve", imagen: steve }];
+const PERSONAJES = [
+  { nombre: "Steve", imagen: steve },
+  { nombre: "Bob", imagen: bob },
+];
 
 function personajeDe(nombreDelAgente: string) {
   const m = /^agente-(\d+)$/.exec(nombreDelAgente);

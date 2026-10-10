@@ -19,7 +19,7 @@ import {
   type OrphanTurn,
 } from "./socket.js";
 import { AgentList, textoDeEstado } from "./AgentList.js";
-import { AvatarDeAgente, AvatarVivo } from "./personajes.js";
+import { AvatarDeAgente } from "./personajes.js";
 import { FiltroChat } from "./FiltroChat.js";
 import { MentionMenu, useMenciones } from "./MentionMenu.js";
 import { Historial } from "./Historial.js";
@@ -635,11 +635,6 @@ function Sala({
   const trabajando = useMemo(
     () => Object.fromEntries(agents.filter((a) => a.state !== "idle").map((a) => [a.id, true])),
     [agents],
-  );
-  /** Lo último que hizo cada agente, para que su personaje lo actúe. */
-  const ultimaAccion = useMemo(
-    () => Object.fromEntries(Object.entries(toolLines).map(([id, l]) => [id, l[l.length - 1]?.tipo])),
-    [toolLines],
   );
   /** El agente cuyo trabajo se anuncia encima del preview: el primero que esté en algo. */
   const agenteActivo = agents.find((a) => a.state !== "idle") ?? null;
@@ -1642,7 +1637,7 @@ function Sala({
         </div>
 
         {/* Los agentes de la sala, como jugadores visibles */}
-        <AgentList agents={agents} ultimaAccion={ultimaAccion} />
+        <AgentList agents={agents} />
 
         {/* El botón dice que se puede filtrar; los avatares de arriba son el
             atajo para quien ya lo sabe. Sin él, nada anuncia que existe. */}
@@ -1731,12 +1726,7 @@ function Sala({
             const color = agent?.color ?? "#ffc37a";
             return (
               <div className="msg" key={agentId}>
-                <AvatarVivo
-                  agent={agent}
-                  accion={ultimaAccion[agentId]}
-                  nombre={agent?.name ?? agentId}
-                  color={color}
-                />
+                <AvatarDeAgente nombre={agent?.name ?? agentId} color={color} />
                 <div className="msg-cuerpo">
                   <div className="msg-cab">
                     <span className="quien" style={{ color }}>
@@ -2024,7 +2014,7 @@ function Sala({
                 onClick={() => alternarFiltro(a.name)}
                 title={filtro.has(a.name) ? t.quitarDelFiltro(a.name) : t.filtrarPor(a.name)}
               >
-                <AvatarVivo agent={a} accion={ultimaAccion[a.id]} nombre={a.name} color={a.color} />
+                <AvatarDeAgente nombre={a.name} color={a.color} />
               </button>
             ))}
             <CuentaPanel
@@ -2478,11 +2468,7 @@ function ChatRow({
 
   return (
     <div className={`msg ${msg.role === "system" ? "msg-system" : ""}`}>
-      {msg.role === "agent" && (
-        // En el historial el personaje se queda quieto: si cada mensaje viejo
-        // reaccionara al estado de ahora, el chat entero se movería a la vez.
-        <AvatarDeAgente nombre={msg.from} color={msg.color} pose="base" titulo={msg.from} />
-      )}
+      {msg.role === "agent" && <AvatarDeAgente nombre={msg.from} color={msg.color} titulo={msg.from} />}
       {msg.role === "human" && (
         <Avatar foto={msg.foto} color={msg.color} inicial={initial} titulo={msg.from} />
       )}

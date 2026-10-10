@@ -16,11 +16,17 @@ const ANTHROPIC_VERSION = "2023-06-01";
 // el saldo de una semana (pasó, 17 dólares en una tarde). Sonnet hace igual de
 // bien lo que se pide aquí (scaffoldear, editar, rediseñar) por menos de la mitad.
 // Quien quiera Opus lo pone en MULTI_MODEL o desde la Sala.
-const DEFAULT_MODEL = "claude-sonnet-5";
+//
+// Sonnet 5.5 cuesta lo mismo que Sonnet 5 y rompe cosas que aquí no se usan:
+// no se manda `thinking` (corre adaptivo, igual que antes), ni `tool_choice`
+// forzado, ni temperatura. Los bloques de thinking no se reenvían al historial
+// (ver `buildMessage()`), así que su chequeo de historial editado no tiene nada que
+// revisar: lo que se recorta del historial entre turnos no puede dar un 400.
+const DEFAULT_MODEL = "claude-sonnet-5-5";
 /**
  * Tope de tokens que el modelo puede DEVOLVER en una respuesta.
  *
- * Estaba en 8192, que con Sonnet 5 (128k de salida) es un dieciseisavo de lo que
+ * Estaba en 8192, que con Sonnet (128k de salida) es un dieciseisavo de lo que
  * el modelo puede dar. Con ese tope un archivo grande no cabe: el agente empieza
  * a escribirlo, se queda sin espacio a media escritura, la tool queda trunca y
  * REINTENTA IGUAL. Se vio en vivo, cinco vueltas seguidas con `salida 8192` y el

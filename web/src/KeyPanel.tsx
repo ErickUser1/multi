@@ -45,7 +45,7 @@ const PROVEEDORES: Record<
     label: "Anthropic",
     hint: "sk-ant-…",
     url: "https://console.anthropic.com/settings/keys",
-    modelos: ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5-20251001"],
+    modelos: ["claude-opus-5", "claude-sonnet-5-5", "claude-haiku-4-5-20251001"],
   },
   // Verificados contra https://openrouter.ai/api/v1/models (julio 2026). Los
   // gratis van primero: son la puerta de entrada para quien no quiere pagar.

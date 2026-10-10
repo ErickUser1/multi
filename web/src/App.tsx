@@ -636,6 +636,11 @@ function Sala({
     () => Object.fromEntries(agents.filter((a) => a.state !== "idle").map((a) => [a.id, true])),
     [agents],
   );
+  /** Lo último que hizo cada agente, para que su personaje lo actúe. */
+  const ultimaAccion = useMemo(
+    () => Object.fromEntries(Object.entries(toolLines).map(([id, l]) => [id, l[l.length - 1]?.tipo])),
+    [toolLines],
+  );
   /** El agente cuyo trabajo se anuncia encima del preview: el primero que esté en algo. */
   const agenteActivo = agents.find((a) => a.state !== "idle") ?? null;
   /** Qué está haciendo, en palabras: su última acción, o su estado si aún no hay. */
@@ -1637,7 +1642,7 @@ function Sala({
         </div>
 
         {/* Los agentes de la sala, como jugadores visibles */}
-        <AgentList agents={agents} />
+        <AgentList agents={agents} ultimaAccion={ultimaAccion} />
 
         {/* El botón dice que se puede filtrar; los avatares de arriba son el
             atajo para quien ya lo sabe. Sin él, nada anuncia que existe. */}
@@ -1726,7 +1731,12 @@ function Sala({
             const color = agent?.color ?? "#ffc37a";
             return (
               <div className="msg" key={agentId}>
-                <AvatarVivo agent={agent} nombre={agent?.name ?? agentId} color={color} />
+                <AvatarVivo
+                  agent={agent}
+                  accion={ultimaAccion[agentId]}
+                  nombre={agent?.name ?? agentId}
+                  color={color}
+                />
                 <div className="msg-cuerpo">
                   <div className="msg-cab">
                     <span className="quien" style={{ color }}>
@@ -2014,7 +2024,7 @@ function Sala({
                 onClick={() => alternarFiltro(a.name)}
                 title={filtro.has(a.name) ? t.quitarDelFiltro(a.name) : t.filtrarPor(a.name)}
               >
-                <AvatarVivo agent={a} nombre={a.name} color={a.color} />
+                <AvatarVivo agent={a} accion={ultimaAccion[a.id]} nombre={a.name} color={a.color} />
               </button>
             ))}
             <CuentaPanel

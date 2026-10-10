@@ -12,7 +12,14 @@ import { AvatarVivo, personajeDe } from "./personajes.js";
  * Los inactivos no se pintan: no están haciendo nada, y siguen siendo
  * direccionables con @ desde el menú de menciones.
  */
-export function AgentList({ agents }: { agents: Agent[] }) {
+export function AgentList({
+  agents,
+  ultimaAccion = {},
+}: {
+  agents: Agent[];
+  /** El `tipo` de la última acción de cada agente, para su personaje. */
+  ultimaAccion?: Record<string, string | undefined>;
+}) {
   const activos = agents.filter((a) => a.state !== "idle");
 
   // Sin nadie trabajando, la lista no se pinta. Antes los inactivos se plegaban
@@ -24,19 +31,25 @@ export function AgentList({ agents }: { agents: Agent[] }) {
   return (
     <div className="agent-list">
       {activos.map((a) => (
-        <AgentRow key={a.id} agent={a} />
+        <AgentRow key={a.id} agent={a} accion={ultimaAccion[a.id]} />
       ))}
 
     </div>
   );
 }
 
-function AgentRow({ agent }: { agent: Agent }) {
+function AgentRow({ agent, accion }: { agent: Agent; accion?: string }) {
   const { t } = useTextos();
   return (
     <div className={`agent-row agent-${agent.state}`}>
       {personajeDe(agent.name) ? (
-        <AvatarVivo agent={agent} nombre={agent.name} color={agent.color} className="av-mini" />
+        <AvatarVivo
+          agent={agent}
+          accion={accion}
+          nombre={agent.name}
+          color={agent.color}
+          className="av-mini"
+        />
       ) : (
         <span className="agent-dot" style={{ background: agent.color }} />
       )}

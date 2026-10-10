@@ -915,6 +915,10 @@ img.av.av-personaje {
 .av-personaje.pose-working {
   animation: chambear 0.7s ease-in-out infinite;
 }
+/* Tecleando: un rebotito corto y rápido, más nervioso que el de trabajando. */
+.av-personaje.pose-coding {
+  animation: teclear 0.32s ease-in-out infinite;
+}
 .av-personaje.pose-waiting {
   animation: ladearse 2.4s ease-in-out infinite;
 }
@@ -937,6 +941,11 @@ img.av.av-personaje {
   }
   50% {
     transform: translateY(-2px) rotate(3deg);
+  }
+}
+@keyframes teclear {
+  50% {
+    transform: translateY(1px) scale(1.01, 0.99);
   }
 }
 @keyframes ladearse {

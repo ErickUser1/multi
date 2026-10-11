@@ -1,12 +1,12 @@
 # Multi
 
-A live room where you, your teammates and several agents build the same app. Open source.
+A live room where you, your teammates and several agents build the same app.
 
 ![A room in Multi: four people connected, the chat on the left, the app running live on the right with everyone's cursors on it](docs/sala.webp)
 
 Four people in that room. Someone asks in plain language, the agent answers in terms of what changed, and the app on the right updates without a refresh. Everyone sees it at the same time, cursors included.
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License: proprietary](https://img.shields.io/badge/license-proprietary-lightgrey.svg)](LICENSE)
 ![Node 22+](https://img.shields.io/badge/node-22%2B-green.svg)
 
 
@@ -73,4 +73,4 @@ Deliberate, not an oversight. PRs in either language. just keep the file you tou
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). MIT licensed.
+Multi is proprietary: the source is public to read, but not to copy, modify or redistribute. See [LICENSE](LICENSE). External contributions are not being accepted right now.

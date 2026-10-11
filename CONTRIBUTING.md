@@ -1,6 +1,6 @@
 # Contributing
 
-PRs are welcome. Here's what helps them get reviewed fast.
+External contributions are not being accepted right now, and the code is proprietary (see [LICENSE](LICENSE)). This guide is for working on Multi with the owner's permission.
 
 ## Running it
 

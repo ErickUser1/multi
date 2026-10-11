@@ -1,21 +1,38 @@
-MIT License
+Copyright (c) 2026 Erick Arriola Aguillón. Todos los derechos reservados.
+All rights reserved.
 
-Copyright (c) 2026 Erick Arriola
+Este repositorio es público solo para que su código pueda leerse. No es
+software libre ni de código abierto.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+Sin un permiso por escrito del titular, no se permite:
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+  - copiar, reproducir o descargar el código para usarlo;
+  - modificarlo o crear obras derivadas de él;
+  - distribuirlo, publicarlo, sublicenciarlo o venderlo, completo o en parte;
+  - desplegarlo o ejecutarlo como servicio para terceros, con o sin fines de
+    lucro.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+Ver el código en GitHub está permitido, en los términos que los Términos de
+Servicio de GitHub conceden a sus usuarios.
+
+Para pedir permiso de uso, escribe al titular del repositorio.
+
+-------------------------------------------------------------------------------
+
+This repository is public only so its source can be read. It is not free or
+open source software.
+
+Without written permission from the copyright holder, you may not:
+
+  - copy, reproduce or download the code in order to use it;
+  - modify it or create derivative works from it;
+  - distribute, publish, sublicense or sell it, in whole or in part;
+  - deploy it or run it as a service for third parties, commercial or not.
+
+Viewing the code on GitHub is allowed, under the terms GitHub's Terms of
+Service grant to its users.
+
+To request permission, contact the owner of this repository.
+
+EL SOFTWARE SE PROPORCIONA "TAL CUAL", SIN GARANTÍA DE NINGÚN TIPO.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.

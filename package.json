@@ -1,6 +1,7 @@
 {
   "name": "multi",
   "private": true,
+  "license": "UNLICENSED",
   "version": "0.1.0",
   "description": "Un Discord para vibecodear con tus compas — salas en vivo donde humanos + agentes construyen apps juntos.",
   "workspaces": [

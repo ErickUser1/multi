@@ -13,13 +13,22 @@
    * línea que cargaba con toda la separación (#333 sobre negro) da 1.4:1 de
    * contraste, que es casi nada.
    *
-   * Así que el lienzo se queda negro y las superficies suben un escalón: el
-   * chat, el preview, los popovers y la caja de escribir. Un solo escalón, no
-   * dos, para que sigan sin competir entre sí.
+   * Así que el lienzo se quedó negro y las superficies subieron un escalón:
+   * el chat, el preview, los popovers y la caja de escribir.
+   *
+   * Y luego volvieron al negro, menos la caja de escribir. Con las superficies
+   * grises la sala entera se leía gris, y Steve y el naranja perdían contraste
+   * (la página de /acerca/, negra, lo dejó a la vista). Lo que el experimento
+   * pedía ya lo cargan otras cosas: bordes de #3d3d3d (no #333), botones con
+   * contorno, y la caja con su propio fondo y borde. La caja es la única que
+   * sube un escalón, porque es lo que más caro sale no encontrar.
+   * Se prueba con gente del servicio social: si alguien se pierde, se regresa.
    */
   --fondo: #000000;
-  --fondo2: #1a1a1a;
-  --panel: #1a1a1a;
+  --fondo2: #000000;
+  --panel: #000000;
+  /* El escalón de la caja de escribir. */
+  --caja: #111111;
   --texto: #f5f5f5;
   /* El gris de lo secundario. Subió de #8a8a8a: a ese valor el texto de los
      botones pasaba el contraste mínimo pero se leía apagado, sobre todo a 11px
@@ -957,7 +966,7 @@ img.av.av-personaje {
 /* El marco es lo que se ve como caja: borde, fondo y esquinas. El textarea va
    desnudo adentro, y debajo la fila de acciones. */
 .caja-marco {
-  background: var(--fondo);
+  background: var(--caja);
   border: 1px solid var(--linea);
   border-radius: 10px;
   padding: 14px 14px 10px;
@@ -1292,7 +1301,9 @@ img.av.av-personaje {
      que el resto de las líneas: --linea (#333) se eligió contra negro, y sobre
      el gris de las superficies se pierde justo donde más tiene que leerse. */
   border: 1px solid #3d3d3d;
-  border-radius: 0 6px 6px 6px;
+  /* Esquinas grandes: con todo en negro, el preview es la pieza que se ve
+     como un objeto encima del lienzo, y la curva es lo que lo hace leerse así. */
+  border-radius: 24px;
   overflow: hidden;
   display: flex;
   position: relative; /* para posicionar cursores/selecciones encima */
@@ -2773,6 +2784,7 @@ img.av.av-personaje {
      teléfono: se contiene aquí para que no empuje la Sala entera de lado. */
   .lienzo {
     margin: 0 12px 12px;
+    border-radius: 18px;
     max-width: 100%;
     min-width: 0;
     overflow: hidden;

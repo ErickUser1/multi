@@ -26,6 +26,7 @@ import {
   cambiarModo,
   renameRoom,
   tipoDeSala,
+  tieneDocumento,
   actualizarTipo,
   type Room,
   type SelectedElement,
@@ -1615,6 +1616,8 @@ io.on("connection", (socket) => {
       // Documento, software, o null si nadie lo ha decidido. Se calcula aquí y
       // no se lee de la sala: quien entra tiene que ver lo que hay en disco.
       tipo: (room.tipo = await tipoDeSala(room)),
+      // Si además hay documento: con una app en el lienzo, se abre encima.
+      documento: (room.documento = tieneDocumento(room)),
       you: member,
       members: membersList(room),
       previewUrl: room.preview?.url ?? null,
@@ -2921,7 +2924,9 @@ function summarizeTool(name: string, input: Record<string, unknown>): string {
  */
 async function avisarTipo(room: Room): Promise<void> {
   try {
-    if (await actualizarTipo(room)) io.to(room.id).emit("room:tipo", { tipo: room.tipo ?? null });
+    if (await actualizarTipo(room)) {
+      io.to(room.id).emit("room:tipo", { tipo: room.tipo ?? null, documento: room.documento ?? false });
+    }
   } catch (err) {
     console.error(`[sala ${room.id}] no se pudo revisar el tipo:`, err);
   }

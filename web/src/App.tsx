@@ -490,6 +490,15 @@ function Sala({
   // Documento, software, o null mientras el agente no decide. Un documento lo
   // pinta Multi en el lienzo en vez del preview.
   const [tipo, setTipo] = useState<TipoDeSala | null>(null);
+  /**
+   * Una sala con app también puede tener documento (su plan, su manual). La
+   * app se queda en el lienzo y el documento se abre encima con un botón, a un
+   * lado o en grande. Abrirlo es de cada quien: no se le abre a toda la sala.
+   */
+  const [tieneDocumento, setTieneDocumento] = useState(false);
+  const [docAbierto, setDocAbierto] = useState(false);
+  const [docEnGrande, setDocEnGrande] = useState(false);
+  const docEncima = tipo === "app" && tieneDocumento;
   // Quién soy en esta sala (nombre y color): con eso se pinta mi cursor en el documento.
   const [yo, setYo] = useState<Member | null>(null);
   /**
@@ -833,6 +842,7 @@ function Sala({
       setNombre(p.nombre ?? null);
       setModo(p.modo ?? "multi");
       setTipo(p.tipo ?? null);
+      setTieneDocumento(!!p.documento);
       setYo(p.you);
       recordarNombre(roomId, p.nombre ?? null);
       setPublicando(p.publicando ?? null);
@@ -909,7 +919,12 @@ function Sala({
     socket.on("room:modo", ({ modo }: { modo: ModoDeSala }) => setModo(modo));
     // El agente decidió que la sala es un documento (o regresaron a antes de
     // que lo fuera): el lienzo cambia para todos sin recargar.
-    socket.on("room:tipo", ({ tipo }: { tipo: TipoDeSala | null }) => setTipo(tipo));
+    // Si apareció la app, el documento deja el lienzo y queda detrás de su botón.
+    socket.on("room:tipo", ({ tipo, documento }: { tipo: TipoDeSala | null; documento?: boolean }) => {
+      setTipo(tipo);
+      setTieneDocumento(!!documento);
+      if (!documento) setDocAbierto(false);
+    });
 
     socket.on("room:renamed", ({ nombre }: { nombre: string | null }) => {
       setNombre(nombre);
@@ -2099,9 +2114,11 @@ function Sala({
               de la barra: ahí arriba se veía igual que "compartir" o
               "variables", que son otra cosa. Flotando encima de lo que señala
               se entiende sin leerlo. */}
-          {roomId && (previewReady || tipo === "documento") && (
+          {/* Con documento encima van aunque la app siga arrancando: el
+              documento ya está y se puede leer mientras tanto. */}
+          {roomId && (previewReady || tipo === "documento" || docEncima) && (
             <div className="herramientas-preview">
-            {tipo !== "documento" && (
+            {tipo !== "documento" && previewReady && (
             <>
             <button
               className={`inspect-flotante ${inspect ? "on" : ""}`}
@@ -2132,6 +2149,21 @@ function Sala({
             </button>
             </>
             )}
+            {/* El documento de una sala que también tiene app. Va con su palabra
+                y no solo el icono: es lo único de esta fila que abre algo que
+                no se ve, y nadie lo busca si no sabe que existe. */}
+            {docEncima && (
+              <button
+                className={`vista-btn flotante doc-abrir ${docAbierto ? "on" : ""}`}
+                onClick={() => setDocAbierto((v) => !v)}
+                title={docAbierto ? t.docCerrarDoc : t.docAbrir}
+                aria-label={docAbierto ? t.docCerrarDoc : t.docAbrir}
+                aria-pressed={docAbierto}
+              >
+                <IconoDocumento />
+                <span>{t.vistaDocumento}</span>
+              </button>
+            )}
             {/* El historial, detrás de un icono. Antes vivía siempre abierto
                 debajo del preview, y eso son unos cincuenta píxeles de alto
                 para algo que se consulta de vez en cuando. */}
@@ -2151,6 +2183,45 @@ function Sala({
                 />
               </svg>
             </button>
+            </div>
+          )}
+          {/* Encima de la app y no en su lugar: el iframe nunca se desmonta, así
+              que cerrar el documento deja la app justo donde estaba. */}
+          {roomId && docEncima && docAbierto && socketRef.current && (
+            <div className={`doc-encima${docEnGrande ? " en-grande" : ""}`}>
+              <div className="doc-encima-cab">
+                <span className="doc-encima-titulo">
+                  <IconoDocumento />
+                  {t.vistaDocumento}
+                </span>
+                <button
+                  type="button"
+                  className="doc-boton"
+                  onClick={() => setDocEnGrande((v) => !v)}
+                  title={docEnGrande ? t.docAchicar : t.docExpandir}
+                  aria-label={docEnGrande ? t.docAchicar : t.docExpandir}
+                >
+                  {docEnGrande ? "⇥" : "⇤"}
+                </button>
+                <button
+                  type="button"
+                  className="doc-boton"
+                  onClick={() => setDocAbierto(false)}
+                  title={t.docCerrarDoc}
+                  aria-label={t.docCerrarDoc}
+                >
+                  ✕
+                </button>
+              </div>
+              <Suspense fallback={<div className="doc-estado">{t.docCargando}</div>}>
+                <DocumentoView
+                  roomId={roomId}
+                  socket={socketRef.current}
+                  yo={{ name: yo?.name ?? name, color: yo?.color ?? "#ff4d1c" }}
+                  agents={agents}
+                  soloYo={modo === "solo" || members.length <= 1}
+                />
+              </Suspense>
             </div>
           )}
           {roomId && tipo === "documento" ? (
@@ -2373,6 +2444,21 @@ function esSeguido(msgs: ChatMessage[], i: number): boolean {
   if (m.role === "system" || prev.role === "system") return false;
   if (m.anchoredTo) return false;
   return prev.from === m.from && prev.role === m.role;
+}
+
+/** Una hoja con renglones: el documento de la sala. */
+function IconoDocumento() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
 }
 
 /**

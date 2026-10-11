@@ -99,6 +99,12 @@ export interface Room {
    * último valor que se le avisó a la sala, para saber cuándo cambió.
    */
   tipo?: TipoDeSala | null;
+  /**
+   * Si la sala tiene documento, aunque su tipo sea "app". Una sala puede tener
+   * las dos cosas: la app se ve en el lienzo y el documento se abre encima.
+   * Igual que `tipo`, es solo lo último que se avisó.
+   */
+  documento?: boolean;
   /** El contenedor que aísla esta sala. null si se está corriendo sin Docker. */
   container?: Container | null;
   /** Dónde se ejecutan los comandos del agente (contenedor o local). */
@@ -298,17 +304,27 @@ async function despertarSala(id: string): Promise<Room | null> {
 }
 
 /**
- * Qué es la sala: documento, software, o null si todavía nadie lo decide.
+ * Qué ocupa el lienzo de la sala: la app, el documento, o null si todavía no
+ * hay ninguno.
  *
- * Lo dice el disco y no una columna: si hay documento/documento.json es un
- * documento; si hay un proyecto que se puede levantar, software. Así "volver
- * atrás" en el historial también devuelve el tipo, y no hay dos verdades que
- * se puedan desincronizar.
+ * Lo dice el disco y no una columna: si hay un proyecto que se puede levantar,
+ * la app; si no, y hay documento, el documento. Así "volver atrás" en el
+ * historial también devuelve el tipo, y no hay dos verdades que se puedan
+ * desincronizar.
+ *
+ * La app gana porque una sala puede tener las dos cosas (el documento como plan
+ * o manual de la app): la app es lo que se mira y se prueba, y el documento se
+ * abre encima cuando hace falta. Ver `tieneDocumento`.
  */
 export async function tipoDeSala(room: Room): Promise<TipoDeSala | null> {
-  if (esDocumento(room.workspace.dir)) return "documento";
   if ((await detectLaunch(room.workspace.dir)) !== null) return "app";
+  if (esDocumento(room.workspace.dir)) return "documento";
   return null;
+}
+
+/** Si la sala tiene documento, sea o no lo que ocupa el lienzo. */
+export function tieneDocumento(room: Room): boolean {
+  return esDocumento(room.workspace.dir);
 }
 
 /**
@@ -317,8 +333,10 @@ export async function tipoDeSala(room: Room): Promise<TipoDeSala | null> {
  */
 export async function actualizarTipo(room: Room): Promise<boolean> {
   const tipo = await tipoDeSala(room);
-  if (tipo === (room.tipo ?? null)) return false;
+  const documento = tieneDocumento(room);
+  if (tipo === (room.tipo ?? null) && documento === (room.documento ?? false)) return false;
   room.tipo = tipo;
+  room.documento = documento;
   return true;
 }
 

@@ -81,6 +81,7 @@ import { leerVariables, modificarVariables, type Variable } from "./engine/env.j
 import { accionDeTool, type Accion } from "./engine/actividad.js";
 import { WORKSPACES_ROOT } from "./engine/workspace.js";
 import { imagenDelDocumento, CARPETA_DOCUMENTO, esDocumento } from "./engine/documento.js";
+import { quienEres } from "./engine/personajes.js";
 import {
   documentosVivos,
   exportarMarkdown,
@@ -2827,7 +2828,7 @@ async function runAgentTurn(
 }
 
 /**
- * Antepone al mensaje un resumen de qué hacen los otros agentes.
+ * Antepone al mensaje quién es el agente y un resumen de qué hacen los otros.
  *
  * Va en el mensaje del turno y no en el prompt del sistema porque cambia con
  * cada turno: el prompt del sistema se cachea del lado del proveedor y meterle
@@ -2847,7 +2848,8 @@ async function conContextoDeOtros(room: Room, agentId: string, task: string): Pr
   });
   const resumen = resumenDeOtros(room.agents, agentId, archivos, ultimosMensajes(room), desdeTuUltimoTurno);
   const delDocumento = await cambiosDelDocumento(room, agentId);
-  return [resumen, delDocumento, task].filter(Boolean).join("\n\n");
+  const nombre = room.agents.get(agentId)?.name ?? agentId;
+  return [quienEres(nombre), resumen, delDocumento, task].filter(Boolean).join("\n\n");
 }
 
 /** Cuándo empezó el último turno de cada agente (sala:agente). */

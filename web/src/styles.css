@@ -1301,7 +1301,9 @@ img.av.av-personaje {
      que el resto de las líneas: --linea (#333) se eligió contra negro, y sobre
      el gris de las superficies se pierde justo donde más tiene que leerse. */
   border: 1px solid #3d3d3d;
-  border-radius: 0 6px 6px 6px;
+  /* Esquinas grandes: con todo en negro, el preview es la pieza que se ve
+     como un objeto encima del lienzo, y la curva es lo que lo hace leerse así. */
+  border-radius: 24px;
   overflow: hidden;
   display: flex;
   position: relative; /* para posicionar cursores/selecciones encima */
@@ -2782,6 +2784,7 @@ img.av.av-personaje {
      teléfono: se contiene aquí para que no empuje la Sala entera de lado. */
   .lienzo {
     margin: 0 12px 12px;
+    border-radius: 18px;
     max-width: 100%;
     min-width: 0;
     overflow: hidden;

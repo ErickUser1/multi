@@ -257,6 +257,9 @@ const SIRVE_WEB = existsSync(join(WEB_DIST, "index.html"));
 if (SIRVE_WEB) {
   await fastify.register(async (ctx) => {
     await ctx.register(fastifyStatic, { root: WEB_DIST, wildcard: false });
+    // La página de "acerca" vive en web/public/acerca/index.html. Sin esto,
+    // /acerca sin la diagonal final caería en la app en vez de en la página.
+    ctx.get("/acerca", (_req, reply) => reply.redirect("/acerca/"));
     ctx.setNotFoundHandler((req, reply) => {
       // Las rutas de API que no existen sí son 404: no tiene sentido
       // devolverles el HTML de la app.

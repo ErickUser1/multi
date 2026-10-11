@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Acerca de Multi</title>
+    <meta
+      name="description"
+      content="Multi es un entorno de trabajo compartido donde varias personas y agentes de IA construyen juntos apps, documentos y presentaciones en la misma sala."
+    />
+    <style>
+      /* Página estática a propósito: la lee quien revisa la empresa (Google
+         for Startups, una incubadora), no quien va a usar la sala. Se sirve
+         tal cual desde web/public, sin pasar por React. */
+      :root {
+        --fondo: #000000;
+        --panel: #1a1a1a;
+        --texto: #f5f5f5;
+        --dim: #b0b0b0;
+        --linea: #3d3d3d;
+        --acento: #ff4d1c;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--fondo);
+        color: var(--texto);
+        font-family: "Segoe UI", system-ui, sans-serif;
+        line-height: 1.6;
+      }
+      main { max-width: 760px; margin: 0 auto; padding: 48px 16px 64px; }
+      .marca {
+        font-family: "Bodoni MT", "Didot", Georgia, serif;
+        font-size: 56px;
+        letter-spacing: 6px;
+        margin: 0;
+      }
+      .personajes { display: flex; gap: 8px; margin: 8px 0 16px; }
+      .personajes img { width: 72px; height: 72px; object-fit: contain; }
+      .lema { font-size: 20px; margin: 0 0 24px; }
+      .cta {
+        display: inline-block;
+        background: var(--texto);
+        color: #000;
+        text-decoration: none;
+        padding: 10px 20px;
+        border-radius: 8px;
+        font-weight: 600;
+      }
+      section { margin-top: 48px; }
+      h2 {
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+        color: var(--acento);
+        margin: 0 0 12px;
+      }
+      p { margin: 0 0 12px; }
+      .dim { color: var(--dim); }
+      ol, ul { margin: 0; padding-left: 20px; }
+      li { margin-bottom: 8px; }
+      .planes { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+      .plan {
+        background: var(--panel);
+        border: 1px solid var(--linea);
+        border-radius: 10px;
+        padding: 16px;
+      }
+      .plan h3 { margin: 0 0 6px; font-size: 17px; }
+      .plan p { margin: 0; color: var(--dim); font-size: 15px; }
+      .persona {
+        display: flex;
+        gap: 16px;
+        align-items: center;
+        background: var(--panel);
+        border: 1px solid var(--linea);
+        border-radius: 10px;
+        padding: 16px;
+      }
+      .persona .inicial {
+        flex: none;
+        width: 56px;
+        height: 56px;
+        border-radius: 50%;
+        background: var(--acento);
+        color: #000;
+        display: grid;
+        place-items: center;
+        font-weight: 700;
+        font-size: 22px;
+      }
+      .persona h3 { margin: 0; font-size: 18px; }
+      .persona p { margin: 0; }
+      a { color: var(--texto); }
+      footer {
+        margin-top: 56px;
+        padding-top: 16px;
+        border-top: 1px solid var(--linea);
+        color: var(--dim);
+        font-size: 14px;
+      }
+      @media (max-width: 480px) {
+        .marca { font-size: 44px; }
+        .personajes img { width: 56px; height: 56px; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1 class="marca">MULTI</h1>
+      <div class="personajes">
+        <img src="/acerca/steve.webp" alt="Steve, uno de los agentes de Multi" />
+        <img src="/acerca/dave.webp" alt="Dave, uno de los agentes de Multi" />
+      </div>
+      <p class="lema">Construye en equipo, con agentes de IA, en la misma sala.</p>
+      <a class="cta" href="/">Abrir Multi</a>
+
+      <section>
+        <h2>Qué es Multi</h2>
+        <p>
+          Multi es un entorno de trabajo compartido en el navegador. Varias personas entran a la misma sala,
+          escriben lo que quieren construir y agentes de IA lo hacen con ellas en tiempo real: aplicaciones web,
+          documentos y presentaciones.
+        </p>
+        <p>
+          Todos ven lo mismo al mismo tiempo: el chat, la vista previa de la app y el documento, que personas y
+          agentes editan juntos. Cada cambio queda en un historial y se puede volver a cualquier punto.
+        </p>
+      </section>
+
+      <section>
+        <h2>Cómo funciona</h2>
+        <ol>
+          <li>Abres una sala y compartes el enlace con tu equipo.</li>
+          <li>Escriben en el chat lo que necesitan, por ejemplo “una app para el inventario de mi negocio”.</li>
+          <li>Los agentes escriben el código o el documento, y la sala muestra el resultado en vivo.</li>
+          <li>Cuando está listo, se publica con un clic y queda en su propia dirección.</li>
+        </ol>
+      </section>
+
+      <section>
+        <h2>Para quién es</h2>
+        <ul>
+          <li>Estudiantes y docentes que hacen proyectos y trabajos en equipo.</li>
+          <li>Equipos pequeños y emprendedores que necesitan una herramienta sin contratar desarrollo.</li>
+          <li>Negocios locales que quieren su página o su app interna.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Modelo de negocio</h2>
+        <p>
+          Multi es freemium. El uso de los agentes se mide en créditos: cada cuenta recibe créditos gratis para
+          empezar, y quien necesita más se suscribe a un plan de pago mensual.
+        </p>
+        <div class="planes">
+          <div class="plan">
+            <h3>Gratis</h3>
+            <p>Salas compartidas, chat y vista previa, con un límite de créditos al mes.</p>
+          </div>
+          <div class="plan">
+            <h3>Suscripción</h3>
+            <p>Más créditos cada mes, para quien usa Multi de forma constante.</p>
+          </div>
+          <div class="plan">
+            <h3>Equipos y escuelas</h3>
+            <p>Créditos compartidos para un grupo, una clase o una empresa.</p>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>Equipo</h2>
+        <div class="persona">
+          <div class="inicial" aria-hidden="true">E</div>
+          <div>
+            <h3>Erick Arriola</h3>
+            <p class="dim">Fundador, CEO y CTO</p>
+            <p>Diseña y construye Multi, desde el producto hasta la infraestructura.</p>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>Contacto</h2>
+        <p>
+          <a href="mailto:erick.arriola@multti.app">erick.arriola@multti.app</a><br />
+          <span class="dim">Querétaro, México</span>
+        </p>
+      </section>
+
+      <section lang="en">
+        <h2>In English</h2>
+        <p>
+          Multi is a shared workspace in the browser where several people and AI agents build web apps, documents
+          and presentations together in the same room, in real time. It follows a freemium model: every account
+          gets free monthly credits for agent usage, and a paid monthly subscription adds more credits. Team and
+          school plans share credits across a group. Multi is founded and built by Erick Arriola (Founder, CEO and
+          CTO) in Querétaro, Mexico. Contact:
+          <a href="mailto:erick.arriola@multti.app">erick.arriola@multti.app</a>.
+        </p>
+      </section>
+
+      <footer>© 2026 Multi · Querétaro, México · Todos los derechos reservados.</footer>
+    </main>
+  </body>
+</html>

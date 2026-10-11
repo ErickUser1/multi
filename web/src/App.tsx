@@ -2315,6 +2315,12 @@ function Sala({
                 <>
                   <p className="preview-titulo">{t.quieresConstruir}</p>
                   <Ejemplos modo="solo" />
+                  {/* Solo en la portada: es la única pantalla que ve quien llega
+                      a multti.app sin enlace a una sala, y a quien revisa la
+                      empresa le hace falta encontrar qué es y quién la hace. */}
+                  <a className="acerca-link" href="/acerca/">
+                    {t.acercaDeMulti}
+                  </a>
                 </>
               ) : esperaLarga ? (
                 // Hay sala, pero su estado todavía no llega. Decir aquí que está

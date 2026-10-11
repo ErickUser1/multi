@@ -1896,6 +1896,15 @@ img.av.av-personaje {
   margin-top: 16px;
   line-height: 1.7;
 }
+.acerca-link {
+  display: inline-block;
+  margin-top: 24px;
+  font-size: 13px;
+  color: var(--dim);
+}
+.acerca-link:hover {
+  color: var(--texto);
+}
 .preview-loading code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 14px;

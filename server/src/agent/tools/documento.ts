@@ -1,6 +1,5 @@
 import type { JSONContent } from "@tiptap/core";
 import { type Tool, ToolError, reqString, optString } from "./base.js";
-import { detectLaunch } from "../../engine/preview.js";
 import { esDocumento, CARPETA_DOCUMENTO, ARCHIVO_MD } from "../../engine/documento.js";
 import {
   documentosVivos,
@@ -87,7 +86,7 @@ export function operacionesDeDocumento(
 
   const abierto = async (): Promise<DocVivo> => {
     const doc = await documentosVivos.abrir(roomId, dir);
-    if (!doc) throw new ToolError("esta sala todavía no es un documento: empieza con iniciar_documento");
+    if (!doc) throw new ToolError("esta sala todavía no tiene documento: empieza con iniciar_documento");
     return doc;
   };
 
@@ -269,20 +268,22 @@ function ops(ctx: Parameters<Tool["run"]>[1]): OperacionesDeDocumento {
 const RUTA = `${CARPETA_DOCUMENTO}/${ARCHIVO_MD}`;
 
 /**
- * Convierte la sala en un documento y deja el esqueleto listo para llenarse.
+ * Le pone un documento a la sala y deja el esqueleto listo para llenarse.
  *
- * La sala nace sin tipo; quien decide si es software o documento es el agente
- * con el primer pedido. Que sea una tool deja la decisión registrada: Multi sabe
- * cuándo cambió y lo avisa a la sala.
+ * Una sala tiene a lo más un documento, y puede tenerlo junto con una app (el
+ * plan, el manual o el reporte de esa app): la app se ve en el lienzo y el
+ * documento se abre encima. Que sea una tool deja el momento registrado: Multi
+ * sabe cuándo apareció y lo avisa a la sala.
  */
 export const iniciarDocumentoTool: Tool = {
   spec: {
     name: "iniciar_documento",
     description:
-      "Convierte la sala en un DOCUMENTO (ensayo, reporte, propuesta, manual, plan, investigación…) y crea su esqueleto: " +
+      "Crea el DOCUMENTO de la sala (ensayo, reporte, propuesta, manual, plan, investigación…) con su esqueleto: " +
       "el título y una sección pendiente por cada parte, con lo que va a llevar. Multi pinta el documento en el panel de " +
-      "la sala, las personas lo editan ahí mismo, y se exporta. Úsala UNA vez, al empezar, y solo si la sala no tiene " +
-      "proyecto. Devuelve el documento con los ids y huellas de cada sección para llenarlas con escribir_seccion.",
+      "la sala, las personas lo editan ahí mismo, y se exporta. Una sala tiene un solo documento, y puede tenerlo junto " +
+      "con una app. Úsala UNA vez, solo si la sala todavía no tiene documento. Devuelve el documento con los ids y " +
+      "huellas de cada sección para llenarlas con escribir_seccion.",
     input_schema: {
       type: "object",
       properties: {
@@ -314,12 +315,7 @@ export const iniciarDocumentoTool: Tool = {
 
     const documento = ops(ctx);
     if (documento.existe()) {
-      throw new ToolError("esta sala ya es un documento: léelo con leer_documento y trabaja sobre él en vez de empezar otro");
-    }
-    if ((await detectLaunch(ctx.workspaceDir)) !== null) {
-      throw new ToolError(
-        "esta sala ya tiene un proyecto de software; un documento no cabe aquí. Si lo que piden es un documento, sugiere abrir una sala nueva",
-      );
+      throw new ToolError("esta sala ya tiene documento: léelo con leer_documento y trabaja sobre él en vez de empezar otro");
     }
     const leido = await documento.iniciar(titulo, secciones);
     ctx.emit?.({ type: "file:changed", path: RUTA, action: "write" });

@@ -110,8 +110,10 @@ export interface JoinedPayload {
    * conoce. En "multi" sí, que es lo que deja platicar sin gastar tokens.
    */
   modo?: ModoDeSala;
-  /** Si la sala es un documento, software, o null mientras nadie lo decide. */
+  /** Qué ocupa el lienzo: la app, el documento, o null mientras no hay ninguno. */
   tipo?: TipoDeSala | null;
+  /** Si la sala tiene documento aunque el lienzo sea de la app: se abre encima. */
+  documento?: boolean;
   you: Member;
   members: Member[];
   previewUrl: string | null;

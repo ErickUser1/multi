@@ -233,7 +233,7 @@ async function main(): Promise<void> {
   const imagen = await falla(() => writeTool.run({ path: "documento/imagenes/a.png", content: "png" }, ctx));
   check("pero las imágenes sí son archivos", imagen === null, String(imagen));
   const segundo = await falla(() => tool("iniciar_documento").run({ titulo: "Otro", secciones: [{ titulo: "A", intencion: "a" }] }, ctx));
-  check("no se empieza un segundo documento", !!segundo?.includes("ya es un documento"), String(segundo));
+  check("no se empieza un segundo documento", !!segundo?.includes("ya tiene documento"), String(segundo));
 
   console.log("\n3. Disco e historial");
   await documentosVivos.flush("sala-a");
@@ -270,13 +270,16 @@ async function main(): Promise<void> {
   check("se convierte con su título, su texto y su pendiente", mdMigrado.includes("# Viejo") && mdMigrado.includes("Texto de uno.") && mdMigrado.includes("pendiente: lo que falta"), mdMigrado);
   check("y lo viejo se borra", !existsSync(join(vieja, "documento/documento.json")) && existsSync(join(vieja, "documento/doc.yjs")));
 
-  console.log("\n5. Lo que no se puede");
+  console.log("\n5. Una sala con app también tiene documento");
   const app = await sala("sala-app");
   await writeFile(join(app.dir, "package.json"), JSON.stringify({ name: "app", scripts: { dev: "vite --host" } }));
-  const enApp = await falla(() => tool("iniciar_documento").run({ titulo: "Doc", secciones: [{ titulo: "A", intencion: "a" }] }, app.ctx));
-  check("una sala de software no se vuelve documento", !!enApp?.includes("proyecto de software"), String(enApp));
   const sinDoc = await falla(() => tool("leer_documento").run({}, app.ctx));
-  check("leer sin documento lo dice", !!sinDoc?.includes("todavía no es un documento"), String(sinDoc));
+  check("leer sin documento lo dice", !!sinDoc?.includes("todavía no tiene documento"), String(sinDoc));
+  const enApp = await falla(() => tool("iniciar_documento").run({ titulo: "Manual", secciones: [{ titulo: "Uso", intencion: "cómo se usa" }] }, app.ctx));
+  check("una sala con app puede empezar su documento", enApp === null, String(enApp));
+  check("y la app sigue ahí", existsSync(join(app.dir, "package.json")) && esDocumento(app.dir));
+
+  console.log("\n6. Lo que no se puede");
   const sinCapacidad = await falla(() => tool("leer_documento").run({}, { ...app.ctx, documento: undefined }));
   check("sin la capacidad, la tool lo dice", !!sinCapacidad?.includes("no hay documento"), String(sinCapacidad));
   check("los nombres de imagen que salen de la carpeta no", !nombreSeguro("../x.png") && !nombreSeguro("a/b.png"));
@@ -296,7 +299,7 @@ async function main(): Promise<void> {
     return bloquesAMarkdown(bloques, objetos, { ids });
   }
 
-  await Promise.all(["sala-a", "sala-vieja"].map((id) => documentosVivos.cerrar(id)));
+  await Promise.all(["sala-a", "sala-vieja", "sala-app"].map((id) => documentosVivos.cerrar(id)));
   await Promise.all([dir, vieja, app.dir].map((d) => rm(d, { recursive: true, force: true })));
   console.log(`\n${pass} pasaron, ${fail} fallaron`);
   if (fail > 0) process.exit(1);

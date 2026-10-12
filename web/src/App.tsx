@@ -408,6 +408,12 @@ function Sala({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [previewReady, setPreviewReady] = useState(false);
   /**
+   * Sube cada vez que el server relanza una vista previa que se había caído. Va
+   * como `key` del iframe para que se recargue: la URL no cambia, y sin esto el
+   * iframe se quedaba con el error que pintó mientras el servidor estaba caído.
+   */
+  const [relanzadas, setRelanzadas] = useState(0);
+  /**
    * El agente ya tocó un archivo, y todavía no hay preview que enseñar.
    *
    * Es la espera más larga de la sala y la única sin nada que mirar: hasta que
@@ -796,7 +802,7 @@ function Sala({
   // Cada vez que cambia a qué apunta el iframe, vuelve a estar cargando.
   useEffect(() => {
     if (previewReady) setCargandoFrame(true);
-  }, [previewSrc, previewReady]);
+  }, [previewSrc, previewReady, relanzadas]);
   // Origen del proxy, para validar postMessage — cuidado 1.
   const proxyOrigin = new URL(SERVER_URL).origin;
 
@@ -980,7 +986,8 @@ function Sala({
       setUrlPublicada(url);
     });
     socket.on("deploy:fallo", () => setPublicando(null));
-    socket.on("preview:ready", () => {
+    socket.on("preview:ready", ({ relanzada }: { relanzada?: boolean }) => {
+      if (relanzada) setRelanzadas((n) => n + 1);
       habiaProyecto.current = false;
       setPreviewReady(true);
       setArrancando(null);
@@ -1014,6 +1021,16 @@ function Sala({
         if (estaba || habiaProyecto.current) setFalloElArranque(true);
         return false;
       });
+    });
+    // La vista previa se cayó varias veces y el server dejó de relanzarla. Se
+    // quita el iframe, que seguiría enseñando la última página del servidor
+    // muerto como si todo estuviera bien, y se muestra el aviso de que algo
+    // falló, que es lo que lleva a pedírselo al agente.
+    socket.on("preview:caida", () => {
+      setPreviewReady(false);
+      setArrancando(null);
+      setArmando(false);
+      setFalloElArranque(true);
     });
     socket.on("agents", ({ agents }: { agents: Agent[] }) => {
       setAgents(agents);
@@ -2258,6 +2275,7 @@ function Sala({
                   </div>
                 )}
                 <iframe
+                  key={relanzadas}
                   ref={iframeRef}
                   className="preview-frame"
                   src={previewSrc}

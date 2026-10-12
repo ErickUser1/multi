@@ -65,6 +65,12 @@ export interface Room {
   /** Hay un arranque de preview en curso (evita dos npm install a la vez). */
   previewBooting?: boolean;
   /**
+   * Cuándo se cayó la vista previa sin que Multi la parara, las más recientes.
+   * Sirve para distinguir "se cayó una vez" (se vuelve a levantar sola) de "el
+   * proyecto no arranca" (relanzarla solo daría vueltas).
+   */
+  caidasPreview?: number[];
+  /**
    * Por dónde va la publicación, o null si no hay ninguna en curso.
    *
    * Vive en la sala y no en quien apretó el botón: publicar tarda minutos, y
@@ -400,6 +406,54 @@ export type EtapaPreview = "contenedor" | "dependencias" | "servidor";
  */
 const arranquesDePreview = new KeyedMutex();
 
+/**
+ * Cuántas caídas seguidas, y en cuánto tiempo, se toleran antes de rendirse.
+ *
+ * Una caída suelta es un accidente (un agente que mató el proceso, un error que
+ * tumbó el server una vez) y relanzar la arregla. Tres en dos minutos ya es el
+ * proyecto que truena al arrancar: relanzarlo solo gastaría CPU en círculos y
+ * le escondería a la sala que algo está roto.
+ */
+export const CAIDAS_PARA_RENDIRSE = 3;
+const VENTANA_DE_CAIDAS_MS = 120_000;
+
+/** Qué hacer cuando la vista previa de una sala se cae sola. Lo decide index.ts. */
+type AlCaerPreview = (room: Room, info: { code: number | null; seRinde: boolean }) => void;
+let alCaer: AlCaerPreview | null = null;
+
+/**
+ * Registra quién atiende las caídas de la vista previa.
+ *
+ * Es un hook y no una llamada directa porque avisar y relanzar necesitan el
+ * socket de la sala, y eso vive en index.ts: este módulo solo sabe que pasó.
+ */
+export function alCaerPreview(fn: AlCaerPreview): void {
+  alCaer = fn;
+}
+
+/**
+ * Lo que pasa cuando el proceso de la vista previa muere solo.
+ *
+ * Lo indispensable es soltar `room.preview`: es lo que hace que el siguiente
+ * `maybeStartPreview` la vuelva a levantar en vez de devolver la URL muerta.
+ * Solo si sigue siendo ESE preview: si ya hay otro, el que murió es historia.
+ */
+function seCayoElPreview(room: Room, preview: Preview, code: number | null): void {
+  if (room.preview !== preview) return;
+  room.preview = null;
+
+  const ahora = Date.now();
+  room.caidasPreview = [...(room.caidasPreview ?? []), ahora].filter(
+    (t) => ahora - t < VENTANA_DE_CAIDAS_MS,
+  );
+  const seRinde = room.caidasPreview.length >= CAIDAS_PARA_RENDIRSE;
+  console.warn(
+    `[sala ${room.id}] la vista previa se cayó (code ${code}); ` +
+      `${room.caidasPreview.length} caída(s) en los últimos ${VENTANA_DE_CAIDAS_MS / 1000}s`,
+  );
+  alCaer?.(room, { code, seRinde });
+}
+
 /** Un despertar a la vez por sala, por lo mismo. */
 const despertares = new KeyedMutex();
 
@@ -476,6 +530,9 @@ async function arrancarPreview(
           publishedPort: room.container.publishedPort,
         })
       : await startPreview(room.workspace, launch);
+
+    const preview = room.preview;
+    preview.alMorir((code) => seCayoElPreview(room, preview, code));
 
     marca("dev server");
     console.log(`[sala ${room.id}] preview listo en ${room.preview.url}`);

@@ -52,7 +52,8 @@
     "demo:modo-persistido": "npm run demo:modo-persistido -w server",
     "demo:sala-al-escribir": "npm run demo:sala-al-escribir -w server",
     "demo:carga": "npm run demo:carga -w server --",
-    "demo:dormir": "npm run demo:dormir -w server"
+    "demo:dormir": "npm run demo:dormir -w server",
+    "demo:preview-caido": "npm run demo:preview-caido -w server"
   },
   "engines": {
     "node": ">=22"

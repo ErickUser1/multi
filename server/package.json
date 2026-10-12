@@ -44,7 +44,8 @@
     "demo:modo-persistido": "tsx src/demos/modo-persistido.ts",
     "demo:sala-al-escribir": "tsx src/demos/sala-al-escribir.ts",
     "demo:carga": "tsx src/demos/carga.ts",
-    "demo:dormir": "tsx src/demos/dormir.ts"
+    "demo:dormir": "tsx src/demos/dormir.ts",
+    "demo:preview-caido": "tsx src/demos/preview-caido.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.3.0",

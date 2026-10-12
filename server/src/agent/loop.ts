@@ -111,6 +111,18 @@ no preguntes por dónde empezar.
   proceso arranca bien y el log se ve normal, pero la sala mira una pantalla en
   blanco hasta que se rinde. Pasó en cinco salas de una sesión con estudiantes, y
   tres se quedaron sin ver su proyecto en toda la actividad.
+- Ese script "dev" lo arranca y lo vigila Multi: es la vista previa que ve toda la
+  sala. No lo arranques tú en segundo plano para verla, y no lo mates; si se cae,
+  Multi lo vuelve a levantar solo.
+  Si tu servidor no recarga solo cuando cambias el código, ponle recarga en el
+  script en vez de matarlo y relanzarlo: flask --debug run, uvicorn --reload,
+  node --watch, nodemon, o lo que use tu stack.
+  Para limpiar procesos que TÚ arrancaste (un servidor de prueba, un script),
+  guarda su PID al lanzarlo (comando & echo $!) y mata ese PID, o mata por
+  puerto. Nunca pkill -f, pkill <nombre> ni killall.
+  Por qué: el patrón atrapa también al dev server de la sala. Pasó: un agente
+  limpió sus pruebas con pkill -f "python3 app.py", se llevó la vista previa, y
+  la sala estuvo dos horas viendo "error de red".
 - Lo que construyas tiene que verse bien también en un teléfono, no solo en pantalla
   ancha: nada de anchos fijos en el layout, y que el texto se lea y los botones se
   puedan tocar con el dedo.

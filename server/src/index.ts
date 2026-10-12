@@ -20,6 +20,7 @@ import {
   intentDeLaSala,
   wakeRoom,
   maybeStartPreview,
+  alCaerPreview,
   ensureRunner,
   loadRoomIndex,
   deleteRoom,
@@ -2944,7 +2945,10 @@ async function avisarTipo(room: Room): Promise<void> {
  * había uno) y al cerrar cada turno de agente (por si lo acaba de scaffoldear).
  * Que no arranque NO es error: la sala vacía es el estado normal al empezar.
  */
-async function notifyPreviewWhenReady(room: Room): Promise<void> {
+async function notifyPreviewWhenReady(
+  room: Room,
+  opts: { relanzada?: boolean } = {},
+): Promise<void> {
   let url: string | null;
   try {
     url = await maybeStartPreview(room, (etapa) => {
@@ -2964,7 +2968,10 @@ async function notifyPreviewWhenReady(room: Room): Promise<void> {
   }
 
   if (url) {
-    io.to(room.id).emit("preview:ready", { previewUrl: url });
+    // `relanzada` le dice a la web que recargue el iframe: la URL es la misma de
+    // antes, así que sin esto se queda con lo que alcanzó a pintar mientras el
+    // servidor estaba caído (casi siempre el error del proxy).
+    io.to(room.id).emit("preview:ready", { previewUrl: url, relanzada: opts.relanzada ?? false });
     return;
   }
 
@@ -2973,6 +2980,43 @@ async function notifyPreviewWhenReady(room: Room): Promise<void> {
   // quedaría con el spinner girando para siempre esperando un ready que no llega.
   io.to(room.id).emit("preview:sin-arranque");
 }
+
+/**
+ * Cuando la vista previa de una sala se cae sola, se vuelve a levantar.
+ *
+ * La caída más común no es un bug del proyecto sino un accidente: el agente
+ * limpia sus procesos de prueba con un `pkill -f` y el patrón atrapa también al
+ * dev server de la sala. Antes de esto la sala se quedaba en "error de red"
+ * hasta que se dormía o se reiniciaba Multi.
+ *
+ * Solo se relanza si alguien la está usando. Una sala vacía se queda sin vista
+ * previa y la levanta el `join` del siguiente que entre, que es el camino de
+ * siempre.
+ */
+alCaerPreview((room, { seRinde }) => {
+  const enUso = room.members.size > 0 || room.coordinator.activeKeys().length > 0;
+  if (!enUso) return;
+
+  if (seRinde) {
+    // Relanzar en círculos escondería que el proyecto no arranca. El siguiente
+    // turno del agente lo vuelve a intentar al cerrar (notifyPreviewWhenReady),
+    // que es justo cuando pudo haberlo arreglado.
+    systemMsg(
+      room,
+      "La vista previa se cayó varias veces seguidas. Pídele al agente que revise por qué no arranca.",
+      "#d95d63",
+    );
+    io.to(room.id).emit("preview:caida");
+    return;
+  }
+
+  // Un respiro para que el puerto se libere antes del siguiente arranque.
+  setTimeout(() => {
+    notifyPreviewWhenReady(room, { relanzada: true }).catch((err) =>
+      console.error(`[sala ${room.id}] no se pudo relanzar la vista previa:`, err),
+    );
+  }, 1000);
+});
 
 // ── Arranque ────────────────────────────────────────────────────────────────
 

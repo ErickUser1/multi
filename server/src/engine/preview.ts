@@ -12,6 +12,17 @@ export interface Preview {
   url: string;
   process: ChildProcess;
   stop: () => Promise<void>;
+  /**
+   * Avisa cuando el proceso se muere SIN que nadie haya llamado a `stop()`: un
+   * crash, un error al arrancar el servidor del proyecto o un agente que lo mató
+   * con un `pkill -f` que se lo llevó de paso. Lo que Multi para a propósito
+   * (dormir la sala, borrarla, apagar el server) no dispara nada.
+   *
+   * Sin esto la sala guardaba la URL de un proceso muerto, `arrancarPreview` la
+   * devolvía como si estuviera viva, y la gente miraba "error de red" hasta que
+   * la sala se dormía o se reiniciaba el server. Pasó: dos horas en una sala.
+   */
+  alMorir: (cb: (code: number | null) => void) => void;
 }
 
 // Rango de puertos para dev servers de salas. Una sala = un puerto.
@@ -258,7 +269,12 @@ export async function startPreview(
 
   const url = `http://localhost:${port}`;
 
+  // Se pone antes de matar nada: lo que muera desde aquí lo mató Multi, y eso
+  // no es una caída.
+  let parando = false;
+
   const stop = async (): Promise<void> => {
+    parando = true;
     // En contenedor el puerto lo administra Docker, no nuestro registro.
     if (!container) usedPorts.delete(port);
 
@@ -325,7 +341,24 @@ export async function startPreview(
     throw err;
   }
 
-  return { roomId: workspace.roomId, port, url, process: child, stop };
+  /**
+   * Con contenedor, `child` es el `docker exec` del host, y termina cuando muere
+   * el proceso de adentro. Sin contenedor es el proceso mismo. En los dos casos
+   * su `exit` es la señal.
+   */
+  const alMorir = (cb: (code: number | null) => void): void => {
+    const avisar = (code: number | null) => {
+      if (!parando) cb(code);
+    };
+    // Pudo morir entre que respondió y que alguien se suscribió.
+    if (child.exitCode !== null || child.signalCode !== null) {
+      queueMicrotask(() => avisar(child.exitCode));
+      return;
+    }
+    child.once("exit", (code) => avisar(code));
+  };
+
+  return { roomId: workspace.roomId, port, url, process: child, stop, alMorir };
 }
 
 /**

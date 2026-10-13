@@ -813,7 +813,13 @@ function Sala({
    * Qué se está viendo. "chat" solo existe en pantallas chicas, donde el chat
    * no cabe al lado del preview y pasa a ser una vista más.
    */
-  const [tab, setTab] = useState<"chat" | "app">("app");
+  const [tab, setTab] = useState<"chat" | "app">("chat");
+  /**
+   * En el teléfono, hay algo nuevo en la vista previa que la persona no ha visto
+   * (la app arrancó o el agente cambió archivos mientras miraba el chat). Pinta
+   * el botón de "ver vista previa" con el acento, como el aviso de Lovable.
+   */
+  const [novedadEnPreview, setNovedadEnPreview] = useState(false);
   /**
    * A qué ancho se está viendo el preview.
    *
@@ -1092,6 +1098,7 @@ function Sala({
     });
     socket.on("deploy:fallo", () => setPublicando(null));
     socket.on("preview:ready", ({ relanzada }: { relanzada?: boolean }) => {
+      setNovedadEnPreview(true);
       if (relanzada) setRelanzadas((n) => n + 1);
       habiaProyecto.current = false;
       setPreviewReady(true);
@@ -1102,6 +1109,7 @@ function Sala({
     });
     // Tocó un archivo: está construyendo de verdad, no solo contestando.
     socket.on("file:changed", () => {
+      setNovedadEnPreview(true);
       setArmando(true);
       // Volvió a escribir: lo está arreglando, así que el aviso de fallo sobra.
       setFalloElArranque(false);
@@ -1954,6 +1962,22 @@ function Sala({
               {errorAdjunto}
             </div>
           )}
+          {/* Solo en el teléfono: ahí el chat es la pantalla principal y la
+              vista previa se abre aparte, como en Lovable. Antes era al revés y
+              no había forma de volver a la vista previa desde el chat. */}
+          {roomId && (previewReady || tipo === "documento") && (
+            <button
+              type="button"
+              className={`ver-preview-movil${novedadEnPreview ? " novedad" : ""}`}
+              onClick={() => {
+                setTab("app");
+                setNovedadEnPreview(false);
+              }}
+            >
+              {t.verVistaPrevia}
+              <span aria-hidden="true">→</span>
+            </button>
+          )}
           <div className="input-wrap">
             {menciones.abierto && (
               <MentionMenu opciones={menciones.opciones} seleccion={menciones.sel} onPick={pickMention} />
@@ -2222,6 +2246,7 @@ function Sala({
             className={`tab tab-chat ${tab === "chat" ? "activa" : ""}`}
             onClick={() => setTab("chat")}
           >
+            <span aria-hidden="true">‹ </span>
             {t.elChat}
           </button>
           {/* "La app" ya no se pinta: al quitarse la pestaña del back quedaba

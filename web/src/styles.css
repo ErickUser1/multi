@@ -2794,13 +2794,26 @@ img.av.av-personaje {
      y se anclan a la derecha para no salirse por el otro lado. */
   .env-caja,
   .publicar-caja,
-  .key-panel,
-  .menu-panel {
+  .key-panel {
     width: auto;
     min-width: 0;
     max-width: calc(100vw - 24px);
     right: 0;
     left: auto;
+  }
+  /**
+   * El menú de salas NO entra en la regla de arriba: su botón está pegado al
+   * borde izquierdo, así que anclarlo a la derecha del botón lo hacía crecer
+   * hacia afuera de la pantalla y no se veía nada. Va fijo bajo la cabecera, a
+   * lo ancho de la pantalla, como el menú de cualquier app de teléfono.
+   */
+  .menu-panel {
+    position: fixed;
+    top: 60px;
+    left: 12px;
+    right: 12px;
+    width: auto;
+    max-height: calc(100dvh - 84px);
   }
 
   /* El preview muestra la app de la sala, que puede ser más ancha que un

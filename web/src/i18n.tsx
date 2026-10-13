@@ -339,6 +339,7 @@ const TEXTOS = {
     // Pestañas
     /** Pestaña del chat: solo se ve en pantallas chicas. */
     elChat: "El chat",
+    verVistaPrevia: "Ver vista previa",
     laApp: "La app",
     /** Qué se ve ahora, en el botón que cicla los anchos del preview. */
     verEn: {
@@ -674,6 +675,7 @@ const TEXTOS = {
 
     // Pestañas
     elChat: "Chat",
+    verVistaPrevia: "View preview",
     laApp: "The app",
     verEn: {
       escritorio: "Desktop view — click for tablet",

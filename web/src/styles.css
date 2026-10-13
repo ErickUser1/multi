@@ -2817,6 +2817,60 @@ img.av.av-personaje {
   }
 }
 
+/* El botón para abrir la vista previa desde el chat. Solo existe en el
+   teléfono: en escritorio la vista previa ya está al lado. */
+.ver-preview-movil {
+  display: none;
+}
+
+@media (max-width: 820px) {
+  /**
+   * El teléfono va como Lovable: el chat es la pantalla principal, con la caja
+   * de escribir siempre a la mano, y la vista previa se abre aparte con un
+   * botón y se cierra con "‹ El chat".
+   *
+   * Antes era al revés: se entraba a la vista previa, había que descubrir la
+   * pestaña del chat para poder escribir, y una vez en el chat no había botón
+   * para regresar, así que la vista previa no se volvía a ver.
+   */
+  .sala.ver-chat {
+    height: 100vh;
+    height: 100dvh;
+  }
+  .sala.ver-chat .escenario {
+    display: none;
+  }
+  .ver-preview-movil {
+    display: flex;
+    align-self: center;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin: 0 12px 10px;
+    padding: 12px 16px;
+    border-radius: 999px;
+    border: 1px solid var(--linea);
+    background: var(--caja);
+    color: var(--texto);
+    font-size: 14px;
+    cursor: pointer;
+  }
+  /* Algo nuevo que no ha visto: el acento, que en Multi se reserva para lo
+     que pide atención. */
+  .ver-preview-movil.novedad {
+    border-color: var(--acento);
+    color: var(--acento);
+  }
+  /* Código todavía no se puede ver, y en el teléfono esa fila le quitaba un
+     renglón entero a la vista previa. */
+  .switch-vista {
+    display: none;
+  }
+  .inspect-flotante {
+    white-space: nowrap;
+  }
+}
+
 /* ── Ver la app a otro ancho ──────────────────────────────────────────────
    El preview se angosta para ver cómo queda la app en una tablet o un teléfono.
    Es solo del que mira: no toca el proyecto ni le cambia nada a la sala. */

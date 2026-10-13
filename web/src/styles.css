@@ -1387,6 +1387,29 @@ img.av.av-personaje {
   align-items: center;
   gap: 8px;
 }
+/* La agarradera: lo único de la barra que la mueve, para que arrastrar no se
+   confunda con apretar uno de los botones. */
+.agarradera-herramientas {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 11px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--linea);
+  background: rgba(10, 10, 10, 0.92);
+  backdrop-filter: blur(8px);
+  color: var(--dim);
+  cursor: grab;
+  touch-action: none;
+}
+.agarradera-herramientas:hover {
+  color: var(--texto);
+  border-color: var(--dim);
+}
+.herramientas-preview.moviendo .agarradera-herramientas {
+  cursor: grabbing;
+  color: var(--texto);
+}
 .vista-btn.flotante {
   border-radius: 999px;
   padding: 11px 15px;

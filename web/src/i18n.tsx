@@ -309,6 +309,7 @@ const TEXTOS = {
     ocultarChat: "Ocultar el chat",
     ajustarAncho: "Arrastra para ajustar el ancho",
     tituloHistorial: "Versiones del proyecto",
+    moverHerramientas: "Arrastra para mover (doble clic para regresarla)",
 
     // Filtro del chat
     filtrarChat: "Filtrar",
@@ -647,6 +648,7 @@ const TEXTOS = {
     ocultarChat: "Hide the chat",
     ajustarAncho: "Drag to resize",
     tituloHistorial: "Project versions",
+    moverHerramientas: "Drag to move (double-click to reset)",
 
     // Chat filter
     filtrarChat: "Filter",

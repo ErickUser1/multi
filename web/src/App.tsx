@@ -241,6 +241,101 @@ export function App() {
 }
 
 
+const CLAVE_POS_HERRAMIENTAS = "multi.herramientas";
+
+function leerPosHerramientas(): { x: number; y: number } | null {
+  try {
+    const v = JSON.parse(localStorage.getItem(CLAVE_POS_HERRAMIENTAS) ?? "null");
+    if (v && typeof v.x === "number" && typeof v.y === "number") return v;
+  } catch {
+    // Sin storage o con basura guardada: su lugar de siempre.
+  }
+  return null;
+}
+
+function guardarPosHerramientas(pos: { x: number; y: number } | null): void {
+  try {
+    if (pos) localStorage.setItem(CLAVE_POS_HERRAMIENTAS, JSON.stringify(pos));
+    else localStorage.removeItem(CLAVE_POS_HERRAMIENTAS);
+  } catch {
+    // Sin storage se mueve igual; solo no se recuerda al recargar.
+  }
+}
+
+/**
+ * La agarradera de la barra flotante del preview.
+ *
+ * Arrastrarla mueve la barra dentro del preview; doble clic la regresa abajo al
+ * centro. Con pointer events, así sirve igual con mouse que con el dedo.
+ *
+ * La posición sale como fracción (0 a 1) del espacio que le sobra a la barra
+ * dentro del preview: con `left: x%` y `translate(-x%)` eso la deja siempre
+ * adentro, aunque el preview cambie de tamaño o la barra de ancho.
+ */
+function AgarraderaHerramientas(props: {
+  titulo: string;
+  onMover: (pos: { x: number; y: number } | null) => void;
+  onMoviendo: (moviendo: boolean) => void;
+}) {
+  const arrastre = useRef<{ dx: number; dy: number } | null>(null);
+  const MARGEN = 8;
+
+  const posDesde = (el: HTMLElement, clientX: number, clientY: number) => {
+    const barra = el.parentElement;
+    const lienzo = barra?.parentElement;
+    if (!barra || !lienzo || !arrastre.current) return null;
+    const l = lienzo.getBoundingClientRect();
+    const b = barra.getBoundingClientRect();
+    const libreX = l.width - b.width;
+    const libreY = l.height - b.height;
+    if (libreX <= 0 || libreY <= 0) return null;
+    const izq = Math.min(Math.max(clientX - l.left - arrastre.current.dx, MARGEN), libreX - MARGEN);
+    const arr = Math.min(Math.max(clientY - l.top - arrastre.current.dy, MARGEN), libreY - MARGEN);
+    return { x: izq / libreX, y: arr / libreY };
+  };
+
+  return (
+    <button
+      type="button"
+      className="agarradera-herramientas"
+      title={props.titulo}
+      aria-label={props.titulo}
+      onPointerDown={(e) => {
+        const barra = e.currentTarget.parentElement;
+        if (!barra) return;
+        const b = barra.getBoundingClientRect();
+        arrastre.current = { dx: e.clientX - b.left, dy: e.clientY - b.top };
+        e.currentTarget.setPointerCapture(e.pointerId);
+        props.onMoviendo(true);
+      }}
+      onPointerMove={(e) => {
+        if (!arrastre.current) return;
+        const pos = posDesde(e.currentTarget, e.clientX, e.clientY);
+        if (pos) props.onMover(pos);
+      }}
+      onPointerUp={(e) => {
+        arrastre.current = null;
+        e.currentTarget.releasePointerCapture(e.pointerId);
+        props.onMoviendo(false);
+      }}
+      onPointerCancel={() => {
+        arrastre.current = null;
+        props.onMoviendo(false);
+      }}
+      onDoubleClick={() => props.onMover(null)}
+    >
+      <svg width="10" height="16" viewBox="0 0 10 16" aria-hidden="true">
+        {[3, 8, 13].map((y) => (
+          <g key={y}>
+            <circle cx="2.5" cy={y} r="1.4" fill="currentColor" />
+            <circle cx="7.5" cy={y} r="1.4" fill="currentColor" />
+          </g>
+        ))}
+      </svg>
+    </button>
+  );
+}
+
 function NamePrompt(props: {
   roomId: string;
   name: string;
@@ -520,6 +615,16 @@ function Sala({
   /** Si el historial está abierto. Cerrado por defecto: se consulta de vez en
       cuando, y abajo del preview se llevaba una franja de la pantalla siempre. */
   const [histAbierto, setHistAbierto] = useState(false);
+  /**
+   * Dónde quedó la barra flotante del preview, o null para su lugar de siempre
+   * (abajo al centro). Se puede mover porque tapa lo que haya debajo: una app
+   * con un botón abajo al centro no se podía tocar. Va como fracción del
+   * espacio libre y no en píxeles, así sigue dentro aunque cambie el tamaño.
+   */
+  const [posHerramientas, setPosHerramientas] = useState<{ x: number; y: number } | null>(
+    leerPosHerramientas,
+  );
+  const [moviendoHerramientas, setMoviendoHerramientas] = useState(false);
   /** Qué dice el botón de descargar ahora mismo. null = su texto normal. */
   /**
    * Por dónde va la publicación, o null si no hay ninguna.
@@ -1991,7 +2096,10 @@ function Sala({
       {/* Escenario derecha */}
       {/* Mientras se arrastra el divisor el iframe no recibe el mouse: si lo
           recibe se queda con él, y el arrastre se atora al pasar encima. */}
-      <section className={`escenario${moviendoDivisor ? " moviendo-divisor" : ""}`} ref={escenarioRef}>
+      <section
+        className={`escenario${moviendoDivisor || moviendoHerramientas ? " moviendo-divisor" : ""}`}
+        ref={escenarioRef}
+      >
         <div className="barra-sup">
 
           {/* Qué se está mirando del proyecto. Dos botones pegados y no dos
@@ -2134,7 +2242,27 @@ function Sala({
           {/* Con documento encima van aunque la app siga arrancando: el
               documento ya está y se puede leer mientras tanto. */}
           {roomId && (previewReady || tipo === "documento" || docEncima) && (
-            <div className="herramientas-preview">
+            <div
+              className={`herramientas-preview${moviendoHerramientas ? " moviendo" : ""}`}
+              style={
+                posHerramientas
+                  ? {
+                      left: `${posHerramientas.x * 100}%`,
+                      top: `${posHerramientas.y * 100}%`,
+                      bottom: "auto",
+                      transform: `translate(${-posHerramientas.x * 100}%, ${-posHerramientas.y * 100}%)`,
+                    }
+                  : undefined
+              }
+            >
+            <AgarraderaHerramientas
+              titulo={t.moverHerramientas}
+              onMoviendo={setMoviendoHerramientas}
+              onMover={(pos) => {
+                setPosHerramientas(pos);
+                guardarPosHerramientas(pos);
+              }}
+            />
             {tipo !== "documento" && previewReady && (
             <>
             <button

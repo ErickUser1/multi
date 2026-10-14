@@ -2874,11 +2874,6 @@ img.av.av-personaje {
     border-color: var(--acento);
     color: var(--acento);
   }
-  /* Código todavía no se puede ver, y en el teléfono esa fila le quitaba un
-     renglón entero a la vista previa. */
-  .switch-vista {
-    display: none;
-  }
   .inspect-flotante {
     white-space: nowrap;
   }
@@ -3879,5 +3874,196 @@ img.av.av-personaje {
   .doc-impresion tr,
   .doc-impresion img {
     break-inside: avoid;
+  }
+}
+
+/* ── El código de la sala ─────────────────────────────────────────────────
+   Encima del preview, ocupándolo entero. De solo lectura: lo escribe el agente. */
+.codigo-encima {
+  position: absolute;
+  inset: 0;
+  z-index: 25;
+  background: var(--fondo);
+  display: flex;
+  min-height: 0;
+}
+.codigo {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+.codigo-arbol {
+  width: 230px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  border-right: 1px solid var(--linea);
+  padding: 10px 0;
+}
+.codigo-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: var(--dim);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px;
+  padding: 4px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color 0.15s, background 0.15s;
+}
+.codigo-item:hover {
+  color: var(--texto);
+}
+.codigo-item.carpeta {
+  color: var(--texto);
+}
+.codigo-item.on {
+  color: var(--texto);
+  background: var(--caja);
+}
+/* El archivo que el agente acaba de tocar: que se vea dónde está trabajando. */
+.codigo-item.recien {
+  color: var(--acento);
+}
+.codigo-selector {
+  display: none;
+}
+.codigo-archivo {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.codigo-cab {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--linea);
+}
+.codigo-ruta {
+  flex: 1;
+  min-width: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px;
+  color: var(--dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.codigo-copiar {
+  background: transparent;
+  border: 1px solid var(--linea);
+  border-radius: 4px;
+  color: var(--dim);
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+.codigo-copiar:hover {
+  color: var(--texto);
+  border-color: var(--dim);
+}
+.codigo-cuerpo {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.codigo-numeros {
+  margin: 0;
+  padding: 14px 10px 14px 16px;
+  text-align: right;
+  color: #555;
+  user-select: none;
+  position: sticky;
+  left: 0;
+  background: var(--fondo);
+}
+.codigo-texto {
+  margin: 0;
+  padding: 14px 16px;
+  color: var(--texto);
+  flex: 1;
+  tab-size: 2;
+}
+.codigo-vacio {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  text-align: center;
+  color: var(--dim);
+  font-size: 14px;
+}
+
+/* Colores del resaltado, sobre negro y con el naranja de Multi como acento.
+   Pocos colores a propósito: el código se lee mejor con tres que con diez. */
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-built_in,
+.hljs-literal {
+  color: #ff7a4d;
+}
+.hljs-string,
+.hljs-attr,
+.hljs-template-string {
+  color: #a5d6a7;
+}
+.hljs-title,
+.hljs-title.function_,
+.hljs-section,
+.hljs-name {
+  color: #8ecbff;
+}
+.hljs-number,
+.hljs-variable,
+.hljs-params {
+  color: #e6c07b;
+}
+.hljs-comment,
+.hljs-quote {
+  color: #6b6b6b;
+  font-style: italic;
+}
+.hljs-tag,
+.hljs-punctuation,
+.hljs-meta {
+  color: #b0b0b0;
+}
+
+@media (max-width: 820px) {
+  /* En el teléfono el árbol no cabe al lado: se vuelve un selector arriba y el
+     código ocupa todo lo demás. */
+  .codigo {
+    flex-direction: column;
+  }
+  .codigo-arbol {
+    display: none;
+  }
+  .codigo-selector {
+    display: block;
+    margin: 10px 12px 0;
+    padding: 10px 12px;
+    background: var(--caja);
+    color: var(--texto);
+    border: 1px solid var(--linea);
+    border-radius: 8px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 13px;
+    max-width: calc(100% - 24px);
+  }
+  .codigo-cuerpo {
+    font-size: 12px;
   }
 }

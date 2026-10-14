@@ -48,6 +48,7 @@ jobs:
       - run: npm run demo:agentes-se-ven
       - run: npm run demo:respetar
       - run: npm run demo:preview-caido
+      - run: npm run demo:ver-codigo
       - run: npm run demo:documento
       - run: npm run demo:doc-sync
       - run: npm run demo:comentarios

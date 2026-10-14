@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, useCallback, lazy, Suspense } fro
 
 // El documento trae su editor (y Yjs): solo se descarga en salas que son documento.
 const DocumentoView = lazy(() => import("./documento/DocumentoView").then((m) => ({ default: m.DocumentoView })));
+const CodigoView = lazy(() => import("./CodigoView").then((m) => ({ default: m.CodigoView })));
 import type { Socket } from "socket.io-client";
 import {
   connectSocket,
@@ -814,6 +815,11 @@ function Sala({
    * no cabe al lado del preview y pasa a ser una vista más.
    */
   const [tab, setTab] = useState<"chat" | "app">("chat");
+  /**
+   * Qué enseña el panel grande: la app corriendo o su código. Es solo de quien
+   * mira, como el ancho de vista: cambiarlo no le mueve nada a los demás.
+   */
+  const [panel, setPanel] = useState<"preview" | "codigo">("preview");
   /**
    * En el teléfono, hay algo nuevo en la vista previa que la persona no ha visto
    * (la app arrancó o el agente cambió archivos mientras miraba el chat). Pinta
@@ -2135,10 +2141,20 @@ function Sala({
               pidieron "ver o modificar el código", y sin el hueco en pantalla
               esa petición no tiene dónde aterrizar. */}
           <div className="switch-vista" role="group">
-            <button className="switch-op activa" type="button">
+            <button
+              className={`switch-op${panel === "preview" ? " activa" : ""}`}
+              type="button"
+              onClick={() => setPanel("preview")}
+            >
               {tipo === "documento" ? t.vistaDocumento : t.vistaPreview}
             </button>
-            <button className="switch-op" type="button" disabled title={t.vistaCodigoPronto}>
+            {/* Una sala de documento no tiene proyecto de código que enseñar. */}
+            <button
+              className={`switch-op${panel === "codigo" ? " activa" : ""}`}
+              type="button"
+              disabled={!roomId || tipo === "documento"}
+              onClick={() => setPanel("codigo")}
+            >
               {t.vistaCodigo}
             </button>
           </div>
@@ -2266,7 +2282,16 @@ function Sala({
               se entiende sin leerlo. */}
           {/* Con documento encima van aunque la app siga arrancando: el
               documento ya está y se puede leer mientras tanto. */}
-          {roomId && (previewReady || tipo === "documento" || docEncima) && (
+          {/* El código va encima del preview y no en su lugar: el iframe no se
+              desmonta, así que al volver la app sigue donde estaba. */}
+          {roomId && panel === "codigo" && tipo !== "documento" && socketRef.current && (
+            <div className="codigo-encima">
+              <Suspense fallback={<div className="codigo-vacio">{t.codigoCargando}</div>}>
+                <CodigoView roomId={roomId} socket={socketRef.current} />
+              </Suspense>
+            </div>
+          )}
+          {roomId && panel !== "codigo" && (previewReady || tipo === "documento" || docEncima) && (
             <div
               className={`herramientas-preview${moviendoHerramientas ? " moviendo" : ""}`}
               style={

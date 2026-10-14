@@ -53,7 +53,8 @@
     "demo:sala-al-escribir": "npm run demo:sala-al-escribir -w server",
     "demo:carga": "npm run demo:carga -w server --",
     "demo:dormir": "npm run demo:dormir -w server",
-    "demo:preview-caido": "npm run demo:preview-caido -w server"
+    "demo:preview-caido": "npm run demo:preview-caido -w server",
+    "demo:ver-codigo": "npm run demo:ver-codigo -w server"
   },
   "engines": {
     "node": ">=22"

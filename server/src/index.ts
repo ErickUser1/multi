@@ -83,6 +83,7 @@ import { accionDeTool, type Accion } from "./engine/actividad.js";
 import { WORKSPACES_ROOT } from "./engine/workspace.js";
 import { imagenDelDocumento, CARPETA_DOCUMENTO, esDocumento } from "./engine/documento.js";
 import { quienEres } from "./engine/personajes.js";
+import { archivosDelProyecto, leerArchivoDelProyecto } from "./engine/codigo.js";
 import {
   documentosVivos,
   exportarMarkdown,
@@ -699,6 +700,35 @@ fastify.get<{ Params: { id: string } }>("/rooms/:id/documento", async (req, repl
     .header("cache-control", "no-store")
     .send({ titulo: tituloDe(doc), markdown: exportarMarkdown(doc) });
 });
+
+/**
+ * El código del proyecto de la sala, para el botón "Código". Solo lectura.
+ *
+ * Bajo `/rooms` por lo mismo que el documento: el proxy del preview deja pasar
+ * ese prefijo. Y con la misma autorización que exportar: quien tiene el link de
+ * la sala puede bajarse el proyecto entero en un zip, así que verlo archivo por
+ * archivo no abre nada nuevo. Lo que sí se cuida es que solo salga el proyecto:
+ * ni el `.env` ni nada fuera del workspace (ver engine/codigo.ts).
+ */
+fastify.get<{ Params: { id: string } }>("/rooms/:id/codigo", async (req, reply) => {
+  const room = getRoom(req.params.id) ?? (await wakeRoom(req.params.id));
+  if (!room) return reply.code(404).send({ error: "sala no encontrada" });
+  return reply
+    .header("cache-control", "no-store")
+    .send({ archivos: await archivosDelProyecto(room.workspace.dir) });
+});
+
+fastify.get<{ Params: { id: string }; Querystring: { ruta?: string } }>(
+  "/rooms/:id/codigo/archivo",
+  async (req, reply) => {
+    const room = getRoom(req.params.id) ?? (await wakeRoom(req.params.id));
+    if (!room) return reply.code(404).send({ error: "sala no encontrada" });
+    const ruta = typeof req.query.ruta === "string" ? req.query.ruta : "";
+    const archivo = ruta ? await leerArchivoDelProyecto(room.workspace.dir, ruta) : null;
+    if (!archivo) return reply.code(404).send({ error: "ese archivo no es parte del proyecto" });
+    return reply.header("cache-control", "no-store").send(archivo);
+  },
+);
 
 // Los comentarios del documento, para pintarlos al abrirlo. Los nuevos llegan
 // por el socket.

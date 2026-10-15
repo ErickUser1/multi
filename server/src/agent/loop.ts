@@ -444,6 +444,17 @@ export interface RunResult {
  * Reintentar igual daría lo mismo. Lo que cambia el resultado es pedirle que
  * escriba ya y en pedazos chicos.
  */
+/**
+ * El tope de salida del reintento cuando lo que se cortó fue una herramienta.
+ *
+ * Es lo que recomienda Anthropic para un `tool_use` cortado por `max_tokens`:
+ * repetir con más espacio. Solo en ese caso: si se lo gastó pensando, más
+ * espacio solo sería pensar más (y pagar más) para terminar igual. Y solo con
+ * Anthropic, donde se sabe que el modelo da para esto; en otros proveedores el
+ * techo de salida varía por modelo y pedir de más es un 400.
+ */
+export const TOPE_REINTENTO = 48_000;
+
 export const AVISO_SIN_ESPACIO =
   "Te quedaste sin espacio antes de terminar tu respuesta. No le des más vueltas: escribe ya, archivo por archivo, empezando por lo mínimo que haga funcionar la app. Ningún archivo debe ser enorme: divide en componentes chicos.";
 
@@ -503,7 +514,9 @@ export async function runAgent(opts: {
    */
   onProgreso?: (messages: Message[]) => void;
 }): Promise<RunResult> {
-  const { provider, workspaceDir, userMessage, model, maxTokens, callbacks = {}, signal } = opts;
+  const { provider, workspaceDir, userMessage, model, callbacks = {}, signal } = opts;
+  // Puede subir una vez si el tope cortó una herramienta (ver TOPE_REINTENTO).
+  let maxTokens = opts.maxTokens;
 
   const messages: Message[] = [
     ...opts.messages,
@@ -612,8 +625,13 @@ export async function runAgent(opts: {
       // Primera vez: se le dice qué hacer distinto y se sigue. Va pegado al
       // último mensaje del usuario (el de los resultados, o el pedido mismo si
       // no hubo tools) para no dejar dos mensajes de usuario seguidos.
-      console.warn("[agente] sin espacio (max_tokens) — reintento con aviso");
       yaSeAviso = true;
+      const masEspacio =
+        end.herramientaCortada && provider.name === "anthropic" && (maxTokens ?? 32_000) < TOPE_REINTENTO;
+      if (masEspacio) maxTokens = TOPE_REINTENTO;
+      console.warn(
+        `[agente] sin espacio (max_tokens) — reintento con aviso${masEspacio ? ` y tope de ${TOPE_REINTENTO}` : ""}`,
+      );
       const ultimo = messages[messages.length - 1];
       if (ultimo?.role === "user") {
         ultimo.content = [...ultimo.content, { type: "text", text: AVISO_SIN_ESPACIO }];

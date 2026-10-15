@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { runAgent, AVISO_SIN_ESPACIO } from "../agent/loop.js";
+import { runAgent, AVISO_SIN_ESPACIO, TOPE_REINTENTO } from "../agent/loop.js";
 import { localRunner } from "../engine/runner.js";
 import { AnthropicProvider } from "../agent/providers/anthropic.js";
 import type { ContentBlock, Message, ModelProvider, StopReason, StreamEvent } from "../agent/providers/types.js";
@@ -32,17 +32,22 @@ function check(name: string, ok: boolean, detail = ""): void {
   }
 }
 
-type Vuelta = { stop: StopReason; content: ContentBlock[] };
+type Vuelta = { stop: StopReason; content: ContentBlock[]; herramientaCortada?: boolean };
 
 /** Proveedor falso: una respuesta por vuelta, en orden. Guarda lo que se le mandó. */
-function proveedor(vueltas: Vuelta[]): { provider: ModelProvider; llamadas: Message[][] } {
+function proveedor(
+  vueltas: Vuelta[],
+  name = "falso",
+): { provider: ModelProvider; llamadas: Message[][]; topes: (number | undefined)[] } {
   const llamadas: Message[][] = [];
+  const topes: (number | undefined)[] = [];
   const provider: ModelProvider = {
-    name: "falso",
+    name,
     defaultModel: "falso/modelo",
     async stream(params): Promise<Extract<StreamEvent, { type: "end" }>> {
       // Copia profunda: el loop sigue mutando el array después.
       llamadas.push(JSON.parse(JSON.stringify(params.messages)));
+      topes.push(params.maxTokens);
       const v = vueltas[llamadas.length - 1];
       if (!v) throw new Error(`el guion no tiene vuelta ${llamadas.length - 1}`);
       return {
@@ -50,10 +55,11 @@ function proveedor(vueltas: Vuelta[]): { provider: ModelProvider; llamadas: Mess
         stopReason: v.stop,
         message: { role: "assistant", content: v.content },
         usage: { inputTokens: 0, outputTokens: v.stop === "max_tokens" ? 32000 : 10 },
+        herramientaCortada: v.herramientaCortada,
       };
     },
   };
-  return { provider, llamadas };
+  return { provider, llamadas, topes };
 }
 
 const VACIO: Vuelta = { stop: "max_tokens", content: [] };
@@ -158,7 +164,24 @@ async function main() {
       check("termina normal", r.finalText === "Listo, ya hay App.tsx." && !r.sinEspacio, r.finalText);
     }
 
-    console.log("\n4. Anthropic: un tool_use truncado por el tope no es un error");
+    console.log("\n4. Si lo que se cortó fue una herramienta, el reintento lleva más espacio");
+    {
+      const cortada: Vuelta = { stop: "max_tokens", content: [], herramientaCortada: true };
+      const a = proveedor([cortada, listo("ya")], "anthropic");
+      await runAgent({ ...base, provider: a.provider });
+      check(`con Anthropic el reintento pide ${TOPE_REINTENTO}`, a.topes[1] === TOPE_REINTENTO, String(a.topes[1]));
+      check("y el primer intento no", a.topes[0] === undefined, String(a.topes[0]));
+
+      const pensando = proveedor([VACIO, listo("ya")], "anthropic");
+      await runAgent({ ...base, provider: pensando.provider });
+      check("si se lo gastó pensando, el tope no sube", pensando.topes[1] === undefined, String(pensando.topes[1]));
+
+      const otro = proveedor([cortada, listo("ya")], "openrouter");
+      await runAgent({ ...base, provider: otro.provider });
+      check("con otro proveedor no se sube (su techo varía por modelo)", otro.topes[1] === undefined, String(otro.topes[1]));
+    }
+
+    console.log("\n5. Anthropic: un tool_use truncado por el tope no es un error");
     {
       const original = globalThis.fetch;
       try {
@@ -167,6 +190,7 @@ async function main() {
         check("no lanza", true);
         check("stop_reason max_tokens", fin.stopReason === "max_tokens", fin.stopReason);
         check("el bloque truncado se descarta", !fin.message.content.some((c) => c.type === "tool_use"));
+        check("y avisa que fue una herramienta", fin.herramientaCortada === true);
         check("el texto de antes se queda", fin.message.content.some((c) => c.type === "text" && c.text === "Va el archivo."));
 
         globalThis.fetch = fetchConSse(sseConToolTruncado("tool_use"));

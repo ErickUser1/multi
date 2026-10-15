@@ -146,11 +146,13 @@ export class AnthropicProvider implements ModelProvider {
       throw new ProviderError("el stream terminó sin stop_reason", "parse");
     }
 
+    const message = acc.buildMessage();
     return {
       type: "end",
       stopReason: acc.stopReason,
-      message: acc.buildMessage(),
+      message,
       usage: acc.usage,
+      herramientaCortada: acc.herramientaCortada,
     };
   }
 
@@ -224,6 +226,8 @@ export class AnthropicProvider implements ModelProvider {
  */
 class MessageAccumulator {
   stopReason: StopReason | null = null;
+  /** Si `buildMessage` descartó un tool_use que el tope dejó a medias. */
+  herramientaCortada = false;
   usage: Extract<StreamEvent, { type: "end" }>["usage"];
 
   // Bloques por índice, en construcción.
@@ -315,7 +319,10 @@ class MessageAccumulator {
             // le acabó el espacio. No es un error del turno: este bloque se
             // descarta y el loop le pide que lo haga en partes (ver
             // AVISO_SIN_ESPACIO en loop.ts). Antes esto culpaba a los créditos.
-            if (this.stopReason === "max_tokens") continue;
+            if (this.stopReason === "max_tokens") {
+              this.herramientaCortada = true;
+              continue;
+            }
             // Casi siempre es un stream que se cortó a media generación: el JSON
             // llega truncado, sin cerrar. Pasó de verdad cuando se acabaron los
             // créditos mientras el modelo escribía los argumentos. El mensaje lo

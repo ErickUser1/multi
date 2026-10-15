@@ -246,9 +246,13 @@ export class OpenAICompatProvider implements ModelProvider {
     // Esa se descarta (correrla con los argumentos vacíos solo daría un error
     // raro) y el turno se marca como sin espacio, igual que en anthropic.ts.
     const sinEspacio = finishReason === "length";
+    let herramientaCortada = false;
 
     for (const [i, tc] of [...toolCalls.entries()].sort((a, b) => a[0] - b[0])) {
-      if (sinEspacio && !jsonCompleto(tc.args)) continue;
+      if (sinEspacio && !jsonCompleto(tc.args)) {
+        herramientaCortada = true;
+        continue;
+      }
       content.push({
         type: "tool_use",
         // Sin id (algunos proveedores no lo mandan) se inventa uno estable:
@@ -272,6 +276,7 @@ export class OpenAICompatProvider implements ModelProvider {
       stopReason,
       message: { role: "assistant", content },
       usage,
+      herramientaCortada,
     };
   }
 }

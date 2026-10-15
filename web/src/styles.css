@@ -3142,63 +3142,6 @@ img.av.av-personaje {
   flex-direction: column;
 }
 
-/* ── El documento encima de la app ─────────────────────────────────────
-   En una sala con app y documento, el documento se abre como un panel sobre
-   el preview: a un lado para leerlo mientras se prueba la app, o en grande
-   para escribir. Encima de los botones flotantes del preview (z-index 20),
-   que debajo del documento no sirven de nada. */
-.doc-encima {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: min(58%, 820px);
-  z-index: 30;
-  display: flex;
-  flex-direction: column;
-  background: var(--panel);
-  border-left: 1px solid #3d3d3d;
-  box-shadow: -12px 0 32px rgba(0, 0, 0, 0.35);
-}
-.doc-encima.en-grande {
-  width: 100%;
-  border-left: 0;
-  box-shadow: none;
-}
-.doc-encima-cab {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--linea);
-}
-.doc-encima-titulo {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--dim);
-}
-.doc-abrir {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
-/* En celular no cabe a un lado: siempre en grande. Y el botón va con su
-   icono solo, que la fila de botones flotantes ya llena el ancho. */
-@media (max-width: 760px) {
-  .doc-encima {
-    width: 100%;
-    border-left: 0;
-  }
-  .doc-abrir span {
-    display: none;
-  }
-}
 .doc-barra {
   display: flex;
   align-items: center;
@@ -3879,7 +3822,8 @@ img.av.av-personaje {
 
 /* ── El código de la sala ─────────────────────────────────────────────────
    Encima del preview, ocupándolo entero. De solo lectura: lo escribe el agente. */
-.codigo-encima {
+.codigo-encima,
+.documento-encima {
   position: absolute;
   inset: 0;
   z-index: 25;

@@ -593,13 +593,11 @@ function Sala({
   // pinta Multi en el lienzo en vez del preview.
   const [tipo, setTipo] = useState<TipoDeSala | null>(null);
   /**
-   * Una sala con app también puede tener documento (su plan, su manual). La
-   * app se queda en el lienzo y el documento se abre encima con un botón, a un
-   * lado o en grande. Abrirlo es de cada quien: no se le abre a toda la sala.
+   * Una sala con app también puede tener documento (su plan, su manual). Se ve
+   * desde el switch de arriba, a pantalla completa como en una sala que solo es
+   * documento. Verlo es de cada quien: no se le cambia la vista a la sala.
    */
   const [tieneDocumento, setTieneDocumento] = useState(false);
-  const [docAbierto, setDocAbierto] = useState(false);
-  const [docEnGrande, setDocEnGrande] = useState(false);
   const docEncima = tipo === "app" && tieneDocumento;
   // Quién soy en esta sala (nombre y color): con eso se pinta mi cursor en el documento.
   const [yo, setYo] = useState<Member | null>(null);
@@ -819,7 +817,7 @@ function Sala({
    * Qué enseña el panel grande: la app corriendo o su código. Es solo de quien
    * mira, como el ancho de vista: cambiarlo no le mueve nada a los demás.
    */
-  const [panel, setPanel] = useState<"preview" | "codigo">("preview");
+  const [panel, setPanel] = useState<"preview" | "codigo" | "documento">("preview");
   /**
    * En el teléfono, hay algo nuevo en la vista previa que la persona no ha visto
    * (la app arrancó o el agente cambió archivos mientras miraba el chat). Pinta
@@ -966,6 +964,7 @@ function Sala({
       setModo(p.modo ?? "multi");
       setTipo(p.tipo ?? null);
       setTieneDocumento(!!p.documento);
+      if (!p.documento || p.tipo === "documento") setPanel((v) => (v === "documento" ? "preview" : v));
       setYo(p.you);
       recordarNombre(roomId, p.nombre ?? null);
       setPublicando(p.publicando ?? null);
@@ -1046,7 +1045,9 @@ function Sala({
     socket.on("room:tipo", ({ tipo, documento }: { tipo: TipoDeSala | null; documento?: boolean }) => {
       setTipo(tipo);
       setTieneDocumento(!!documento);
-      if (!documento) setDocAbierto(false);
+      // El documento se fue, o la sala entera pasó a ser documento (ahí ya
+      // ocupa el lienzo solo): de cualquier forma se regresa a la vista base.
+      if (!documento || tipo === "documento") setPanel((p) => (p === "documento" ? "preview" : p));
     });
 
     socket.on("room:renamed", ({ nombre }: { nombre: string | null }) => {
@@ -2148,6 +2149,17 @@ function Sala({
             >
               {tipo === "documento" ? t.vistaDocumento : t.vistaPreview}
             </button>
+            {/* El documento de una sala con app va junto a ella: casi siempre
+                es el plan del que salió. Solo aparece si existe. */}
+            {docEncima && (
+              <button
+                className={`switch-op${panel === "documento" ? " activa" : ""}`}
+                type="button"
+                onClick={() => setPanel("documento")}
+              >
+                {t.vistaDocumento}
+              </button>
+            )}
             {/* Una sala de documento no tiene proyecto de código que enseñar. */}
             <button
               className={`switch-op${panel === "codigo" ? " activa" : ""}`}
@@ -2280,8 +2292,6 @@ function Sala({
               de la barra: ahí arriba se veía igual que "compartir" o
               "variables", que son otra cosa. Flotando encima de lo que señala
               se entiende sin leerlo. */}
-          {/* Con documento encima van aunque la app siga arrancando: el
-              documento ya está y se puede leer mientras tanto. */}
           {/* El código va encima del preview y no en su lugar: el iframe no se
               desmonta, así que al volver la app sigue donde estaba. */}
           {roomId && panel === "codigo" && tipo !== "documento" && socketRef.current && (
@@ -2291,7 +2301,24 @@ function Sala({
               </Suspense>
             </div>
           )}
-          {roomId && panel !== "codigo" && (previewReady || tipo === "documento" || docEncima) && (
+          {/* Igual que el código, y por lo mismo: el documento va encima y el
+              iframe sigue debajo, así que al volver la app está donde quedó. Se
+              ve idéntico a una sala que solo es documento: si lo abres es para
+              leerlo, no para ver la app de reojo. */}
+          {roomId && panel === "documento" && docEncima && socketRef.current && (
+            <div className="documento-encima">
+              <Suspense fallback={<div className="doc-estado">{t.docCargando}</div>}>
+                <DocumentoView
+                  roomId={roomId}
+                  socket={socketRef.current}
+                  yo={{ name: yo?.name ?? name, color: yo?.color ?? "#ff4d1c" }}
+                  agents={agents}
+                  soloYo={modo === "solo" || members.length <= 1}
+                />
+              </Suspense>
+            </div>
+          )}
+          {roomId && panel === "preview" && (previewReady || tipo === "documento") && (
             <div
               className={`herramientas-preview${moviendoHerramientas ? " moviendo" : ""}`}
               style={
@@ -2344,21 +2371,6 @@ function Sala({
             </button>
             </>
             )}
-            {/* El documento de una sala que también tiene app. Va con su palabra
-                y no solo el icono: es lo único de esta fila que abre algo que
-                no se ve, y nadie lo busca si no sabe que existe. */}
-            {docEncima && (
-              <button
-                className={`vista-btn flotante doc-abrir ${docAbierto ? "on" : ""}`}
-                onClick={() => setDocAbierto((v) => !v)}
-                title={docAbierto ? t.docCerrarDoc : t.docAbrir}
-                aria-label={docAbierto ? t.docCerrarDoc : t.docAbrir}
-                aria-pressed={docAbierto}
-              >
-                <IconoDocumento />
-                <span>{t.vistaDocumento}</span>
-              </button>
-            )}
             {/* El historial, detrás de un icono. Antes vivía siempre abierto
                 debajo del preview, y eso son unos cincuenta píxeles de alto
                 para algo que se consulta de vez en cuando. */}
@@ -2378,45 +2390,6 @@ function Sala({
                 />
               </svg>
             </button>
-            </div>
-          )}
-          {/* Encima de la app y no en su lugar: el iframe nunca se desmonta, así
-              que cerrar el documento deja la app justo donde estaba. */}
-          {roomId && docEncima && docAbierto && socketRef.current && (
-            <div className={`doc-encima${docEnGrande ? " en-grande" : ""}`}>
-              <div className="doc-encima-cab">
-                <span className="doc-encima-titulo">
-                  <IconoDocumento />
-                  {t.vistaDocumento}
-                </span>
-                <button
-                  type="button"
-                  className="doc-boton"
-                  onClick={() => setDocEnGrande((v) => !v)}
-                  title={docEnGrande ? t.docAchicar : t.docExpandir}
-                  aria-label={docEnGrande ? t.docAchicar : t.docExpandir}
-                >
-                  {docEnGrande ? "⇥" : "⇤"}
-                </button>
-                <button
-                  type="button"
-                  className="doc-boton"
-                  onClick={() => setDocAbierto(false)}
-                  title={t.docCerrarDoc}
-                  aria-label={t.docCerrarDoc}
-                >
-                  ✕
-                </button>
-              </div>
-              <Suspense fallback={<div className="doc-estado">{t.docCargando}</div>}>
-                <DocumentoView
-                  roomId={roomId}
-                  socket={socketRef.current}
-                  yo={{ name: yo?.name ?? name, color: yo?.color ?? "#ff4d1c" }}
-                  agents={agents}
-                  soloYo={modo === "solo" || members.length <= 1}
-                />
-              </Suspense>
             </div>
           )}
           {roomId && tipo === "documento" ? (
@@ -2646,21 +2619,6 @@ function esSeguido(msgs: ChatMessage[], i: number): boolean {
   if (m.role === "system" || prev.role === "system") return false;
   if (m.anchoredTo) return false;
   return prev.from === m.from && prev.role === m.role;
-}
-
-/** Una hoja con renglones: el documento de la sala. */
-function IconoDocumento() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path
-        d="M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
 }
 
 /**

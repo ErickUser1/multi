@@ -46,7 +46,8 @@
     "demo:carga": "tsx src/demos/carga.ts",
     "demo:dormir": "tsx src/demos/dormir.ts",
     "demo:preview-caido": "tsx src/demos/preview-caido.ts",
-    "demo:ver-codigo": "tsx src/demos/ver-codigo.ts"
+    "demo:ver-codigo": "tsx src/demos/ver-codigo.ts",
+    "demo:sin-espacio": "tsx src/demos/sin-espacio.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.3.0",

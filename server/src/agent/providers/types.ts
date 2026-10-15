@@ -77,6 +77,12 @@ export type StreamEvent =
       /** El mensaje completo del assistant (texto + tool_use), para el historial. */
       message: Message;
       usage?: Usage;
+      /**
+       * El tope de salida cortó una herramienta a media escritura y se
+       * descartó. Distingue "se le acabó el espacio escribiendo" de "se le
+       * acabó pensando": lo primero sí se arregla con más espacio.
+       */
+      herramientaCortada?: boolean;
     };
 
 export type StopReason =

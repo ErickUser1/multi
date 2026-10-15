@@ -81,7 +81,10 @@ no preguntes por dónde empezar.
     1. El manifiesto de dependencias (package.json, pyproject.toml, go.mod…).
     2. Instalar las dependencias.
     3. Los archivos de config del stack y el punto de entrada.
-    4. Ya con eso, el código que te pidieron.
+    4. Ya con eso, el código que te pidieron. En proyectos grandes (juegos, páginas
+       con mucho contenido) empieza por lo mínimo que funcione y crece en archivos
+       chicos: nunca escribas toda la app en un solo archivo. Una respuesta tuya
+       tiene un tope de largo, y un archivo enorme no cabe.
   Mira antes qué hay: si un paso ya está hecho, sáltatelo y sigue desde donde se
   quedó. Un turno anterior pudo haberse cortado a la mitad.
   El orden importa porque hasta que no hay manifiesto no hay instalación, sin
@@ -422,7 +425,38 @@ export interface RunResult {
   messages: Message[];
   /** El turno se cortó porque alguien de la sala interrumpió al agente. */
   interrumpido?: boolean;
+  /**
+   * El modelo se acabó su tope de salida dos veces seguidas sin terminar.
+   * Quien lo reciba tiene que decirlo en la sala: el texto viene vacío.
+   */
+  sinEspacio?: boolean;
 }
+
+/**
+ * Lo que se le dice al modelo cuando se acabó el tope de salida sin terminar.
+ *
+ * Pasó en una sala real: pidieron una página de outfits "con mucha variedad" y
+ * el modelo se gastó los 32k de salida pensando, sin escribir un solo archivo.
+ * Volvió a pasar con el siguiente pedido. Las dos veces el turno terminó en
+ * blanco y la persona se quedó viendo el error de Vite de un `main.tsx` que
+ * importaba un `App.tsx` que nunca llegó.
+ *
+ * Reintentar igual daría lo mismo. Lo que cambia el resultado es pedirle que
+ * escriba ya y en pedazos chicos.
+ */
+/**
+ * El tope de salida del reintento cuando lo que se cortó fue una herramienta.
+ *
+ * Es lo que recomienda Anthropic para un `tool_use` cortado por `max_tokens`:
+ * repetir con más espacio. Solo en ese caso: si se lo gastó pensando, más
+ * espacio solo sería pensar más (y pagar más) para terminar igual. Y solo con
+ * Anthropic, donde se sabe que el modelo da para esto; en otros proveedores el
+ * techo de salida varía por modelo y pedir de más es un 400.
+ */
+export const TOPE_REINTENTO = 48_000;
+
+export const AVISO_SIN_ESPACIO =
+  "Te quedaste sin espacio antes de terminar tu respuesta. No le des más vueltas: escribe ya, archivo por archivo, empezando por lo mínimo que haga funcionar la app. Ningún archivo debe ser enorme: divide en componentes chicos.";
 
 /**
  * EL loop del agente. Blueprint: doc oficial de Anthropic + ~/ccx-rs.
@@ -480,7 +514,9 @@ export async function runAgent(opts: {
    */
   onProgreso?: (messages: Message[]) => void;
 }): Promise<RunResult> {
-  const { provider, workspaceDir, userMessage, model, maxTokens, callbacks = {}, signal } = opts;
+  const { provider, workspaceDir, userMessage, model, callbacks = {}, signal } = opts;
+  // Puede subir una vez si el tope cortó una herramienta (ver TOPE_REINTENTO).
+  let maxTokens = opts.maxTokens;
 
   const messages: Message[] = [
     ...opts.messages,
@@ -507,6 +543,8 @@ export async function runAgent(opts: {
 
   let finalText = "";
   let turn = 0;
+  /** Si ya se le avisó en este turno que se quedó sin espacio. */
+  let yaSeAviso = false;
 
   for (; turn < MAX_TURNS; turn++) {
     let end;
@@ -542,14 +580,18 @@ export async function runAgent(opts: {
 
     reportarGasto(end.usage, turn);
 
-    // Guardar el mensaje del assistant en el historial.
-    messages.push(end.message);
+    const sinEspacio = end.stopReason === "max_tokens";
+
+    // Guardar el mensaje del assistant en el historial. Uno vacío NO: la API
+    // rechaza contenido vacío en medio del historial, y un `assistant []` es lo
+    // que deja un modelo que se gastó el tope pensando.
+    if (end.message.content.length > 0) messages.push(end.message);
 
     // Recolectar el texto (por si es la respuesta final).
     finalText = textOf(end.message);
 
-    if (end.stopReason !== "tool_use") {
-      // end_turn / max_tokens / etc. → terminó.
+    if (end.stopReason !== "tool_use" && !sinEspacio) {
+      // end_turn / stop_sequence / etc. → terminó.
       opts.onProgreso?.(messages);
       return { finalText, turns: turn + 1, messages };
     }
@@ -568,7 +610,35 @@ export async function runAgent(opts: {
     // Van SIEMPRE, aunque hayan interrumpido a media ejecución: la API exige que
     // cada tool_use tenga su tool_result, y sin eso el historial queda inválido
     // y el turno siguiente falla al mandarlo.
-    messages.push({ role: "user", content: results });
+    if (results.length > 0) messages.push({ role: "user", content: results });
+
+    // Sin espacio: las tools que alcanzaron a salir completas ya corrieron
+    // arriba, así que lo que haya escrito no se pierde y cada tool_use tiene su
+    // resultado. Lo que falta decidir es si se le da otra oportunidad.
+    if (sinEspacio && yaSeAviso) {
+      // Segunda vez en el mismo turno: otro intento serían otros 32k tirados.
+      console.warn("[agente] sin espacio (max_tokens) otra vez — se rinde");
+      opts.onProgreso?.(messages);
+      return { finalText, turns: turn + 1, messages, sinEspacio: true };
+    }
+    if (sinEspacio) {
+      // Primera vez: se le dice qué hacer distinto y se sigue. Va pegado al
+      // último mensaje del usuario (el de los resultados, o el pedido mismo si
+      // no hubo tools) para no dejar dos mensajes de usuario seguidos.
+      yaSeAviso = true;
+      const masEspacio =
+        end.herramientaCortada && provider.name === "anthropic" && (maxTokens ?? 32_000) < TOPE_REINTENTO;
+      if (masEspacio) maxTokens = TOPE_REINTENTO;
+      console.warn(
+        `[agente] sin espacio (max_tokens) — reintento con aviso${masEspacio ? ` y tope de ${TOPE_REINTENTO}` : ""}`,
+      );
+      const ultimo = messages[messages.length - 1];
+      if (ultimo?.role === "user") {
+        ultimo.content = [...ultimo.content, { type: "text", text: AVISO_SIN_ESPACIO }];
+      } else {
+        messages.push({ role: "user", content: [{ type: "text", text: AVISO_SIN_ESPACIO }] });
+      }
+    }
 
     // Interrumpido mientras corrían las tools: se cierra aquí, con el historial
     // ya consistente.

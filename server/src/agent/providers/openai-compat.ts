@@ -242,7 +242,13 @@ export class OpenAICompatProvider implements ModelProvider {
     const content: ContentBlock[] = [];
     if (text) content.push({ type: "text", text });
 
+    // Cortado por el tope de salida: la última llamada puede venir a medias.
+    // Esa se descarta (correrla con los argumentos vacíos solo daría un error
+    // raro) y el turno se marca como sin espacio, igual que en anthropic.ts.
+    const sinEspacio = finishReason === "length";
+
     for (const [i, tc] of [...toolCalls.entries()].sort((a, b) => a[0] - b[0])) {
+      if (sinEspacio && !jsonCompleto(tc.args)) continue;
       content.push({
         type: "tool_use",
         // Sin id (algunos proveedores no lo mandan) se inventa uno estable:
@@ -255,7 +261,11 @@ export class OpenAICompatProvider implements ModelProvider {
 
     // Si hay tool_calls, el turno pide ejecutarlas — aunque el proveedor haya
     // dicho "stop" (los hay que no marcan finish_reason correctamente).
-    const stopReason: StopReason = toolCalls.size > 0 ? "tool_use" : mapFinish(finishReason);
+    const stopReason: StopReason = sinEspacio
+      ? "max_tokens"
+      : toolCalls.size > 0
+        ? "tool_use"
+        : mapFinish(finishReason);
 
     return {
       type: "end",
@@ -355,6 +365,18 @@ function toOpenAITool(t: { name: string; description: string; input_schema: unkn
  * aquí NO debe tirar el turno: se manda un objeto vacío y la tool se queja con
  * un mensaje que el modelo puede entender y corregir.
  */
+/** Si los argumentos de una llamada llegaron enteros (vacíos cuentan como enteros). */
+function jsonCompleto(raw: string): boolean {
+  const s = raw.trim();
+  if (!s) return true;
+  try {
+    JSON.parse(s);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function parseArgs(raw: string, toolName: string): Record<string, unknown> {
   const s = raw.trim();
   if (!s) return {};

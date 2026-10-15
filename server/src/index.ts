@@ -2764,6 +2764,24 @@ async function runAgentTurn(
       return;
     }
 
+    /**
+     * Nunca un mensaje en blanco.
+     *
+     * Un turno que termina sin texto dejaba en el chat el nombre del agente y
+     * nada más, y la persona no tenía forma de saber si seguía trabajando, si
+     * falló, o si le tocaba a ella. Pasó dos veces seguidas en una sala real:
+     * el modelo se gastó su tope de salida pensando y no escribió nada.
+     */
+    if (!result.finalText.trim()) {
+      console.warn(
+        `[sala ${room.id}] turno de ${agent.name} terminó sin texto${result.sinEspacio ? " (sin espacio)" : ""}`,
+      );
+      result.finalText = result.sinEspacio ? TEXTO_SIN_ESPACIO : TEXTO_SIN_RESPUESTA;
+    } else if (result.sinEspacio) {
+      // Alcanzó a decir algo pero no terminó: que se sepa que quedó a medias.
+      result.finalText = `${result.finalText}\n\n${TEXTO_SIN_ESPACIO}`;
+    }
+
     // Si el turno vino solo de comentarios, la respuesta es del hilo, no del
     // chat: en el chat queda una línea que dice dónde contestó.
     const hilos = origenes.filter((o): o is Extract<OrigenDelPedido, { tipo: "comentario" }> => o.tipo === "comentario");
@@ -3219,6 +3237,12 @@ function tituloDesde(task: string): string {
   const palabras = corto.split(" ").slice(0, 6).join(" ");
   return palabras.charAt(0).toUpperCase() + palabras.slice(1);
 }
+
+/** Lo que dice el agente cuando se quedó sin espacio dos veces en el mismo turno. */
+const TEXTO_SIN_ESPACIO =
+  "Me atoré: lo que pediste era mucho para una sola respuesta y me quedé sin espacio antes de terminar. ¿Me lo pides más chico o por partes? (por ejemplo: primero la página principal, luego cada sección)";
+/** Lo que dice cuando el turno terminó sin texto y no se sabe por qué. */
+const TEXTO_SIN_RESPUESTA = "Terminé sin decir nada, algo raro pasó de mi lado. ¿Me lo vuelves a pedir?";
 
 function explicarFalla(err: unknown): string {
   // Por tipo y no por texto: así el mensaje se puede reescribir sin romper esto.

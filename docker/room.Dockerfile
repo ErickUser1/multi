@@ -23,6 +23,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       python3 \
     && rm -rf /var/lib/apt/lists/*
 
+# El navegador con el que el agente mira su propia vista previa (tool
+# `ver_preview`). Va aquí y no en el server porque la página es código del
+# proyecto, y el contenedor es el encierro de todo lo que no revisó nadie.
+# Las fuentes son para que la captura se parezca a lo que ve la gente: sin
+# ellas los emojis salen como cuadritos y el texto en una fuente de relleno.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      chromium \
+      fonts-liberation \
+      fonts-noto-color-emoji \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY qa/ /opt/qa/
+RUN cd /opt/qa && npm install --omit=dev --no-audit --no-fund
+ENV MULTI_CHROMIUM=/usr/bin/chromium
+
 # El proyecto se monta aquí como volumen (vive en el disco del host, para que git
 # y el historial de Multi sigan funcionando sin cambios).
 WORKDIR /work

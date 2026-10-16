@@ -51,6 +51,10 @@ jobs:
       - run: npm run demo:ver-codigo
       - run: npm run demo:sin-espacio
       - run: npm run demo:mensaje-creditos
+      # El navegador con el que el agente mira su vista previa. En las salas
+      # viene en la imagen; aquí, el de Playwright.
+      - run: npx playwright-core install --with-deps chromium
+      - run: npm run demo:ver-preview
       - run: npm run demo:documento
       - run: npm run demo:doc-sync
       - run: npm run demo:comentarios

@@ -560,6 +560,20 @@ async function arrancarPreview(
 const INTERNAL_DEV_PORT = 5173;
 
 /**
+ * Dónde abre la vista previa un navegador que corre junto a los comandos de la
+ * sala (la tool ver_preview), o null si no hay vista previa corriendo.
+ *
+ * Adentro del contenedor el dev server está en su puerto interno; sin
+ * contenedor, en el que se le asignó en esta máquina. No pasa por el proxy de
+ * Multi: el proxy es para los navegadores de la gente, y desde aquí se llega
+ * directo.
+ */
+export function direccionDelPreview(room: Room): string | null {
+  if (!room.preview) return null;
+  return room.runner?.isolated ? `http://localhost:${INTERNAL_DEV_PORT}` : `http://127.0.0.1:${room.preview.port}`;
+}
+
+/**
  * El runner de la sala: dónde corren los comandos del agente.
  *
  * Con Docker, arranca (o reusa) el contenedor de la sala, y si no puede, LANZA.

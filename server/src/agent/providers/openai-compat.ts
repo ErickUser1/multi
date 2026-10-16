@@ -315,6 +315,22 @@ function toOpenAIMessages(system: string | undefined, messages: Message[]): unkn
         content: r.content,
       });
     }
+    // Un mensaje `tool` no lleva imágenes en este formato: las capturas van en
+    // uno de usuario justo después de los resultados, que es donde el modelo
+    // las espera.
+    const capturas = resultados.filter((r) => r.imagen);
+    if (capturas.length > 0) {
+      out.push({
+        role: "user",
+        content: [
+          ...capturas.map((r) => ({
+            type: "image_url",
+            image_url: { url: `data:${r.imagen!.mediaType};base64,${r.imagen!.data}` },
+          })),
+          { type: "text", text: "(La captura de arriba es la que tomó ver_preview.)" },
+        ],
+      });
+    }
 
     if (m.role === "assistant") {
       if (textos.length === 0 && usos.length === 0) continue;

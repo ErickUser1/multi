@@ -50,6 +50,7 @@ jobs:
       - run: npm run demo:preview-caido
       - run: npm run demo:ver-codigo
       - run: npm run demo:sin-espacio
+      - run: npm run demo:mensaje-creditos
       - run: npm run demo:documento
       - run: npm run demo:doc-sync
       - run: npm run demo:comentarios

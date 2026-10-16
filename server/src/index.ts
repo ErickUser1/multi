@@ -155,6 +155,7 @@ import {
 } from "./engine/container.js";
 import { NoHayAislamiento } from "./engine/runner.js";
 import { runAgent } from "./agent/loop.js";
+import { explicarFallaDelProveedor } from "./engine/fallas.js";
 import type { ModelProvider, Message, ContentBlock } from "./agent/providers/types.js";
 import { createDevMock } from "./agent/providers/mock-scenarios.js";
 
@@ -1564,6 +1565,12 @@ const FALLBACK = (() => {
 })();
 
 /**
+ * Los proveedores armados con la key de respaldo (la del `.env`). Si un turno
+ * de estos falla por saldo, el problema es de quien corre Multi, no de la sala.
+ */
+const deRespaldo = new WeakSet<ModelProvider>();
+
+/**
  * El proveedor de modelo de QUIEN pidió el turno.
  *
  * La credencial es de la persona, no del server: cada quien paga lo que pide y
@@ -1574,10 +1581,13 @@ const FALLBACK = (() => {
  */
 function providerFor(socketId: string): ModelProvider | null {
   if (TEST_MOCK) return createDevMock();
-  const cred = getCredential(socketId) ?? FALLBACK;
+  const propia = getCredential(socketId);
+  const cred = propia ?? FALLBACK;
   if (!cred) return null;
   try {
-    return makeProvider(cred.provider, cred.apiKey, cred.model);
+    const provider = makeProvider(cred.provider, cred.apiKey, cred.model);
+    if (!propia) deRespaldo.add(provider);
+    return provider;
   } catch (err) {
     // Se trata como "sin credencial", pero SE DICE: un catch mudo aquí dejaba al
     // agente colgado sin explicación, y desde la sala parecía que Multi se había
@@ -2869,7 +2879,7 @@ async function runAgentTurn(
     // El error crudo del proveedor no le sirve a nadie en la sala: se traduce a
     // qué pasó y qué hacer. El detalle técnico va al log del server.
     console.error(`[sala ${room.id}] turno de ${agent.name} falló:`, err);
-    systemMsg(room, `${agent.name}: ${explicarFalla(err)}`, "#d95d63");
+    systemMsg(room, `${agent.name}: ${explicarFalla(err, deRespaldo.has(provider))}`, "#d95d63");
   } finally {
     room.agents.finish(agentId);
     ultimaAccion.get(room.id)?.delete(agentId);
@@ -3244,39 +3254,14 @@ const TEXTO_SIN_ESPACIO =
 /** Lo que dice cuando el turno terminó sin texto y no se sabe por qué. */
 const TEXTO_SIN_RESPUESTA = "Terminé sin decir nada, algo raro pasó de mi lado. ¿Me lo vuelves a pedir?";
 
-function explicarFalla(err: unknown): string {
+/**
+ * Qué decirle a la sala cuando el turno falló.
+ *
+ * `deRespaldo`: el turno corrió con la key del `.env` (la de quien corre Multi),
+ * no con una que la persona pegó. Ahí el saldo no es de nadie en la sala.
+ */
+function explicarFalla(err: unknown, deRespaldo: boolean): string {
   // Por tipo y no por texto: así el mensaje se puede reescribir sin romper esto.
   if (err instanceof NoHayAislamiento) return AVISO_SIN_AISLAMIENTO;
-
-  const texto = String(err);
-
-  // Antes que el de créditos: este mensaje TAMBIÉN habla de saldo, y si cae en
-  // el genérico se le dice "recarga" a alguien que sí tiene dinero.
-  if (texto.includes("el techo de salida no cabe")) {
-    return "tu saldo no alcanza para el tamaño de respuesta que se pidió. Se reintentó con uno más chico y tampoco cupo: recarga saldo o usa un modelo más barato.";
-  }
-  if (texto.includes("credit balance") || texto.includes("insufficient")) {
-    return "se acabaron los créditos de tu cuenta. Pon otra key o recarga saldo.";
-  }
-  if (texto.includes("401") || texto.includes("key inválida") || texto.includes("invalid_api_key")) {
-    return "tu API key no es válida. Revísala en el panel de arriba.";
-  }
-  if (texto.includes("rate") || texto.includes("429")) {
-    return "tu cuenta llegó a su límite de uso por ahora. Espera un momento o usa otra key.";
-  }
-  if (texto.includes("Internal Server Error") || texto.includes("no responde") || texto.includes("503")) {
-    return "el proveedor del modelo está fallando (no es cosa tuya). Vuelve a intentar, o cambia de modelo en el panel.";
-  }
-  if (texto.includes("model") && texto.includes("not found")) {
-    return "ese modelo no existe o tu cuenta no tiene acceso. Elige otro en el panel.";
-  }
-  if (texto.includes("se cortó a media escritura")) {
-    return "la respuesta del modelo se cortó a la mitad. Suele ser falta de créditos o una caída de conexión, vuelve a intentar.";
-  }
-  if (texto.includes("AbortError")) {
-    return "el turno se detuvo.";
-  }
-
-  // Sin patrón conocido: se muestra recortado, no el volcado entero.
-  return `algo falló — ${texto.slice(0, 120)}`;
+  return explicarFallaDelProveedor(String(err), deRespaldo);
 }

@@ -259,6 +259,23 @@ no preguntes por dónde empezar.
   Por qué: sin él la variable no entra a la compilación, y entonces la app publicada
   no encuentra su base. No falla al compilar ni avisa nada: simplemente no conecta,
   y desde fuera parece que la app está rota.
+- Si la app necesita credenciales que todavía no están en el .env (una base, un login,
+  una API de mapas o de pagos, del servicio que sea), NO la bloquees con una pantalla
+  de "falta configurar". Mientras alguien las consigue, la app sigue andando en modo
+  demo:
+    * Se puede recorrer toda la interfaz con datos de ejemplo o un usuario de prueba.
+    * Arriba va un aviso chico y visible, una franja: "Modo demo: faltan las
+      credenciales de <servicio>. Los datos no se guardan."
+    * El modo demo existe SOLO mientras falten las credenciales: en cuanto están, se
+      apaga solo, sin tocar código.
+    * El usuario de prueba nunca tiene permisos sobre datos reales. Si la app tiene
+      administrador, el demo puede enseñar esas pantallas con datos de ejemplo; con
+      credenciales, quién es admin lo dice la base, no el modo demo.
+  Y al cerrar, di en una línea qué credenciales faltan y que se ponen en el panel de
+  Variables.
+  Por qué: pasó en una sala de cuatro personas. La app enseñaba una pantalla entera
+  de "falta configurar Firebase" y tres se quedaron sin ver nada mientras la cuarta
+  sacaba las credenciales.
 </sala_vacia>
 
 <documentos>

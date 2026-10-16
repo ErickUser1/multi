@@ -280,8 +280,10 @@ const TEXTOS = {
     salasGuardadas: "Tus salas se guardan en tu cuenta.",
 
     // Variables del proyecto (.env)
-    envBoton: "Variables",
-    envTitulo: "Variables del proyecto",
+    envBoton: "Variables de entorno",
+    // En celular la barra va apretada: ahí el botón se queda en una palabra.
+    envBotonCorto: "Variables",
+    envTitulo: "Variables de entorno",
     envNota:
       "Van al .env de esta sala: la app y el agente las leen. Son de la sala, así que las ve quien entre. Las que la app lee desde el navegador necesitan el prefijo de su framework (VITE_, NEXT_PUBLIC_); sin él no llegan a la app publicada.",
     envVacio: "Todavía no hay ninguna.",
@@ -626,8 +628,9 @@ const TEXTOS = {
     salasGuardadas: "Your rooms are saved to your account.",
 
     // Variables del proyecto (.env)
-    envBoton: "Variables",
-    envTitulo: "Project variables",
+    envBoton: "Environment variables",
+    envBotonCorto: "Variables",
+    envTitulo: "Environment variables",
     envNota:
       "They go in this room's .env: the app and the agent read them. They belong to the room, so anyone who joins can see them. The ones the app reads from the browser need its framework's prefix (VITE_, NEXT_PUBLIC_); without it they never reach the published app.",
     envVacio: "None yet.",

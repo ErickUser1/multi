@@ -200,7 +200,8 @@ export function EnvPanel({
   return (
     <div className="env-panel" ref={cajaRef}>
       <button className="invitar" onClick={() => setAbierto((v) => !v)} title={t.envTitulo}>
-        {t.envBoton}
+        <span className="env-largo">{t.envBoton}</span>
+        <span className="env-corto">{t.envBotonCorto}</span>
       </button>
 
       {abierto && (

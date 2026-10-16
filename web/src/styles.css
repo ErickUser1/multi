@@ -4039,3 +4039,34 @@ img.av.av-personaje {
   font-size: 13px;
   text-align: center;
 }
+
+/* Los agentes arriba de la caja: con quién se puede hablar, a la vista. Picar
+   uno pone su mención al inicio del mensaje; picarlo otra vez la quita. */
+.selector-agentes {
+  margin: 0 0 8px;
+}
+.selector-cab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: var(--dim);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.selector-cab:hover {
+  color: var(--texto);
+}
+.selector-escogido {
+  text-transform: none;
+  color: var(--texto);
+}
+/* La lista es el mismo menú del `@`, pero en su lugar y no flotando. */
+.selector-agentes .mention-menu {
+  position: static;
+  margin-top: 6px;
+}

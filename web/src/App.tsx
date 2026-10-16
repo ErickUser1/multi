@@ -22,7 +22,7 @@ import {
 import { AgentList, textoDeEstado } from "./AgentList.js";
 import { AvatarDeAgente } from "./personajes.js";
 import { FiltroChat } from "./FiltroChat.js";
-import { MentionMenu, useMenciones } from "./MentionMenu.js";
+import { MentionMenu, opcionesDeMencion, useMenciones } from "./MentionMenu.js";
 import { Historial } from "./Historial.js";
 // El panel ya no se monta, pero la key guardada del navegador se sigue
 // mandando al conectar: quien la había configurado no debe quedarse fuera.
@@ -71,6 +71,9 @@ const ALTO_MAXIMO_CAJA = 180;
  * Los anchos son los de siempre para cada clase de pantalla; lo que importa no
  * es el número exacto sino cruzar los puntos donde un layout se rompe.
  */
+/** La mención con la que empieza el mensaje, si hay: es lo que edita el selector de la caja. */
+const MENCION_AL_INICIO = /^@([a-z0-9-]+)\s*/i;
+
 /** Cuánto se sigue tapando el error de compilación cuando el agente ya terminó. */
 const GRACIA_TRAS_TERMINAR_MS = 3000;
 
@@ -835,6 +838,31 @@ function Sala({
   /** Query del menú de menciones (null = cerrado). */
   // El menú de menciones de la caja del chat (el mismo que usan los comentarios).
   const menciones = useMenciones(agents);
+  /**
+   * Los agentes de la sala, arriba de la caja, para escoger a quién le hablas.
+   *
+   * Lo pidieron en una sesión de cuatro personas con cuatro agentes: hablarle
+   * al correcto dependía de acordarse de escribir `@agente-3`, y un mensaje sin
+   * mención en multijugador no despertaba a nadie ("no tagueaste el agente").
+   *
+   * Abierto de entrada, porque es la forma de hablarle a un agente y si nace
+   * escondido nadie sabe que existe. Se puede plegar, y se recuerda.
+   */
+  const [agentesPlegados, setAgentesPlegados] = useState(() => {
+    try {
+      return localStorage.getItem("multi.agentesPlegados") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const plegarAgentes = (v: boolean) => {
+    setAgentesPlegados(v);
+    try {
+      localStorage.setItem("multi.agentesPlegados", v ? "1" : "0");
+    } catch {
+      // Sin almacenamiento solo no se recuerda.
+    }
+  };
   /** Qué opción del menú de menciones está resaltada: la que toma un Tab o un Enter. */
   /** Se incrementa cuando el historial cambia, para que el scrubber recargue. */
   const [histVersion, setHistVersion] = useState(0);
@@ -1584,6 +1612,29 @@ function Sala({
     setDraft((d) => menciones.elegir(d, name));
   };
 
+  /**
+   * El selector de la caja cambia la mención del INICIO del texto, nada más.
+   *
+   * Así lo que se escogió se ve en la caja, el `@` escrito a mano sigue igual,
+   * y el server no cambia: decide a quién despertar leyendo el texto, como
+   * siempre.
+   */
+  const elegirDestino = (nombre: string) => {
+    // Picar el que ya está escogido lo quita: así se vuelve a solo platicar
+    // sin una opción aparte que se lea como una persona más.
+    setDraft((d) => {
+      const actual = d.match(MENCION_AL_INICIO)?.[1]?.toLowerCase();
+      const sin = d.replace(MENCION_AL_INICIO, "");
+      return actual === nombre.toLowerCase() ? sin : `@${nombre} ${sin}`;
+    });
+    requestAnimationFrame(() => {
+      const el = inputRef.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(el.value.length, el.value.length);
+    });
+  };
+
   /** El humano decide qué hacer con el trabajo que quedó a medias por un crash. */
   const resolveOrphans = (action: "keep" | "revert") => {
     socketRef.current?.emit("orphans:resolve", { action });
@@ -2024,6 +2075,37 @@ function Sala({
               <span aria-hidden="true">→</span>
             </button>
           )}
+          {/* Solo cuando hay de dónde escoger (multijugador con gente, o varios
+              agentes). Sola con un agente no hay decisión que tomar. */}
+          {roomId && (modoAlEscribir === "multi" || agents.length > 1) && (() => {
+            const escogido = draft.match(MENCION_AL_INICIO)?.[1]?.toLowerCase() ?? null;
+            return (
+              <div className={`selector-agentes${agentesPlegados ? " plegado" : ""}`}>
+                <button
+                  type="button"
+                  className="selector-cab"
+                  onClick={() => plegarAgentes(!agentesPlegados)}
+                  aria-expanded={!agentesPlegados}
+                >
+                  <span aria-hidden="true">{agentesPlegados ? "▸" : "▾"}</span>
+                  {t.elegirAgente}
+                  {agentesPlegados && escogido && <span className="selector-escogido">@{escogido}</span>}
+                </button>
+                {!agentesPlegados && (() => {
+                  // La misma lista del `@`, solo que fija y abierta: así se ve
+                  // igual que cuando escribes la arroba.
+                  const opciones = opcionesDeMencion(agents, "");
+                  return (
+                    <MentionMenu
+                      opciones={opciones}
+                      seleccion={opciones.findIndex((o) => o.name.toLowerCase() === escogido)}
+                      onPick={elegirDestino}
+                    />
+                  );
+                })()}
+              </div>
+            );
+          })()}
           <div className="input-wrap">
             {menciones.abierto && (
               <MentionMenu opciones={menciones.opciones} seleccion={menciones.sel} onPick={pickMention} />

@@ -55,7 +55,8 @@
     "demo:dormir": "npm run demo:dormir -w server",
     "demo:preview-caido": "npm run demo:preview-caido -w server",
     "demo:ver-codigo": "npm run demo:ver-codigo -w server",
-    "demo:sin-espacio": "npm run demo:sin-espacio -w server"
+    "demo:sin-espacio": "npm run demo:sin-espacio -w server",
+    "demo:mensaje-creditos": "npm run demo:mensaje-creditos -w server"
   },
   "engines": {
     "node": ">=22"

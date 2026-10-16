@@ -4019,3 +4019,23 @@ img.av.av-personaje {
   padding: 5px 10px;
   font-size: 10.5px;
 }
+
+/* Tapa el error rojo de Vite mientras un agente trabaja: a media obra casi
+   siempre es un archivo que importa a otro que viene en el siguiente paso, no
+   un error. Va encima del iframe y debajo de la barra de quién trabaja, que
+   sigue diciendo en qué va. Fuera de un turno no aparece y el error se ve. */
+.preview-construyendo {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px;
+  background: var(--fondo);
+  color: var(--dim);
+  font-size: 13px;
+  text-align: center;
+}

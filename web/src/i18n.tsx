@@ -122,6 +122,8 @@ const TEXTOS = {
      * aparecer. Solo sale una vez en la vida de la sala: después ya hay preview
      * y lo que avisa es la barra de arriba.
      */
+    construyendo: "Construyendo…",
+    construyendoNota: "El agente está a media obra; esto se acomoda solo cuando termine.",
     armandoPrimera: "El agente está armando la primera versión",
     falloArmando: "Algo falló al armar la versión",
     falloArmandoNota:
@@ -490,6 +492,8 @@ const TEXTOS = {
     renombrarSala: "click to name it",
     ningunaSala: "no room open",
     quieresConstruir: "What do you want to build?",
+    construyendo: "Building…",
+    construyendoNota: "The agent is mid-build; this will settle on its own when it finishes.",
     armandoPrimera: "The agent is building the first version",
     falloArmando: "Something failed while building the version",
     falloArmandoNota:

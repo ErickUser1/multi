@@ -89,6 +89,14 @@ export function createDevMock(): MockProvider {
       },
     })
     .scenario({
+      // Un turno que se tarda: "tarda 8s" deja al agente trabajando ese rato.
+      // Sirve para probar lo que la sala enseña mientras hay un agente activo.
+      match: (t) => /\btarda \d+\s?s\b/i.test(t),
+      reply: (t) => [
+        { type: "tool_use", id: "", name: "bash", input: { command: `sleep ${Math.min(60, Number(t.match(/tarda (\d+)/i)?.[1] ?? 5))}` } },
+      ],
+    })
+    .scenario({
     match: () => true,
     // ESCRIBE el archivo (no edita buscando texto): así cada turno produce un
     // cambio real y se puede ejercitar el historial varias veces. Con edit_file

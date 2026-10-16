@@ -2091,30 +2091,18 @@ function Sala({
                   {t.elegirAgente}
                   {agentesPlegados && escogido && <span className="selector-escogido">@{escogido}</span>}
                 </button>
-                {!agentesPlegados && (
-                  <div className="selector-lista" role="listbox" aria-label={t.elegirAgente}>
-                    {opcionesDeMencion(agents, "").map((o) => (
-                      <button
-                        key={o.name}
-                        type="button"
-                        role="option"
-                        aria-selected={escogido === o.name.toLowerCase()}
-                        className={`selector-op${escogido === o.name.toLowerCase() ? " on" : ""}${o.nuevo ? " nuevo" : ""}`}
-                        style={escogido === o.name.toLowerCase() ? { borderColor: o.color } : undefined}
-                        onClick={() => elegirDestino(o.name)}
-                        title={o.hint}
-                      >
-                        {o.nuevo ? (
-                          <span aria-hidden="true">+</span>
-                        ) : (
-                          <span className="destino-punto" style={{ background: o.color }} />
-                        )}
-                        <span>{o.nuevo ? t.agenteNuevo : o.name}</span>
-                        {!o.nuevo && <span className="selector-hint">{o.hint}</span>}
-                      </button>
-                    ))}
-                  </div>
-                )}
+                {!agentesPlegados && (() => {
+                  // La misma lista del `@`, solo que fija y abierta: así se ve
+                  // igual que cuando escribes la arroba.
+                  const opciones = opcionesDeMencion(agents, "");
+                  return (
+                    <MentionMenu
+                      opciones={opciones}
+                      seleccion={opciones.findIndex((o) => o.name.toLowerCase() === escogido)}
+                      onPick={elegirDestino}
+                    />
+                  );
+                })()}
               </div>
             );
           })()}

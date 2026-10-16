@@ -4065,46 +4065,8 @@ img.av.av-personaje {
   text-transform: none;
   color: var(--texto);
 }
-.selector-lista {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+/* La lista es el mismo menú del `@`, pero en su lugar y no flotando. */
+.selector-agentes .mention-menu {
+  position: static;
   margin-top: 6px;
-}
-.selector-op {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  max-width: 100%;
-  padding: 5px 10px;
-  border: 1px solid var(--linea);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--texto);
-  font-size: 12px;
-  cursor: pointer;
-}
-.selector-op:hover {
-  border-color: var(--dim);
-}
-.selector-op.on {
-  background: var(--caja);
-}
-.selector-op.nuevo {
-  color: var(--dim);
-  border-style: dashed;
-}
-.selector-hint {
-  color: var(--dim);
-  font-size: 11px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 140px;
-}
-.destino-punto {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
 }

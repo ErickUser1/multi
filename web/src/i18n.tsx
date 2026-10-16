@@ -123,7 +123,6 @@ const TEXTOS = {
      * y lo que avisa es la barra de arriba.
      */
     elegirAgente: "Hablarle a un agente",
-    agenteNuevo: "agente nuevo",
     construyendo: "Construyendo…",
     construyendoNota: "El agente está a media obra; esto se acomoda solo cuando termine.",
     armandoPrimera: "El agente está armando la primera versión",
@@ -497,7 +496,6 @@ const TEXTOS = {
     ningunaSala: "no room open",
     quieresConstruir: "What do you want to build?",
     elegirAgente: "Talk to an agent",
-    agenteNuevo: "new agent",
     construyendo: "Building…",
     construyendoNota: "The agent is mid-build; this will settle on its own when it finishes.",
     armandoPrimera: "The agent is building the first version",

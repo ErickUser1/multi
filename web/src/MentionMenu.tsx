@@ -54,13 +54,8 @@ export function MentionMenu(props: {
   /** La que acepta un Tab o un Enter; las flechas la mueven. */
   seleccion: number;
   onPick: (name: string) => void;
-  /**
-   * Una fila más al final que no es una mención (en el selector de la caja:
-   * "Nadie, solo platicar"). El menú del `@` no la usa.
-   */
-  extra?: { etiqueta: string; hint: string; onPick: () => void };
 }) {
-  if (props.opciones.length === 0 && !props.extra) return null;
+  if (props.opciones.length === 0) return null;
 
   return (
     <div className="mention-menu" role="listbox">
@@ -82,12 +77,6 @@ export function MentionMenu(props: {
           {o.ocupado && <span className="mention-tag">lo detiene</span>}
         </div>
       ))}
-      {props.extra && (
-        <div role="option" aria-selected={false} className="mention-item" onMouseDown={props.extra.onPick}>
-          <span className="mention-name">{props.extra.etiqueta}</span>
-          <span className="mention-hint">{props.extra.hint}</span>
-        </div>
-      )}
     </div>
   );
 }

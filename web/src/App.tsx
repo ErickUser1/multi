@@ -1616,13 +1616,10 @@ function Sala({
    *
    * Así lo que se escogió se ve en la caja, el `@` escrito a mano sigue igual,
    * y el server no cambia: decide a quién despertar leyendo el texto, como
-   * siempre. Con null se quita la mención (en multijugador: solo platicar).
+   * siempre.
    */
-  const elegirDestino = (nombre: string | null) => {
-    setDraft((d) => {
-      const sinMencion = d.replace(MENCION_AL_INICIO, "");
-      return nombre ? `@${nombre} ${sinMencion}` : sinMencion;
-    });
+  const elegirDestino = (nombre: string) => {
+    setDraft((d) => `@${nombre} ${d.replace(MENCION_AL_INICIO, "")}`);
     setSelectorAbierto(false);
     requestAnimationFrame(() => {
       const el = inputRef.current;
@@ -2078,11 +2075,6 @@ function Sala({
                 opciones={opcionesDeMencion(agents, "")}
                 seleccion={-1}
                 onPick={(n) => elegirDestino(n)}
-                extra={
-                  modoAlEscribir === "multi"
-                    ? { etiqueta: t.nadieSoloPlaticar, hint: t.nadieSoloPlaticarNota, onPick: () => elegirDestino(null) }
-                    : undefined
-                }
               />
             )}
             {menciones.abierto && (

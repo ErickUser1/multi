@@ -22,7 +22,7 @@ import {
 import { AgentList, textoDeEstado } from "./AgentList.js";
 import { AvatarDeAgente } from "./personajes.js";
 import { FiltroChat } from "./FiltroChat.js";
-import { MentionMenu, useMenciones } from "./MentionMenu.js";
+import { MentionMenu, opcionesDeMencion, useMenciones } from "./MentionMenu.js";
 import { Historial } from "./Historial.js";
 // El panel ya no se monta, pero la key guardada del navegador se sigue
 // mandando al conectar: quien la había configurado no debe quedarse fuera.
@@ -71,6 +71,9 @@ const ALTO_MAXIMO_CAJA = 180;
  * Los anchos son los de siempre para cada clase de pantalla; lo que importa no
  * es el número exacto sino cruzar los puntos donde un layout se rompe.
  */
+/** La mención con la que empieza el mensaje, si hay: es lo que edita el selector de la caja. */
+const MENCION_AL_INICIO = /^@([a-z0-9-]+)\s*/i;
+
 /** Cuánto se sigue tapando el error de compilación cuando el agente ya terminó. */
 const GRACIA_TRAS_TERMINAR_MS = 3000;
 
@@ -835,6 +838,30 @@ function Sala({
   /** Query del menú de menciones (null = cerrado). */
   // El menú de menciones de la caja del chat (el mismo que usan los comentarios).
   const menciones = useMenciones(agents);
+  /**
+   * El selector de a quién va el mensaje, junto al clip.
+   *
+   * Lo pidieron en una sesión de cuatro personas con cuatro agentes: hablarle
+   * al correcto dependía de acordarse de escribir `@agente-3`, y un mensaje sin
+   * mención en multijugador no despertaba a nadie ("no tagueaste el agente").
+   */
+  const [selectorAbierto, setSelectorAbierto] = useState(false);
+  const selectorRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!selectorAbierto) return;
+    const fuera = (e: MouseEvent) => {
+      if (!selectorRef.current?.contains(e.target as Node)) setSelectorAbierto(false);
+    };
+    const esc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSelectorAbierto(false);
+    };
+    document.addEventListener("mousedown", fuera);
+    document.addEventListener("keydown", esc);
+    return () => {
+      document.removeEventListener("mousedown", fuera);
+      document.removeEventListener("keydown", esc);
+    };
+  }, [selectorAbierto]);
   /** Qué opción del menú de menciones está resaltada: la que toma un Tab o un Enter. */
   /** Se incrementa cuando el historial cambia, para que el scrubber recargue. */
   const [histVersion, setHistVersion] = useState(0);
@@ -1584,6 +1611,27 @@ function Sala({
     setDraft((d) => menciones.elegir(d, name));
   };
 
+  /**
+   * El selector de la caja cambia la mención del INICIO del texto, nada más.
+   *
+   * Así lo que se escogió se ve en la caja, el `@` escrito a mano sigue igual,
+   * y el server no cambia: decide a quién despertar leyendo el texto, como
+   * siempre. Con null se quita la mención (en multijugador: solo platicar).
+   */
+  const elegirDestino = (nombre: string | null) => {
+    setDraft((d) => {
+      const sinMencion = d.replace(MENCION_AL_INICIO, "");
+      return nombre ? `@${nombre} ${sinMencion}` : sinMencion;
+    });
+    setSelectorAbierto(false);
+    requestAnimationFrame(() => {
+      const el = inputRef.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(el.value.length, el.value.length);
+    });
+  };
+
   /** El humano decide qué hacer con el trabajo que quedó a medias por un crash. */
   const resolveOrphans = (action: "keep" | "revert") => {
     socketRef.current?.emit("orphans:resolve", { action });
@@ -2024,7 +2072,19 @@ function Sala({
               <span aria-hidden="true">→</span>
             </button>
           )}
-          <div className="input-wrap">
+          <div className="input-wrap" ref={selectorRef}>
+            {selectorAbierto && (
+              <MentionMenu
+                opciones={opcionesDeMencion(agents, "")}
+                seleccion={-1}
+                onPick={(n) => elegirDestino(n)}
+                extra={
+                  modoAlEscribir === "multi"
+                    ? { etiqueta: t.nadieSoloPlaticar, hint: t.nadieSoloPlaticarNota, onPick: () => elegirDestino(null) }
+                    : undefined
+                }
+              />
+            )}
             {menciones.abierto && (
               <MentionMenu opciones={menciones.opciones} seleccion={menciones.sel} onPick={pickMention} />
             )}
@@ -2112,6 +2172,35 @@ function Sala({
                 />
               </svg>
                 </button>
+                {/* A quién va: solo cuando hay de dónde escoger (multijugador con
+                    gente, o varios agentes). Sola con un agente no hay decisión
+                    que tomar y el chip sería ruido. */}
+                {roomId && (modoAlEscribir === "multi" || agents.length > 1) && (() => {
+                  const nombre = draft.match(MENCION_AL_INICIO)?.[1] ?? null;
+                  const agente = nombre ? agents.find((a) => a.name.toLowerCase() === nombre.toLowerCase()) : undefined;
+                  const etiqueta = !nombre
+                    ? modoAlEscribir === "multi"
+                      ? t.paraLaSala
+                      : t.paraElAgente
+                    : nombre.toLowerCase() === "agente"
+                      ? t.paraAgenteNuevo
+                      : t.paraAgente(agente?.name ?? nombre);
+                  return (
+                    <button
+                      type="button"
+                      className={`destino-btn${selectorAbierto ? " on" : ""}`}
+                      onClick={() => setSelectorAbierto((v) => !v)}
+                      title={t.elegirDestino}
+                      aria-label={t.elegirDestino}
+                      aria-expanded={selectorAbierto}
+                    >
+                      {agente && <span className="destino-punto" style={{ background: agente.color }} />}
+                      <span className="destino-texto">{etiqueta}</span>
+                      <span aria-hidden="true">▾</span>
+                    </button>
+                  );
+                })()}
+                <span className="caja-espacio" />
                 {/* Enviar también con botón: enter ya funcionaba, pero en el
                     teléfono no hay enter que mande, y quien llega de WhatsApp
                     busca la flecha antes que el teclado. */}

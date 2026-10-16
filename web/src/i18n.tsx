@@ -122,6 +122,13 @@ const TEXTOS = {
      * aparecer. Solo sale una vez en la vida de la sala: después ya hay preview
      * y lo que avisa es la barra de arriba.
      */
+    paraLaSala: "Para: la sala",
+    paraElAgente: "Para: el agente",
+    paraAgenteNuevo: "Para: agente nuevo",
+    paraAgente: (n: string) => `Para: ${n}`,
+    elegirDestino: "Elegir a quién le hablas",
+    nadieSoloPlaticar: "Nadie",
+    nadieSoloPlaticarNota: "solo platicar con la sala, sin despertar a un agente",
     construyendo: "Construyendo…",
     construyendoNota: "El agente está a media obra; esto se acomoda solo cuando termine.",
     armandoPrimera: "El agente está armando la primera versión",
@@ -492,6 +499,13 @@ const TEXTOS = {
     renombrarSala: "click to name it",
     ningunaSala: "no room open",
     quieresConstruir: "What do you want to build?",
+    paraLaSala: "To: the room",
+    paraElAgente: "To: the agent",
+    paraAgenteNuevo: "To: new agent",
+    paraAgente: (n: string) => `To: ${n}`,
+    elegirDestino: "Choose who you're talking to",
+    nadieSoloPlaticar: "Nobody",
+    nadieSoloPlaticarNota: "just chat with the room, without waking an agent",
     construyendo: "Building…",
     construyendoNota: "The agent is mid-build; this will settle on its own when it finishes.",
     armandoPrimera: "The agent is building the first version",

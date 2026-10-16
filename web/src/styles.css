@@ -4039,3 +4039,39 @@ img.av.av-personaje {
   font-size: 13px;
   text-align: center;
 }
+
+/* A quién va el mensaje, junto al clip. Chico y del color del texto apagado:
+   es un ajuste del mensaje, no una acción que compita con enviar. */
+.caja-espacio {
+  flex: 1;
+}
+.destino-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 60%;
+  margin-left: 8px;
+  padding: 4px 10px;
+  border: 1px solid var(--linea);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--dim);
+  font-size: 12px;
+  cursor: pointer;
+}
+.destino-btn:hover,
+.destino-btn.on {
+  color: var(--texto);
+  border-color: var(--dim);
+}
+.destino-texto {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.destino-punto {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}

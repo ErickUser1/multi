@@ -95,10 +95,11 @@ const TEXTOS = {
     // justo a quien esto viene a ayudar. Qué implica cada uno lo cuenta el
     // texto de abajo, al pasar el cursor.
     modo: (m: "solo" | "multi"): string => (m === "solo" ? "Solo" : "Multijugador"),
+    modoTitulo: "Cómo se le habla al agente",
     modoAyuda: (m: "solo" | "multi"): string =>
       m === "solo"
-        ? "Escribir despierta al agente. Toca para pedir que haya que mencionarlo, y poder platicar sin gastar tokens."
-        : "Hay que escribir @agente para despertarlo. Toca para que responda a todo lo que escribas.",
+        ? "Escribir despierta al agente. En Multijugador hay que mencionarlo, y pueden platicar sin gastar tokens."
+        : "Hay que escribir @agente para despertarlo. En Solo responde a todo lo que escriban.",
     renombrarSala: "clic para ponerle nombre",
     ningunaSala: "ninguna sala abierta",
     /**
@@ -481,10 +482,11 @@ const TEXTOS = {
     // Sala
     enLaSala: (n: number) => `${n} in the room`,
     modo: (m: "solo" | "multi"): string => (m === "solo" ? "Solo" : "Multiplayer"),
+    modoTitulo: "How to talk to the agent",
     modoAyuda: (m: "solo" | "multi"): string =>
       m === "solo"
-        ? "Anything you write wakes the agent. Tap to require mentioning it, so you can chat without spending tokens."
-        : "You need to write @agente to wake it. Tap to make it answer everything you write.",
+        ? "Anything you write wakes the agent. In Multiplayer you have to mention it, so you can chat without spending tokens."
+        : "You need to write @agente to wake it. In Solo it answers everything you write.",
     renombrarSala: "click to name it",
     ningunaSala: "no room open",
     quieresConstruir: "What do you want to build?",

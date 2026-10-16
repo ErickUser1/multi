@@ -1644,8 +1644,11 @@ function Sala({
    * igual que con el nombre. Es un ajuste de la sala y lo ven todos, así que la
    * fuente de verdad es una sola.
    */
-  const cambiarModo = () => {
-    socketRef.current?.emit("room:modo", { modo: modo === "solo" ? "multi" : "solo" });
+  const elegirModo = (nuevo: ModoDeSala) => {
+    // La opción que ya está activa no manda nada: antes cada clic cambiaba el
+    // modo y dejaba un aviso en el chat, aunque solo fuera para ver qué hacía.
+    if (nuevo === modo) return;
+    socketRef.current?.emit("room:modo", { modo: nuevo });
   };
 
   const guardarNombre = (valor: string) => {
@@ -2231,11 +2234,37 @@ function Sala({
                 Publicar, que da un enlace en vez de una carpeta que alguien
                 tendría que saber correr. La ruta del server sigue ahí. */}
             {/* El modo sube aquí desde la cabecera del chat, donde competía por
-                ancho con el nombre de la sala y quedaba apretado. */}
-            {roomId && modo && (
-              <button className="invitar" onClick={cambiarModo} title={t.modoAyuda(modo)}>
-                {t.modo(modo)}
-              </button>
+                ancho con el nombre de la sala y quedaba apretado.
+
+                Va como interruptor de dos opciones y no como botón. Era un
+                botón con el mismo estilo que Publicar o Compartir, y se leía
+                como una acción: el 14/10 cinco personas lo picaron para ver qué
+                hacía, y casi todas lo regresaron en el mismo segundo.
+
+                Y solo aparece con dos o más personas. Sola en la sala, escribir
+                despierta al agente sin importar el modo (ver modoAlEscribir), así
+                que ahí el botón no cambiaba nada salvo dejar un aviso que pedía
+                una arroba que no hacía falta. Cuatro de esos cinco estaban solos.
+                Qué implica cada modo lo dice el placeholder de la caja. */}
+            {roomId && modo && members.length > 1 && (
+              <div
+                className="switch-vista switch-modo"
+                role="group"
+                aria-label={t.modoTitulo}
+                title={t.modoAyuda(modo)}
+              >
+                {(["solo", "multi"] as const).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    className={`switch-op${modo === m ? " activa" : ""}`}
+                    aria-pressed={modo === m}
+                    onClick={() => elegirModo(m)}
+                  >
+                    {t.modo(m)}
+                  </button>
+                ))}
+              </div>
             )}
             <PublicarPanel
               roomId={roomId}

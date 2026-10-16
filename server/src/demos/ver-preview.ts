@@ -106,9 +106,16 @@ function proveedorQueMira(veces: number): { provider: ModelProvider; llamadas: M
   return { provider, llamadas };
 }
 
+/** Capturas en el historial: imágenes que van junto a resultados de tools. */
 function imagenesEn(msgs: Message[]): number {
-  return msgs.reduce((n, m) => n + m.content.filter((c) => c.type === "tool_result" && c.imagen).length, 0);
+  return msgs.reduce(
+    (n, m) => n + (m.content.some((c) => c.type === "tool_result") ? m.content.filter((c) => c.type === "image").length : 0),
+    0,
+  );
 }
+
+const avisosEn = (msgs: Message[]) =>
+  msgs.flatMap((m) => m.content).filter((c) => c.type === "text" && c.text === CAPTURA_RETIRADA).length;
 
 /** Un fetch falso que guarda el cuerpo pedido y contesta con este SSE. */
 function fetchQueGuarda(cuerpos: unknown[], sse: string): typeof fetch {
@@ -127,7 +134,8 @@ const HISTORIAL_CON_CAPTURA: Message[] = [
   {
     role: "user",
     content: [
-      { type: "tool_result", tool_use_id: "tu_1", content: "sin errores", imagen: { mediaType: "image/jpeg", data: IMAGEN_FALSA } },
+      { type: "tool_result", tool_use_id: "tu_1", content: "sin errores" },
+      { type: "image", mediaType: "image/jpeg", data: IMAGEN_FALSA },
     ],
   },
 ];
@@ -219,13 +227,24 @@ async function main() {
       check("miró tres veces y terminó", llamadas.length === 4 && r.finalText === "Ya quedó, lo revisé.", `${llamadas.length}`);
       check("cada llamada lleva UNA imagen, la más reciente", llamadas.slice(1).every((m) => imagenesEn(m) === 1), llamadas.map(imagenesEn).join(","));
       const ultima = llamadas[3]!;
-      const resultados = ultima.flatMap((m) => m.content).filter((c) => c.type === "tool_result");
-      check("la que tiene imagen es la última", resultados.at(-1)?.type === "tool_result" && !!resultados.at(-1)?.imagen);
-      check(
-        "las de antes dejan su texto y un aviso",
-        resultados.slice(0, -1).every((c) => c.type === "tool_result" && c.content.endsWith(CAPTURA_RETIRADA)),
-      );
-      check("el historial que se guarda no tiene ninguna", imagenesEn(r.messages) === 0);
+      check("la que tiene imagen es la última", ultima.at(-1)!.content.some((c) => c.type === "image"));
+      check("las de antes dejan un aviso en su lugar", avisosEn(ultima) === 2, String(avisosEn(ultima)));
+      check("la imagen va después del tool_result", ultima.at(-1)!.content[0]?.type === "tool_result");
+      check("el historial que se guarda no tiene ninguna", imagenesEn(r.messages) === 0 && avisosEn(r.messages) === 3);
+
+      // Las imágenes que pega la gente no son capturas: no se tocan.
+      const pegada: Message = { role: "user", content: [{ type: "image", mediaType: "image/png", data: "x" }, { type: "text", text: "pon este logo" }] };
+      const conPegada = proveedorQueMira(2);
+      await runAgent({
+        provider: conPegada.provider,
+        workspaceDir: dir,
+        runner,
+        messages: [pegada, { role: "assistant", content: [{ type: "text", text: "va" }] }],
+        userMessage: "revisa",
+        verPreview: async () => capturaFalsa(),
+        ve: true,
+      });
+      check("una imagen pegada en el chat no se confunde con una captura", conPegada.llamadas[2]![0]!.content[0]?.type === "image");
 
       const sinVer = proveedorQueMira(1);
       await runAgent({
@@ -261,9 +280,9 @@ async function main() {
             .join(""),
         );
         await new AnthropicProvider("sk-falsa").stream({ messages: HISTORIAL_CON_CAPTURA });
-        const tr = cuerpos[0].messages[2].content[0];
-        check("Anthropic: la imagen va DENTRO del tool_result", Array.isArray(tr.content) && tr.content[0].type === "image", JSON.stringify(tr).slice(0, 120));
-        check("Anthropic: y el texto después", tr.content[1]?.type === "text" && tr.content[1].text === "sin errores");
+        const [tr, img] = cuerpos[0].messages[2].content;
+        check("Anthropic: primero el tool_result", tr?.type === "tool_result" && tr.content === "sin errores", JSON.stringify(tr).slice(0, 120));
+        check("Anthropic: y la imagen después, en el mismo mensaje", img?.type === "image" && img.source?.data === IMAGEN_FALSA);
 
         const cuerposOa: any[] = [];
         globalThis.fetch = fetchQueGuarda(

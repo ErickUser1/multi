@@ -5,7 +5,7 @@ import {
   type StreamCallbacks,
   type Usage,
 } from "./providers/types.js";
-import { toolRegistry, toolSpecs, type ToolContext, type ToolEvent, type ResultadoConImagen, ToolError } from "./tools/index.js";
+import { toolRegistry, toolSpecs, type ToolContext, type ToolEvent, ToolError } from "./tools/index.js";
 
 const MAX_TURNS = 50;
 
@@ -641,15 +641,21 @@ export async function runAgent(opts: {
     );
 
     // Ejecutar TODAS en paralelo. Cada una produce un tool_result.
-    const results = await Promise.all(
+    const salidas = await Promise.all(
       toolUses.map((tu) => executeTool(tu, toolCtx, callbacks, opts.ve === true)),
     );
+    const results = salidas.map((s) => s.resultado);
+    // Las capturas de ver_preview van como bloques `image` normales, DESPUÉS de
+    // todos los tool_result del mensaje (Anthropic exige los resultados
+    // primero). Es el mismo bloque que las imágenes que pega la gente, así que
+    // cada proveedor ya sabe mandarlo.
+    const capturas = salidas.flatMap((s) => (s.imagen ? [s.imagen] : []));
 
     // Los resultados van como UN mensaje user con todos los tool_result.
     // Van SIEMPRE, aunque hayan interrumpido a media ejecución: la API exige que
     // cada tool_use tenga su tool_result, y sin eso el historial queda inválido
     // y el turno siguiente falla al mandarlo.
-    if (results.length > 0) messages.push({ role: "user", content: results });
+    if (results.length > 0) messages.push({ role: "user", content: [...results, ...capturas] });
     soloLaUltimaCaptura(messages);
 
     // Sin espacio: las tools que alcanzaron a salir completas ya corrieron
@@ -693,28 +699,21 @@ export async function runAgent(opts: {
   return { finalText: finalText || "(el agente alcanzó el límite de turnos)", turns: turn, messages: sinCapturas(messages) };
 }
 
-/** Ejecuta un tool_use (con gate de permisos) → tool_result. */
+type ToolResult = Extract<ContentBlock, { type: "tool_result" }>;
+type BloqueDeImagen = Extract<ContentBlock, { type: "image" }>;
+
+/** Ejecuta un tool_use (con gate de permisos) → tool_result, y la imagen si trajo una. */
 async function executeTool(
   tu: Extract<ContentBlock, { type: "tool_use" }>,
   ctx: ToolContext,
   callbacks: AgentCallbacks,
   ve: boolean,
-): Promise<Extract<ContentBlock, { type: "tool_result" }>> {
+): Promise<{ resultado: ToolResult; imagen?: BloqueDeImagen }> {
   callbacks.onToolStart?.({ id: tu.id, name: tu.name, input: tu.input });
 
-  const emit = (
-    result: string,
-    isError: boolean,
-    imagen?: ResultadoConImagen["imagen"],
-  ): Extract<ContentBlock, { type: "tool_result" }> => {
+  const emit = (result: string, isError: boolean): { resultado: ToolResult } => {
     callbacks.onToolEnd?.({ id: tu.id, name: tu.name, result, isError });
-    return {
-      type: "tool_result",
-      tool_use_id: tu.id,
-      content: result,
-      is_error: isError,
-      ...(imagen && ve ? { imagen } : {}),
-    };
+    return { resultado: { type: "tool_result", tool_use_id: tu.id, content: result, is_error: isError } };
   };
 
   // Gate de permisos.
@@ -728,7 +727,10 @@ async function executeTool(
 
   try {
     const result = await tool.run(tu.input, ctx);
-    return typeof result === "string" ? emit(result, false) : emit(result.texto, false, result.imagen);
+    if (typeof result === "string") return emit(result, false);
+    // A un modelo que no ve, una imagen le es un 400: le llega solo el texto.
+    const salida = emit(result.texto, false);
+    return result.imagen && ve ? { ...salida, imagen: { type: "image", ...result.imagen } } : salida;
   } catch (err) {
     const msg = err instanceof ToolError ? err.message : `error inesperado: ${String(err)}`;
     return emit(msg, true);
@@ -736,47 +738,49 @@ async function executeTool(
 }
 
 /** Lo que queda en el lugar de una captura que ya no viaja. */
-export const CAPTURA_RETIRADA = "\n(la captura de esta vista ya no está a la vista; si necesitas verla otra vez, vuelve a pedirla)";
+export const CAPTURA_RETIRADA =
+  "(aquí había una captura de ver_preview que ya no está a la vista; si necesitas verla otra vez, vuelve a pedirla)";
+
+/**
+ * Una captura es una imagen que va junto a resultados de tools. Las que pega la
+ * gente van con su texto, en un mensaje sin tool_result, y esas no se tocan.
+ */
+function esCaptura(m: Message, c: ContentBlock): boolean {
+  return c.type === "image" && m.role === "user" && m.content.some((x) => x.type === "tool_result");
+}
+
+const RETIRADA: ContentBlock = { type: "text", text: CAPTURA_RETIRADA };
 
 /**
  * Deja la imagen solo en la captura más reciente.
  *
  * El historial se reenvía completo en cada vuelta: con cuatro capturas en un
  * turno, la cuarta llamada pagaría las cuatro. Las de antes ya cumplieron, el
- * agente actuó sobre ellas, y su texto (los errores) sigue ahí.
+ * agente actuó sobre ellas, y su texto (los errores) sigue en su tool_result.
  */
 export function soloLaUltimaCaptura(messages: Message[]): void {
   let vista = false;
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
-    if (!m.content.some((c) => c.type === "tool_result" && c.imagen)) continue;
+    if (!m.content.some((c) => esCaptura(m, c))) continue;
     const content = [...m.content];
     for (let j = content.length - 1; j >= 0; j--) {
-      const c = content[j];
-      if (c.type !== "tool_result" || !c.imagen) continue;
+      if (!esCaptura(m, content[j])) continue;
       if (!vista) {
         vista = true;
         continue;
       }
-      content[j] = retirarCaptura(c);
+      content[j] = RETIRADA;
     }
     messages[i] = { ...m, content };
   }
 }
 
-function retirarCaptura(c: Extract<ContentBlock, { type: "tool_result" }>): ContentBlock {
-  const { imagen: _, ...sin } = c;
-  return { ...sin, content: sin.content + CAPTURA_RETIRADA };
-}
-
 /** Una copia del historial sin ninguna captura, para guardarlo. */
 export function sinCapturas(messages: Message[]): Message[] {
   return messages.map((m) =>
-    m.content.some((c) => c.type === "tool_result" && c.imagen)
-      ? {
-          ...m,
-          content: m.content.map((c) => (c.type === "tool_result" && c.imagen ? retirarCaptura(c) : c)),
-        }
+    m.content.some((c) => esCaptura(m, c))
+      ? { ...m, content: m.content.map((c) => (esCaptura(m, c) ? RETIRADA : c)) }
       : m,
   );
 }

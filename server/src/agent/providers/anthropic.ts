@@ -396,17 +396,7 @@ function toApiMessage(m: Message): Record<string, unknown> {
           return {
             type: "tool_result",
             tool_use_id: block.tool_use_id,
-            // Con captura, el contenido pasa a ser una lista: la imagen primero y
-            // el texto después, igual que en un mensaje de la persona.
-            content: block.imagen
-              ? [
-                  {
-                    type: "image",
-                    source: { type: "base64", media_type: block.imagen.mediaType, data: block.imagen.data },
-                  },
-                  { type: "text", text: block.content },
-                ]
-              : block.content,
+            content: block.content,
             ...(block.is_error ? { is_error: true } : {}),
           };
         case "image":

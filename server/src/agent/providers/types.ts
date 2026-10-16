@@ -12,22 +12,7 @@ export type Role = "user" | "assistant";
 export type ContentBlock =
   | { type: "text"; text: string }
   | { type: "tool_use"; id: string; name: string; input: Record<string, unknown> }
-  | {
-      type: "tool_result";
-      tool_use_id: string;
-      content: string;
-      is_error?: boolean;
-      /**
-       * Una captura que trajo la herramienta (hoy, `ver_preview`). Va pegada al
-       * resultado y no como bloque `image` suelto porque es la respuesta a ESA
-       * llamada: Anthropic la recibe dentro del `tool_result`, y los de formato
-       * OpenAI, que no aceptan imágenes ahí, en un mensaje aparte justo después.
-       *
-       * Solo la captura más reciente viaja al modelo; las de antes se quitan (ver
-       * `soloLaUltimaCaptura` en loop.ts), y ninguna se guarda en el historial.
-       */
-      imagen?: { mediaType: string; data: string };
-    }
+  | { type: "tool_result"; tool_use_id: string; content: string; is_error?: boolean }
   /**
    * Una imagen que alguien pegó en el chat. Solo se manda a proveedores que ven
    * (ver `ve` en profiles.ts); a los demás les llega la ruta como texto y con eso

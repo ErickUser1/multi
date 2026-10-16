@@ -122,11 +122,8 @@ const TEXTOS = {
      * aparecer. Solo sale una vez en la vida de la sala: después ya hay preview
      * y lo que avisa es la barra de arriba.
      */
-    paraLaSala: "Para: la sala",
-    paraElAgente: "Para: el agente",
-    paraAgenteNuevo: "Para: agente nuevo",
-    paraAgente: (n: string) => `Para: ${n}`,
-    elegirDestino: "Elegir a quién le hablas",
+    elegirAgente: "Hablarle a un agente",
+    agenteNuevo: "agente nuevo",
     construyendo: "Construyendo…",
     construyendoNota: "El agente está a media obra; esto se acomoda solo cuando termine.",
     armandoPrimera: "El agente está armando la primera versión",
@@ -148,9 +145,9 @@ const TEXTOS = {
      * Y el ejemplo es de lo que alguien quiere, no de con qué se construye.
      * Quien llega no sabe qué es Next ni Tailwind, y no le hace falta. */
     hablaConLaSala: (m: "solo" | "multi"): string =>
-      // En multijugador la caja ya trae el selector de agentes abajo: el
+      // En multijugador arriba de la caja están los agentes para escoger: el
       // placeholder apunta ahí en vez de pedir que se escriba la arroba.
-      m === "solo" ? "escribe lo que quieres construir" : "escribe a tus compañeros, o elige un agente abajo",
+      m === "solo" ? "escribe lo que quieres construir" : "escribe a tus compañeros, o elige un agente arriba",
     /**
      * Lo que se puede pedir, rotando. Es la sala vacía enseñando de qué va.
      *
@@ -499,11 +496,8 @@ const TEXTOS = {
     renombrarSala: "click to name it",
     ningunaSala: "no room open",
     quieresConstruir: "What do you want to build?",
-    paraLaSala: "To: the room",
-    paraElAgente: "To: the agent",
-    paraAgenteNuevo: "To: new agent",
-    paraAgente: (n: string) => `To: ${n}`,
-    elegirDestino: "Choose who you're talking to",
+    elegirAgente: "Talk to an agent",
+    agenteNuevo: "new agent",
     construyendo: "Building…",
     construyendoNota: "The agent is mid-build; this will settle on its own when it finishes.",
     armandoPrimera: "The agent is building the first version",
@@ -515,7 +509,7 @@ const TEXTOS = {
     cargandoSala: "Loading the room…",
     reconectando: "No connection. Reconnecting…",
     hablaConLaSala: (m: "solo" | "multi"): string =>
-      m === "solo" ? "type what you want to build" : "message your teammates, or pick an agent below",
+      m === "solo" ? "type what you want to build" : "message your teammates, or pick an agent above",
     ejemplos: [
       "a deck for my class",
       "a simple game",

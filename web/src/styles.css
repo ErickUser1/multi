@@ -4040,34 +4040,67 @@ img.av.av-personaje {
   text-align: center;
 }
 
-/* A quién va el mensaje, junto al clip. Chico y del color del texto apagado:
-   es un ajuste del mensaje, no una acción que compita con enviar. */
-.caja-espacio {
-  flex: 1;
+/* Los agentes arriba de la caja: con quién se puede hablar, a la vista. Picar
+   uno pone su mención al inicio del mensaje; picarlo otra vez la quita. */
+.selector-agentes {
+  margin: 0 0 8px;
 }
-.destino-btn {
+.selector-cab {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  max-width: 60%;
-  margin-left: 8px;
-  padding: 4px 10px;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: var(--dim);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.selector-cab:hover {
+  color: var(--texto);
+}
+.selector-escogido {
+  text-transform: none;
+  color: var(--texto);
+}
+.selector-lista {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.selector-op {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 5px 10px;
   border: 1px solid var(--linea);
   border-radius: 999px;
   background: transparent;
-  color: var(--dim);
+  color: var(--texto);
   font-size: 12px;
   cursor: pointer;
 }
-.destino-btn:hover,
-.destino-btn.on {
-  color: var(--texto);
+.selector-op:hover {
   border-color: var(--dim);
 }
-.destino-texto {
+.selector-op.on {
+  background: var(--caja);
+}
+.selector-op.nuevo {
+  color: var(--dim);
+  border-style: dashed;
+}
+.selector-hint {
+  color: var(--dim);
+  font-size: 11px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  max-width: 140px;
 }
 .destino-punto {
   width: 8px;

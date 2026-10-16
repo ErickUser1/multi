@@ -839,29 +839,30 @@ function Sala({
   // El menú de menciones de la caja del chat (el mismo que usan los comentarios).
   const menciones = useMenciones(agents);
   /**
-   * El selector de a quién va el mensaje, junto al clip.
+   * Los agentes de la sala, arriba de la caja, para escoger a quién le hablas.
    *
    * Lo pidieron en una sesión de cuatro personas con cuatro agentes: hablarle
    * al correcto dependía de acordarse de escribir `@agente-3`, y un mensaje sin
    * mención en multijugador no despertaba a nadie ("no tagueaste el agente").
+   *
+   * Abierto de entrada, porque es la forma de hablarle a un agente y si nace
+   * escondido nadie sabe que existe. Se puede plegar, y se recuerda.
    */
-  const [selectorAbierto, setSelectorAbierto] = useState(false);
-  const selectorRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    if (!selectorAbierto) return;
-    const fuera = (e: MouseEvent) => {
-      if (!selectorRef.current?.contains(e.target as Node)) setSelectorAbierto(false);
-    };
-    const esc = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setSelectorAbierto(false);
-    };
-    document.addEventListener("mousedown", fuera);
-    document.addEventListener("keydown", esc);
-    return () => {
-      document.removeEventListener("mousedown", fuera);
-      document.removeEventListener("keydown", esc);
-    };
-  }, [selectorAbierto]);
+  const [agentesPlegados, setAgentesPlegados] = useState(() => {
+    try {
+      return localStorage.getItem("multi.agentesPlegados") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const plegarAgentes = (v: boolean) => {
+    setAgentesPlegados(v);
+    try {
+      localStorage.setItem("multi.agentesPlegados", v ? "1" : "0");
+    } catch {
+      // Sin almacenamiento solo no se recuerda.
+    }
+  };
   /** Qué opción del menú de menciones está resaltada: la que toma un Tab o un Enter. */
   /** Se incrementa cuando el historial cambia, para que el scrubber recargue. */
   const [histVersion, setHistVersion] = useState(0);
@@ -1619,8 +1620,13 @@ function Sala({
    * siempre.
    */
   const elegirDestino = (nombre: string) => {
-    setDraft((d) => `@${nombre} ${d.replace(MENCION_AL_INICIO, "")}`);
-    setSelectorAbierto(false);
+    // Picar el que ya está escogido lo quita: así se vuelve a solo platicar
+    // sin una opción aparte que se lea como una persona más.
+    setDraft((d) => {
+      const actual = d.match(MENCION_AL_INICIO)?.[1]?.toLowerCase();
+      const sin = d.replace(MENCION_AL_INICIO, "");
+      return actual === nombre.toLowerCase() ? sin : `@${nombre} ${sin}`;
+    });
     requestAnimationFrame(() => {
       const el = inputRef.current;
       if (!el) return;
@@ -2069,14 +2075,50 @@ function Sala({
               <span aria-hidden="true">→</span>
             </button>
           )}
-          <div className="input-wrap" ref={selectorRef}>
-            {selectorAbierto && (
-              <MentionMenu
-                opciones={opcionesDeMencion(agents, "")}
-                seleccion={-1}
-                onPick={(n) => elegirDestino(n)}
-              />
-            )}
+          {/* Solo cuando hay de dónde escoger (multijugador con gente, o varios
+              agentes). Sola con un agente no hay decisión que tomar. */}
+          {roomId && (modoAlEscribir === "multi" || agents.length > 1) && (() => {
+            const escogido = draft.match(MENCION_AL_INICIO)?.[1]?.toLowerCase() ?? null;
+            return (
+              <div className={`selector-agentes${agentesPlegados ? " plegado" : ""}`}>
+                <button
+                  type="button"
+                  className="selector-cab"
+                  onClick={() => plegarAgentes(!agentesPlegados)}
+                  aria-expanded={!agentesPlegados}
+                >
+                  <span aria-hidden="true">{agentesPlegados ? "▸" : "▾"}</span>
+                  {t.elegirAgente}
+                  {agentesPlegados && escogido && <span className="selector-escogido">@{escogido}</span>}
+                </button>
+                {!agentesPlegados && (
+                  <div className="selector-lista" role="listbox" aria-label={t.elegirAgente}>
+                    {opcionesDeMencion(agents, "").map((o) => (
+                      <button
+                        key={o.name}
+                        type="button"
+                        role="option"
+                        aria-selected={escogido === o.name.toLowerCase()}
+                        className={`selector-op${escogido === o.name.toLowerCase() ? " on" : ""}${o.nuevo ? " nuevo" : ""}`}
+                        style={escogido === o.name.toLowerCase() ? { borderColor: o.color } : undefined}
+                        onClick={() => elegirDestino(o.name)}
+                        title={o.hint}
+                      >
+                        {o.nuevo ? (
+                          <span aria-hidden="true">+</span>
+                        ) : (
+                          <span className="destino-punto" style={{ background: o.color }} />
+                        )}
+                        <span>{o.nuevo ? t.agenteNuevo : o.name}</span>
+                        {!o.nuevo && <span className="selector-hint">{o.hint}</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+          <div className="input-wrap">
             {menciones.abierto && (
               <MentionMenu opciones={menciones.opciones} seleccion={menciones.sel} onPick={pickMention} />
             )}
@@ -2164,35 +2206,6 @@ function Sala({
                 />
               </svg>
                 </button>
-                {/* A quién va: solo cuando hay de dónde escoger (multijugador con
-                    gente, o varios agentes). Sola con un agente no hay decisión
-                    que tomar y el chip sería ruido. */}
-                {roomId && (modoAlEscribir === "multi" || agents.length > 1) && (() => {
-                  const nombre = draft.match(MENCION_AL_INICIO)?.[1] ?? null;
-                  const agente = nombre ? agents.find((a) => a.name.toLowerCase() === nombre.toLowerCase()) : undefined;
-                  const etiqueta = !nombre
-                    ? modoAlEscribir === "multi"
-                      ? t.paraLaSala
-                      : t.paraElAgente
-                    : nombre.toLowerCase() === "agente"
-                      ? t.paraAgenteNuevo
-                      : t.paraAgente(agente?.name ?? nombre);
-                  return (
-                    <button
-                      type="button"
-                      className={`destino-btn${selectorAbierto ? " on" : ""}`}
-                      onClick={() => setSelectorAbierto((v) => !v)}
-                      title={t.elegirDestino}
-                      aria-label={t.elegirDestino}
-                      aria-expanded={selectorAbierto}
-                    >
-                      {agente && <span className="destino-punto" style={{ background: agente.color }} />}
-                      <span className="destino-texto">{etiqueta}</span>
-                      <span aria-hidden="true">▾</span>
-                    </button>
-                  );
-                })()}
-                <span className="caja-espacio" />
                 {/* Enviar también con botón: enter ya funcionaba, pero en el
                     teléfono no hay enter que mande, y quien llega de WhatsApp
                     busca la flecha antes que el teclado. */}

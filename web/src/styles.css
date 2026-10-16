@@ -4070,3 +4070,16 @@ img.av.av-personaje {
   position: static;
   margin-top: 6px;
 }
+
+/* "Variables de entorno" en compu; en celular la barra no da para tanto. */
+.env-corto {
+  display: none;
+}
+@media (max-width: 820px) {
+  .env-largo {
+    display: none;
+  }
+  .env-corto {
+    display: inline;
+  }
+}

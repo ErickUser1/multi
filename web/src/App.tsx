@@ -71,6 +71,9 @@ const ALTO_MAXIMO_CAJA = 180;
  * Los anchos son los de siempre para cada clase de pantalla; lo que importa no
  * es el número exacto sino cruzar los puntos donde un layout se rompe.
  */
+/** Cuánto se sigue tapando el error de compilación cuando el agente ya terminó. */
+const GRACIA_TRAS_TERMINAR_MS = 3000;
+
 const VISTAS = ["escritorio", "tablet", "movil"] as const;
 type Vista = (typeof VISTAS)[number];
 
@@ -757,6 +760,34 @@ function Sala({
   );
   /** El agente cuyo trabajo se anuncia encima del preview: el primero que esté en algo. */
   const agenteActivo = agents.find((a) => a.state !== "idle") ?? null;
+  /**
+   * El preview tiene el overlay rojo de Vite, según el inspector del iframe.
+   *
+   * Mientras un agente trabaja casi siempre es obra a medias (un `main.tsx` que
+   * importa un `App.tsx` que viene en el siguiente paso) y se tapa con un
+   * "Construyendo…": el 14/10 dos personas lo vieron y se leía como que Multi
+   * se había roto. Sin agente trabajando se deja ver, porque ahí sí es real.
+   */
+  const [errorDeCompilacion, setErrorDeCompilacion] = useState(false);
+  /**
+   * Unos segundos después de que el agente termina se sigue tapando: el último
+   * cambio todavía está compilando y Vite quita el overlay solo al acabar. Sin
+   * esto el rojo se asomaba justo al terminar, que es cuando todos miran.
+   */
+  const [enGracia, setEnGracia] = useState(false);
+  const habiaAgente = useRef(false);
+  useEffect(() => {
+    const hay = agenteActivo !== null;
+    if (habiaAgente.current && !hay) {
+      setEnGracia(true);
+      const t = setTimeout(() => setEnGracia(false), GRACIA_TRAS_TERMINAR_MS);
+      habiaAgente.current = hay;
+      return () => clearTimeout(t);
+    }
+    habiaAgente.current = hay;
+    if (hay) setEnGracia(false);
+  }, [agenteActivo]);
+  const taparError = errorDeCompilacion && (agenteActivo !== null || enGracia);
   /** Qué está haciendo, en palabras: su última acción, o su estado si aún no hay. */
   const ultimaLineaDe = (a: Agent): string => {
     const lineas = toolLines[a.id];
@@ -917,6 +948,9 @@ function Sala({
   // Cada vez que cambia a qué apunta el iframe, vuelve a estar cargando.
   useEffect(() => {
     if (previewReady) setCargandoFrame(true);
+    // Otro iframe: lo que dijo el anterior ya no vale. El inspector del nuevo
+    // avisa en cuanto carga si trae el overlay o no.
+    setErrorDeCompilacion(false);
   }, [previewSrc, previewReady, relanzadas]);
   // Origen del proxy, para validar postMessage — cuidado 1.
   const proxyOrigin = new URL(SERVER_URL).origin;
@@ -1295,6 +1329,8 @@ function Sala({
         if (!marco || !esc) return;
         const { x, y } = m.data as { x: number; y: number };
         socketRef.current?.emit("cursor", { x: marco.left - esc.left + x, y: marco.top - esc.top + y });
+      } else if (m.type === "compilacion") {
+        setErrorDeCompilacion(!!(m.data as { conError?: boolean })?.conError);
       } else if (m.type === "element:gone") {
         // El elemento que tenía seleccionado desapareció (HMR) — cuidado edge case.
         setMySelection(null);
@@ -2452,6 +2488,17 @@ function Sala({
                     <span className="preview-trabajando-punto" style={{ background: agenteActivo.color }} />
                     <span className="preview-trabajando-quien">{agenteActivo.name}</span>
                     <span>{ultimaLineaDe(agenteActivo)}</span>
+                  </div>
+                )}
+                {taparError && (
+                  <div className="preview-construyendo" role="status">
+                    <div className="preview-puntos" aria-hidden="true">
+                      <span />
+                      <span />
+                      <span />
+                    </div>
+                    <p className="preview-titulo">{t.construyendo}</p>
+                    <p className="preview-loading-sub">{t.construyendoNota}</p>
                   </div>
                 )}
                 <iframe

@@ -142,7 +142,22 @@ export const INSPECTOR_SCRIPT = String.raw`
     }
   }
 
-  var mo = new MutationObserver(function () { revalidate(); });
+  // ── el overlay de error de Vite ─────────────────────────────────────────
+  // Mientras un agente arma archivos, uno puede importar a otro que todavía no
+  // existe y Vite pinta su error rojo unos segundos. La sala decide si taparlo
+  // (si hay un agente trabajando, es obra a medias y no un error de verdad);
+  // aquí solo se avisa cuándo aparece y cuándo se va. Vite lo agrega como hijo
+  // directo de <body> y lo quita solo cuando el siguiente cambio compila.
+  var conError = null;
+  function revisarErrorDeCompilacion() {
+    var ahora = !!document.querySelector('vite-error-overlay');
+    if (ahora === conError) return;
+    conError = ahora;
+    send('compilacion', { conError: ahora });
+  }
+  revisarErrorDeCompilacion();
+
+  var mo = new MutationObserver(function () { revalidate(); revisarErrorDeCompilacion(); });
   mo.observe(document.documentElement, { childList: true, subtree: true, attributes: true });
 
   // reposicionar overlays al hacer scroll/resize (las coords son fixed)

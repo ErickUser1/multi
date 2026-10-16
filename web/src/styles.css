@@ -4011,3 +4011,11 @@ img.av.av-personaje {
     font-size: 12px;
   }
 }
+
+/* El interruptor de modo va en la barra junto a botones de acción (Publicar,
+   Compartir). Más chico que el de las vistas para que no compita con ellos, y
+   sin mayúsculas gruesas para que no se lea como uno más de la fila. */
+.switch-modo .switch-op {
+  padding: 5px 10px;
+  font-size: 10.5px;
+}

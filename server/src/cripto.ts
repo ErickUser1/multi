@@ -43,7 +43,7 @@ export function hayLlave(): boolean {
 
 export class SinLlave extends Error {
   constructor() {
-    super("este Multi no tiene MULTI_LLAVE configurada, así que no puede guardar secretos");
+    super("este Multti no tiene MULTI_LLAVE configurada, así que no puede guardar secretos");
   }
 }
 

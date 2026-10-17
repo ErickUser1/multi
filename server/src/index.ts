@@ -312,7 +312,7 @@ fastify.get("/auth/google", async (req, reply) => {
   // Sin credenciales configuradas no hay login, y se dice. Es una capacidad que
   // solo puede habilitar quien hospeda este Multi.
   if (!cred) {
-    return reply.code(503).send({ error: "este Multi no tiene configurado el inicio de sesión" });
+    return reply.code(503).send({ error: "este Multti no tiene configurado el inicio de sesión" });
   }
   const state = nuevoState();
   return reply.redirect(urlDeAutorizacion(cred, state, urlDeVuelta(req)));
@@ -921,11 +921,11 @@ function vueltaDeSupabase(req: { headers: Record<string, unknown> }): string {
 
 fastify.get<{ Params: { id: string } }>("/rooms/:id/supabase/conectar", async (req, reply) => {
   const cred = credencialDeSupabase();
-  if (!cred) return reply.code(503).send({ error: "este Multi no tiene configurado Supabase" });
+  if (!cred) return reply.code(503).send({ error: "este Multti no tiene configurado Supabase" });
   if (!hayLlave()) {
     // Sin dónde guardar el token, autorizar no serviría de nada: la persona
     // pasaría por toda la pantalla de permisos para que se perdiera al volver.
-    return reply.code(503).send({ error: "este Multi no puede guardar la conexión (falta MULTI_LLAVE)" });
+    return reply.code(503).send({ error: "este Multti no puede guardar la conexión (falta MULTI_LLAVE)" });
   }
   const room = getRoom(req.params.id) ?? (await wakeRoom(req.params.id));
   if (!room) return reply.code(404).send({ error: "sala no encontrada" });
@@ -959,7 +959,7 @@ fastify.get<{ Querystring: { code?: string; state?: string; error?: string } }>(
     const cred = credencialDeSupabase();
     if (!cred) {
       console.error("[supabase] no hay credencial configurada");
-      return reply.code(503).send({ error: "este Multi no tiene configurado Supabase" });
+      return reply.code(503).send({ error: "este Multti no tiene configurado Supabase" });
     }
 
     const vuelo = consumirStateSupabase(req.query.state);
@@ -1285,7 +1285,7 @@ function avisoDeBaseConectada(roomId: string, agentId: string, yaHabiaTrabajado:
   avisados.add(agentId);
   if (!yaHabiaTrabajado) return "";
   return (
-    "[Aviso de Multi] La sala acaba de conectar su base de Supabase: VITE_SUPABASE_URL y " +
+    "[Aviso de Multti] La sala acaba de conectar su base de Supabase: VITE_SUPABASE_URL y " +
     "VITE_SUPABASE_ANON_KEY ya están en el .env y el login anónimo está prendido. Si antes " +
     "dejaste la app guardando datos en local, o dijiste que faltaba conectar la base, eso " +
     "cambió: cuando venga al caso de lo que te piden, pásala a Supabase.\n\n"
@@ -1463,7 +1463,7 @@ fastify.post<{ Params: { id: string } }>("/rooms/:id/publicar", async (req, repl
   if (!cred) {
     // Sin credencial no se degrada en silencio: se dice que este Multi no tiene
     // publicación configurada, que es algo que solo su dueño puede resolver.
-    return reply.code(409).send({ error: "este Multi no tiene configurada la publicación" });
+    return reply.code(409).send({ error: "este Multti no tiene configurada la publicación" });
   }
   if (room.publicando) {
     return reply.code(409).send({ error: "ya se está publicando", etapa: room.publicando });
@@ -3168,7 +3168,7 @@ async function setupIsolation(): Promise<void> {
         "",
         "  *** SIN AISLAMIENTO A PROPOSITO (MULTI_SIN_AISLAMIENTO=1) ***",
         "  Los comandos del agente corren en ESTA máquina, con acceso a todo lo",
-        "  que alcance el usuario que arrancó Multi. Cualquiera que entre a una",
+        "  que alcance el usuario que arrancó Multti. Cualquiera que entre a una",
         "  sala le puede dar órdenes a ese agente.",
         "",
       ].join("\n"),
@@ -3241,7 +3241,7 @@ try {
       ? `respaldo: ${PERFILES[FALLBACK.provider].label} + key propia por persona`
       : "cada quien trae su key";
   console.log(
-    `Multi server en http://localhost:${PORT}  (${modoKeys}, ${salas} sala(s) guardada(s))`,
+    `Multti server en http://localhost:${PORT}  (${modoKeys}, ${salas} sala(s) guardada(s))`,
   );
   if (!credencialDeGoogle()) {
     console.log("  (sin GOOGLE_CLIENT_ID: se entra sin cuenta, que es el modo de siempre)");
@@ -3281,7 +3281,7 @@ async function loadEnv(): Promise<void> {
 const AVISO_SIN_AISLAMIENTO =
   "no puedo ejecutar código en esta sala ahora mismo, falta la caja donde corre. " +
   "Pueden seguir platicando, y todo lo que ya hicieron sigue guardado. " +
-  "Quien administra este Multi tiene que revisarlo.";
+  "Quien administra este Multti tiene que revisarlo.";
 
 /**
  * Un nombre de sala a partir de lo primero que se pidió.

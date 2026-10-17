@@ -138,7 +138,7 @@ export function makeProvider(id: ProviderId, apiKey: string, modelo?: string): M
     // OpenRouter pide identificar la app que llama (aparece en su ranking).
     extraHeaders:
       id === "openrouter"
-        ? { "HTTP-Referer": "https://github.com/multi", "X-Title": "Multi" }
+        ? { "HTTP-Referer": "https://github.com/multi", "X-Title": "Multti" }
         : undefined,
   });
 }

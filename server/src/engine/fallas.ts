@@ -24,12 +24,12 @@ export function explicarFallaDelProveedor(texto: string, deRespaldo: boolean): s
   }
   if (texto.includes("401") || texto.includes("key inválida") || texto.includes("invalid_api_key")) {
     return deRespaldo
-      ? "Multi tiene un problema con su conexión al modelo, no es nada de tu lado. Intenta de nuevo en un rato."
+      ? "Multti tiene un problema con su conexión al modelo, no es nada de tu lado. Intenta de nuevo en un rato."
       : "tu API key no es válida. Revísala en el panel de arriba.";
   }
   if (texto.includes("rate") || texto.includes("429")) {
     return deRespaldo
-      ? "hay mucha gente usando Multi en este momento. Espera un minuto y vuelve a intentar."
+      ? "hay mucha gente usando Multti en este momento. Espera un minuto y vuelve a intentar."
       : "tu cuenta llegó a su límite de uso por ahora. Espera un momento o usa otra key.";
   }
   if (texto.includes("Internal Server Error") || texto.includes("no responde") || texto.includes("503")) {
@@ -39,7 +39,7 @@ export function explicarFallaDelProveedor(texto: string, deRespaldo: boolean): s
   }
   if (texto.includes("model") && texto.includes("not found")) {
     return deRespaldo
-      ? "Multi tiene un problema con su conexión al modelo, no es nada de tu lado. Intenta de nuevo en un rato."
+      ? "Multti tiene un problema con su conexión al modelo, no es nada de tu lado. Intenta de nuevo en un rato."
       : "ese modelo no existe o tu cuenta no tiene acceso. Elige otro en el panel.";
   }
   if (texto.includes("se cortó a media escritura")) {
@@ -57,4 +57,4 @@ export function explicarFallaDelProveedor(texto: string, deRespaldo: boolean): s
 
 /** Cuando el saldo que se acabó es el de Multi, no el de quien está en la sala. */
 export const SIN_SALDO_DE_MULTI =
-  "Multi se quedó sin saldo por ahora. No es tu cuenta ni nada que hayas hecho: ya lo estamos resolviendo. Intenta de nuevo en un rato.";
+  "Multti se quedó sin saldo por ahora. No es tu cuenta ni nada que hayas hecho: ya lo estamos resolviendo. Intenta de nuevo en un rato.";

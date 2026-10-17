@@ -1,8 +1,8 @@
-# Multi
+# Multti
 
 A live room where you, your teammates and several agents build the same app.
 
-![A room in Multi: four people connected, the chat on the left, the app running live on the right with everyone's cursors on it](docs/sala.webp)
+![A room in Multti: four people connected, the chat on the left, the app running live on the right with everyone's cursors on it](docs/sala.webp)
 
 Four people in that room. Someone asks in plain language, the agent answers in terms of what changed, and the app on the right updates without a refresh. Everyone sees it at the same time, cursors included.
 
@@ -39,7 +39,7 @@ Every work tool of the last two decades won by going multiplayer. Google Docs be
 
 AI coding hasn't had that moment. You open a chat, type a prompt, get an answer in a box only you can see. Two people building the same thing means two private threads, two agents, and finding out you diverged three days later.
 
-Multi makes the project the place you're in, not the file you pass around.
+Multti makes the project the place you're in, not the file you pass around.
 
 <sub>The idea comes from <a href="https://www.ycombinator.com/rfs">Multiplayer AI</a> (Aaron Epstein, YC RFS).</sub>
 
@@ -73,4 +73,4 @@ Deliberate, not an oversight. PRs in either language. just keep the file you tou
 
 ## Contributing
 
-Multi is proprietary: the source is public to read, but not to copy, modify or redistribute. See [LICENSE](LICENSE). External contributions are not being accepted right now.
+Multti is proprietary: the source is public to read, but not to copy, modify or redistribute. See [LICENSE](LICENSE). External contributions are not being accepted right now.

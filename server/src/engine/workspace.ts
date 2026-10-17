@@ -66,7 +66,7 @@ export async function createWorkspace(
   if (!existsSync(join(dir, ".git"))) {
     await execFileP("git", ["init", "-q"], { cwd: dir });
     // Config local para que los commits del motor no dependan del git global.
-    await execFileP("git", ["config", "user.name", "Multi"], { cwd: dir });
+    await execFileP("git", ["config", "user.name", "Multti"], { cwd: dir });
     await execFileP("git", ["config", "user.email", "motor@multi.local"], { cwd: dir });
   } else {
     await limpiarLocksHuerfanos(dir);

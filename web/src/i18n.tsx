@@ -166,7 +166,7 @@ const TEXTOS = {
       "una calculadora de gastos",
     ],
     construyeAlgoComo: "Construye algo como",
-    acercaDeMulti: "Acerca de Multi",
+    acercaDeMulti: "Acerca de Multti",
     adjuntarImagen: "Adjuntar un archivo",
     enviar: "Enviar",
     agentesInactivos: (n: number) => `${n} agente${n === 1 ? "" : "s"} inactivo${n === 1 ? "" : "s"}`,
@@ -259,7 +259,7 @@ const TEXTOS = {
     publicadaTitulo: "Publicada",
     sinPublicarTitulo: "Sin publicar",
     publicarNota:
-      "Publicar pone la app en internet, con un link que puedes pasarle a quien sea. Nadie tiene que entrar a Multi para verla.",
+      "Publicar pone la app en internet, con un link que puedes pasarle a quien sea. Nadie tiene que entrar a Multti para verla.",
     publicarNotaViva:
       "Lo que cambies aquí no se ve afuera hasta que vuelvas a publicar.",
     preparandoZip: "Preparando…",
@@ -299,7 +299,7 @@ const TEXTOS = {
     envNoSePudo: "no se pudieron guardar: ",
     sbTitulo: "Base de datos",
     sbNota:
-      "Conecta Supabase y la sala tendrá su base, con las variables puestas solas. El proyecto queda en tu cuenta de Supabase, no en Multi.",
+      "Conecta Supabase y la sala tendrá su base, con las variables puestas solas. El proyecto queda en tu cuenta de Supabase, no en Multti.",
     sbConectar: "Conectar Supabase",
     sbCreando: "Creando el proyecto…",
     sbLevantando: "Levantando la base, esto tarda unos minutos…",
@@ -310,7 +310,7 @@ const TEXTOS = {
     sbTerminar: "Terminar de conectar",
     sbDesconectar: "Desconectar",
     sbPassword:
-      "Esta es la contraseña de tu base. Cópiala ahora: Supabase no la vuelve a mostrar y Multi no la va a enseñar otra vez.",
+      "Esta es la contraseña de tu base. Cópiala ahora: Supabase no la vuelve a mostrar y Multti no la va a enseñar otra vez.",
     seleccionarElemento: "Seleccionar elemento",
     selecciono: "seleccionó",
     contraer: "contraer",
@@ -519,7 +519,7 @@ const TEXTOS = {
       "an expense calculator",
     ],
     construyeAlgoComo: "Build something like",
-    acercaDeMulti: "About Multi",
+    acercaDeMulti: "About Multti",
     adjuntarImagen: "Attach a file",
     enviar: "Send",
     agentesInactivos: (n: number) => `${n} idle agent${n === 1 ? "" : "s"}`,
@@ -609,7 +609,7 @@ const TEXTOS = {
     publicadaTitulo: "Published",
     sinPublicarTitulo: "Not published",
     publicarNota:
-      "Publishing puts the app online, with a link you can send to anyone. They don't need to join Multi to see it.",
+      "Publishing puts the app online, with a link you can send to anyone. They don't need to join Multti to see it.",
     publicarNotaViva: "What you change here isn't live until you publish again.",
     preparandoZip: "Preparing…",
     zipSalaVacia: "nothing to download yet",
@@ -647,7 +647,7 @@ const TEXTOS = {
     envNoSePudo: "couldn't save them: ",
     sbTitulo: "Database",
     sbNota:
-      "Connect Supabase and the room gets its own database, with the variables filled in for you. The project lives in your Supabase account, not in Multi.",
+      "Connect Supabase and the room gets its own database, with the variables filled in for you. The project lives in your Supabase account, not in Multti.",
     sbConectar: "Connect Supabase",
     sbCreando: "Creating the project…",
     sbLevantando: "Bringing the database up, this takes a few minutes…",
@@ -658,7 +658,7 @@ const TEXTOS = {
     sbTerminar: "Finish connecting",
     sbDesconectar: "Disconnect",
     sbPassword:
-      "This is your database password. Copy it now: Supabase never shows it again, and neither will Multi.",
+      "This is your database password. Copy it now: Supabase never shows it again, and neither will Multti.",
     seleccionarElemento: "Select element",
     selecciono: "selected",
     contraer: "collapse",

@@ -280,7 +280,7 @@ export const iniciarDocumentoTool: Tool = {
     name: "iniciar_documento",
     description:
       "Crea el DOCUMENTO de la sala (ensayo, reporte, propuesta, manual, plan, investigación…) con su esqueleto: " +
-      "el título y una sección pendiente por cada parte, con lo que va a llevar. Multi pinta el documento en el panel de " +
+      "el título y una sección pendiente por cada parte, con lo que va a llevar. Multti pinta el documento en el panel de " +
       "la sala, las personas lo editan ahí mismo, y se exporta. Una sala tiene un solo documento, y puede tenerlo junto " +
       "con una app. Úsala UNA vez, solo si la sala todavía no tiene documento. Devuelve el documento con los ids y " +
       "huellas de cada sección para llenarlas con escribir_seccion.",

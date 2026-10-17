@@ -204,7 +204,7 @@ export function motivoDeFallo(texto: string): string {
  */
 function explicarWrangler(texto: string): string {
   if (/authentication|unauthorized|10000|invalid.*token/i.test(texto)) {
-    return "la credencial de publicación no sirve. Quien administra este Multi tiene que revisarla";
+    return "la credencial de publicación no sirve. Quien administra este Multti tiene que revisarla";
   }
   if (/account.*not found|10001/i.test(texto)) {
     return "la cuenta configurada para publicar no existe o el token no la alcanza";

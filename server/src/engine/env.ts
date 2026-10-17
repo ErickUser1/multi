@@ -128,7 +128,7 @@ async function escribir(workspaceDir: string, crudas: unknown): Promise<Variable
 
   const cabecera = [
     "# Las variables del proyecto de esta sala.",
-    "# Las escribe Multi desde el panel de la barra de arriba; se pueden editar",
+    "# Las escribe Multti desde el panel de la barra de arriba; se pueden editar",
     "# aquí también, pero el panel las vuelve a escribir cuando alguien lo use.",
     "",
   ];

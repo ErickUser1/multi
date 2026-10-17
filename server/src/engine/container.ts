@@ -36,7 +36,7 @@ const execFileP = promisify(execFile);
  * imagen nueva "no existe" y se construye sola; los contenedores viejos se van
  * en el barrido del arranque (`sweepOrphanContainers`).
  */
-const ARCHIVOS_DE_LA_IMAGEN = ["room.Dockerfile", "qa/package.json", "qa/capturar.mjs"];
+const ARCHIVOS_DE_LA_IMAGEN = ["room.Dockerfile", "qa/package.json", "qa/capturar.mjs", "qa/fuentes.conf"];
 
 function huellaDeLaImagen(): string {
   const carpeta = fileURLToPath(new URL("../../../docker/", import.meta.url));

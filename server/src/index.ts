@@ -2730,8 +2730,11 @@ async function runAgentTurn(
       // al empezar el turno: en una sala vacía el preview arranca a la mitad,
       // cuando el agente ya escribió el proyecto.
       verPreview: async (pedido) => {
-        const base = direccionDelPreview(room);
-        return base ? capturarPreview(runner, base, pedido) : null;
+        const base = direccionDelPreview(room) ?? (await levantarPreviewParaVerla(room));
+        if (base) return capturarPreview(runner, base, pedido);
+        return room.previewBooting
+          ? { ok: false, error: "la vista previa se está levantando; vuelve a pedirla en un momento" }
+          : null;
       },
       ve: proveedorQueVe(provider),
       // El documento de la sala: el agente lo lee y lo cambia por bloque.
@@ -3017,6 +3020,37 @@ async function avisarTipo(room: Room): Promise<void> {
   } catch (err) {
     console.error(`[sala ${room.id}] no se pudo revisar el tipo:`, err);
   }
+}
+
+/** Cuánto espera ver_preview a que arranque una vista previa que no estaba corriendo. */
+const ESPERA_DE_ARRANQUE_MS = 90_000;
+
+/**
+ * Levanta la vista previa a mitad de un turno, para que el agente la pueda ver.
+ *
+ * Multi la arranca al cerrar cada turno, y en una sala nueva eso es tarde: el
+ * agente arma el proyecto, pide ver_preview para revisarlo y todavía no hay
+ * nada. Pasó en la primera prueba real: contestó "no la pude ver" justo en el
+ * primer pedido, que es donde más se rompen las cosas.
+ *
+ * Es seguro hacerlo aquí y no en cuanto aparece el package.json: si el agente
+ * pide ver es porque ya terminó de instalar, y un `npm install` de Multi no se
+ * pisa con uno suyo. De paso la sala ve aparecer la vista previa antes.
+ *
+ * Devuelve la dirección, o null si no hay proyecto o no levantó a tiempo.
+ */
+async function levantarPreviewParaVerla(room: Room): Promise<string | null> {
+  const limite = Date.now() + ESPERA_DE_ARRANQUE_MS;
+  const arranque = notifyPreviewWhenReady(room).catch((err) => {
+    console.error(`[sala ${room.id}] no se pudo levantar la vista previa para ver_preview:`, err);
+  });
+  await Promise.race([arranque, new Promise((r) => setTimeout(r, ESPERA_DE_ARRANQUE_MS))]);
+  // Si ya había otro arranque en curso, el de arriba vuelve enseguida sin
+  // esperarlo: hay que mirar hasta que aparezca o se acabe el tiempo.
+  while (!direccionDelPreview(room) && room.previewBooting && Date.now() < limite) {
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  return direccionDelPreview(room);
 }
 
 /**

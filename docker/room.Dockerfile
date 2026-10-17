@@ -27,14 +27,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # `ver_preview`). Va aquí y no en el server porque la página es código del
 # proyecto, y el contenedor es el encierro de todo lo que no revisó nadie.
 # Las fuentes son para que la captura se parezca a lo que ve la gente: sin
-# ellas los emojis salen como cuadritos y el texto en una fuente de relleno.
+# ellas los emojis salen como cuadritos y la letra del sistema (`system-ui`,
+# `sans-serif`) caía en Liberation Mono, de máquina de escribir. Cuál real
+# usar para cada genérica lo dice qa/fuentes.conf.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       chromium \
+      fontconfig \
+      fonts-dejavu-core \
+      fonts-roboto-unhinted \
       fonts-liberation \
       fonts-noto-color-emoji \
     && rm -rf /var/lib/apt/lists/*
 
 COPY qa/ /opt/qa/
+COPY qa/fuentes.conf /etc/fonts/local.conf
 RUN cd /opt/qa && npm install --omit=dev --no-audit --no-fund
 ENV MULTI_CHROMIUM=/usr/bin/chromium
 

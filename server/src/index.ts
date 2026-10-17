@@ -22,6 +22,7 @@ import {
   maybeStartPreview,
   alCaerPreview,
   ensureRunner,
+  direccionDelPreview,
   loadRoomIndex,
   deleteRoom,
   cambiarModo,
@@ -34,6 +35,7 @@ import {
   dormirSalasOciosas,
 } from "./rooms.js";
 import { detectLaunch } from "./engine/preview.js";
+import { capturarPreview } from "./engine/captura.js";
 import { getStorage } from "./storage/index.js";
 import { randomUUID } from "node:crypto";
 import { KeyedMutex } from "./engine/keyed-mutex.js";
@@ -1609,6 +1611,19 @@ function esPdf(a: { mediaType: string }): boolean {
   return a.mediaType === "application/pdf";
 }
 
+/**
+ * Si el modelo de este turno puede ver una imagen (las capturas de ver_preview).
+ *
+ * Por el proveedor ya construido y no por el socket: el turno puede venir de un
+ * comentario o de la cola, sin socket a la mano. Los de formato OpenAI se
+ * llaman como la etiqueta de su perfil (ver makeProvider).
+ */
+function proveedorQueVe(provider: ModelProvider): boolean {
+  if (TEST_MOCK) return true;
+  if (provider.name === "anthropic") return proveedorVe("anthropic");
+  return Object.values(PERFILES).some((p) => p.label === provider.name && p.ve);
+}
+
 function vePorSocket(socketId: string): boolean {
   if (TEST_MOCK) return true; // el mock acepta lo que le manden
   const cred = getCredential(socketId) ?? FALLBACK;
@@ -2711,6 +2726,14 @@ async function runAgentTurn(
       comentarios: operacionesDeComentarios(room, agent.name, agent.color, () => {
         comento = true;
       }),
+      // Mirar la vista previa en un navegador. Se pregunta en cada llamada y no
+      // al empezar el turno: en una sala vacía el preview arranca a la mitad,
+      // cuando el agente ya escribió el proyecto.
+      verPreview: async (pedido) => {
+        const base = direccionDelPreview(room);
+        return base ? capturarPreview(runner, base, pedido) : null;
+      },
+      ve: proveedorQueVe(provider),
       // El documento de la sala: el agente lo lee y lo cambia por bloque.
       documento: operacionesDeDocumento(room.id, room.workspace.dir, agent.name, (bloques) =>
         io.to(room.id).emit("doc:agente", { agente: agent.name, color: agent.color, bloques }),

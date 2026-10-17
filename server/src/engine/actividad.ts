@@ -19,6 +19,7 @@ export type TipoDeAccion =
   | "buscarTexto"
   | "baseDeDatos"
   | "verBase"
+  | "verPreview"
   | "adjunto"
   | "documento"
   | "leerDocumento"
@@ -58,6 +59,8 @@ export function accionDeTool(nombre: string, input: Record<string, unknown>): Ac
       return { tipo: "buscarTexto", detalle: texto("pattern") };
     case "sql":
       return { tipo: "baseDeDatos", detalle: texto("descripcion") };
+    case "ver_preview":
+      return { tipo: "verPreview", detalle: texto("ruta") || undefined };
     case "ver_base":
       return { tipo: "verBase", detalle: texto("consulta") || undefined };
     case "iniciar_documento":

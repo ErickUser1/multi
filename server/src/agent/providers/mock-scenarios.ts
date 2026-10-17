@@ -89,6 +89,22 @@ export function createDevMock(): MockProvider {
       },
     })
     .scenario({
+      // Mirar la vista previa: "revisa la vista" (o "revisa la vista en celular")
+      // llama ver_preview y repite en el chat lo que vio, para probar el camino
+      // completo desde la sala sin un modelo de verdad.
+      match: (t) => /revisa la vista/i.test(t),
+      reply: (t) => [
+        { type: "text", text: "Voy a mirar cómo quedó." },
+        {
+          type: "tool_use",
+          id: "",
+          name: "ver_preview",
+          input: { dispositivo: /celular/i.test(t) ? "celular" : "compu" },
+        },
+      ],
+      seguir: (resultado) => [{ type: "text", text: `Esto vi:\n\n${resultado}` }],
+    })
+    .scenario({
       // Un turno que se tarda: "tarda 8s" deja al agente trabajando ese rato.
       // Sirve para probar lo que la sala enseña mientras hay un agente activo.
       match: (t) => /\btarda \d+\s?s\b/i.test(t),

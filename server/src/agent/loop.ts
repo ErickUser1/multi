@@ -45,6 +45,15 @@ Bash te devuelve el exit code y la salida: LÉELOS. Un comando que falló y das 
 bueno te deja construyendo sobre nada, y quien está en la sala ve una pantalla vacía
 sin saber por qué. Si algo no salió como esperabas, arréglalo antes de seguir.
 
+Antes de decir que algo quedó, míralo con ver_preview: te da una captura de la vista
+previa y los errores que salieron. Úsalo después de cambiar algo que se ve, y si hay
+errores, un error de compilación o la página sale en blanco, arréglalo y vuelve a
+mirar. Si el pedido es de diseño o de celular, mírala también con dispositivo
+"celular". No lo uses si no tocaste nada visual, y no digas "listo" con errores a la
+vista: quien está en la sala va a ver exactamente lo mismo que tú.
+Por qué: en todas las sesiones con gente real el agente decía "listo" sin haber visto
+nada, y la pantalla en blanco la descubría la persona.
+
 Cuando vayas a llamar varias tools y no dependan entre sí, llámalas en paralelo en vez
 de una tras otra: leer tres archivos son tres llamadas simultáneas. Si una necesita el
 resultado de otra, encadénalas.
@@ -518,6 +527,14 @@ export async function runAgent(opts: {
   documento?: ToolContext["documento"];
   /** Los comentarios del documento. */
   comentarios?: ToolContext["comentarios"];
+  /** Abrir la vista previa en un navegador (tool ver_preview). */
+  verPreview?: ToolContext["verPreview"];
+  /**
+   * Si el modelo puede ver imágenes. Sin esto las capturas de ver_preview no
+   * viajan: a un modelo que no ve, una imagen le es un 400, y el texto (errores,
+   * pantalla en blanco) igual le llega.
+   */
+  ve?: boolean;
   /**
    * El historial tal como va, para que sobreviva si el turno LANZA.
    *
@@ -532,6 +549,10 @@ export async function runAgent(opts: {
   onProgreso?: (messages: Message[]) => void;
 }): Promise<RunResult> {
   const { provider, workspaceDir, userMessage, model, callbacks = {}, signal } = opts;
+  // Lo que sale de aquí (el resultado y el historial a medias) va sin capturas:
+  // se guarda y se reenvía en cada turno siguiente, y una imagen ahí se pagaría
+  // cada vez. El texto de lo que se vio sí se queda.
+  const onProgreso = (m: Message[]) => opts.onProgreso?.(sinCapturas(m));
   // Puede subir una vez si el tope cortó una herramienta (ver TOPE_REINTENTO).
   let maxTokens = opts.maxTokens;
 
@@ -552,6 +573,7 @@ export async function runAgent(opts: {
     leerBase: opts.leerBase,
     documento: opts.documento,
     comentarios: opts.comentarios,
+    verPreview: opts.verPreview,
     emit: callbacks.onToolEvent,
     agentId: opts.agentId,
     onWaitStart: opts.onWaitStart,
@@ -584,14 +606,14 @@ export async function runAgent(opts: {
       // de arriba, y el agente respondía "no tengo el contexto de la
       // conversación anterior" — rompiendo la premisa de interrumpir sin miedo.
       if (signal?.aborted) {
-        opts.onProgreso?.(messages);
-        return { finalText, turns: turn, messages, interrumpido: true };
+        onProgreso(messages);
+        return { finalText, turns: turn, messages: sinCapturas(messages), interrumpido: true };
       }
       // El array es local: si se va con el stack, el turno entero se pierde.
       // Aquí está consistente — el push del mensaje del assistant viene DESPUÉS
       // de este catch, así que lo que queda son vueltas completas con cada
       // tool_use emparejado con su tool_result.
-      opts.onProgreso?.(messages);
+      onProgreso(messages);
       throw err;
     }
 
@@ -609,8 +631,8 @@ export async function runAgent(opts: {
 
     if (end.stopReason !== "tool_use" && !sinEspacio) {
       // end_turn / stop_sequence / etc. → terminó.
-      opts.onProgreso?.(messages);
-      return { finalText, turns: turn + 1, messages };
+      onProgreso(messages);
+      return { finalText, turns: turn + 1, messages: sinCapturas(messages) };
     }
 
     // Hay tools que ejecutar. Sacar todos los tool_use del mensaje.
@@ -619,15 +641,22 @@ export async function runAgent(opts: {
     );
 
     // Ejecutar TODAS en paralelo. Cada una produce un tool_result.
-    const results = await Promise.all(
-      toolUses.map((tu) => executeTool(tu, toolCtx, callbacks)),
+    const salidas = await Promise.all(
+      toolUses.map((tu) => executeTool(tu, toolCtx, callbacks, opts.ve === true)),
     );
+    const results = salidas.map((s) => s.resultado);
+    // Las capturas de ver_preview van como bloques `image` normales, DESPUÉS de
+    // todos los tool_result del mensaje (Anthropic exige los resultados
+    // primero). Es el mismo bloque que las imágenes que pega la gente, así que
+    // cada proveedor ya sabe mandarlo.
+    const capturas = salidas.flatMap((s) => (s.imagen ? [s.imagen] : []));
 
     // Los resultados van como UN mensaje user con todos los tool_result.
     // Van SIEMPRE, aunque hayan interrumpido a media ejecución: la API exige que
     // cada tool_use tenga su tool_result, y sin eso el historial queda inválido
     // y el turno siguiente falla al mandarlo.
-    if (results.length > 0) messages.push({ role: "user", content: results });
+    if (results.length > 0) messages.push({ role: "user", content: [...results, ...capturas] });
+    soloLaUltimaCaptura(messages);
 
     // Sin espacio: las tools que alcanzaron a salir completas ya corrieron
     // arriba, así que lo que haya escrito no se pierde y cada tool_use tiene su
@@ -635,8 +664,8 @@ export async function runAgent(opts: {
     if (sinEspacio && yaSeAviso) {
       // Segunda vez en el mismo turno: otro intento serían otros 32k tirados.
       console.warn("[agente] sin espacio (max_tokens) otra vez — se rinde");
-      opts.onProgreso?.(messages);
-      return { finalText, turns: turn + 1, messages, sinEspacio: true };
+      onProgreso(messages);
+      return { finalText, turns: turn + 1, messages: sinCapturas(messages), sinEspacio: true };
     }
     if (sinEspacio) {
       // Primera vez: se le dice qué hacer distinto y se sigue. Va pegado al
@@ -660,27 +689,31 @@ export async function runAgent(opts: {
     // Interrumpido mientras corrían las tools: se cierra aquí, con el historial
     // ya consistente.
     if (signal?.aborted) {
-      opts.onProgreso?.(messages);
-      return { finalText, turns: turn + 1, messages, interrumpido: true };
+      onProgreso(messages);
+      return { finalText, turns: turn + 1, messages: sinCapturas(messages), interrumpido: true };
     }
   }
 
   // Se acabaron los turnos.
-  opts.onProgreso?.(messages);
-  return { finalText: finalText || "(el agente alcanzó el límite de turnos)", turns: turn, messages };
+  onProgreso(messages);
+  return { finalText: finalText || "(el agente alcanzó el límite de turnos)", turns: turn, messages: sinCapturas(messages) };
 }
 
-/** Ejecuta un tool_use (con gate de permisos) → tool_result. */
+type ToolResult = Extract<ContentBlock, { type: "tool_result" }>;
+type BloqueDeImagen = Extract<ContentBlock, { type: "image" }>;
+
+/** Ejecuta un tool_use (con gate de permisos) → tool_result, y la imagen si trajo una. */
 async function executeTool(
   tu: Extract<ContentBlock, { type: "tool_use" }>,
   ctx: ToolContext,
   callbacks: AgentCallbacks,
-): Promise<Extract<ContentBlock, { type: "tool_result" }>> {
+  ve: boolean,
+): Promise<{ resultado: ToolResult; imagen?: BloqueDeImagen }> {
   callbacks.onToolStart?.({ id: tu.id, name: tu.name, input: tu.input });
 
-  const emit = (result: string, isError: boolean): Extract<ContentBlock, { type: "tool_result" }> => {
+  const emit = (result: string, isError: boolean): { resultado: ToolResult } => {
     callbacks.onToolEnd?.({ id: tu.id, name: tu.name, result, isError });
-    return { type: "tool_result", tool_use_id: tu.id, content: result, is_error: isError };
+    return { resultado: { type: "tool_result", tool_use_id: tu.id, content: result, is_error: isError } };
   };
 
   // Gate de permisos.
@@ -694,11 +727,62 @@ async function executeTool(
 
   try {
     const result = await tool.run(tu.input, ctx);
-    return emit(result, false);
+    if (typeof result === "string") return emit(result, false);
+    // A un modelo que no ve, una imagen le es un 400: le llega solo el texto.
+    const salida = emit(result.texto, false);
+    return result.imagen && ve ? { ...salida, imagen: { type: "image", ...result.imagen } } : salida;
   } catch (err) {
     const msg = err instanceof ToolError ? err.message : `error inesperado: ${String(err)}`;
     return emit(msg, true);
   }
+}
+
+/** Lo que queda en el lugar de una captura que ya no viaja. */
+export const CAPTURA_RETIRADA =
+  "(aquí había una captura de ver_preview que ya no está a la vista; si necesitas verla otra vez, vuelve a pedirla)";
+
+/**
+ * Una captura es una imagen que va junto a resultados de tools. Las que pega la
+ * gente van con su texto, en un mensaje sin tool_result, y esas no se tocan.
+ */
+function esCaptura(m: Message, c: ContentBlock): boolean {
+  return c.type === "image" && m.role === "user" && m.content.some((x) => x.type === "tool_result");
+}
+
+const RETIRADA: ContentBlock = { type: "text", text: CAPTURA_RETIRADA };
+
+/**
+ * Deja la imagen solo en la captura más reciente.
+ *
+ * El historial se reenvía completo en cada vuelta: con cuatro capturas en un
+ * turno, la cuarta llamada pagaría las cuatro. Las de antes ya cumplieron, el
+ * agente actuó sobre ellas, y su texto (los errores) sigue en su tool_result.
+ */
+export function soloLaUltimaCaptura(messages: Message[]): void {
+  let vista = false;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (!m.content.some((c) => esCaptura(m, c))) continue;
+    const content = [...m.content];
+    for (let j = content.length - 1; j >= 0; j--) {
+      if (!esCaptura(m, content[j])) continue;
+      if (!vista) {
+        vista = true;
+        continue;
+      }
+      content[j] = RETIRADA;
+    }
+    messages[i] = { ...m, content };
+  }
+}
+
+/** Una copia del historial sin ninguna captura, para guardarlo. */
+export function sinCapturas(messages: Message[]): Message[] {
+  return messages.map((m) =>
+    m.content.some((c) => esCaptura(m, c))
+      ? { ...m, content: m.content.map((c) => (esCaptura(m, c) ? RETIRADA : c)) }
+      : m,
+  );
 }
 
 function textOf(message: Message): string {

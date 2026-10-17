@@ -1,0 +1,11 @@
+{
+  "name": "@multi/qa",
+  "version": "0.1.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "description": "El navegador con el que el agente mira su propia vista previa. Corre dentro del contenedor de la sala.",
+  "dependencies": {
+    "playwright-core": "1.56.1"
+  }
+}

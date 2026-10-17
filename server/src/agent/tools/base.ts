@@ -50,17 +50,33 @@ export interface ToolContext {
   documento?: import("./documento.js").OperacionesDeDocumento;
   /** Contestar y abrir comentarios en el documento. */
   comentarios?: import("./comentarios.js").OperacionesDeComentarios;
+  /**
+   * Abrir la vista previa de la sala en un navegador y traer lo que se vio.
+   * Null cuando no hay vista previa corriendo. Mismo trato que `leerBase`: la
+   * tool no sabe de puertos ni de contenedores, recibe lo que puede hacer.
+   */
+  verPreview?: (pedido: import("./ver-preview.js").PedidoDeCaptura) => Promise<import("./ver-preview.js").Captura | null>;
 }
 
 export type ToolEvent =
   | { type: "file:changed"; path: string; action: "write" | "edit" | "delete" }
   | { type: "tool:bash"; command: string };
 
-export interface Tool {
-  spec: ToolSpec;
-  /** Ejecuta la tool. Devuelve el texto de resultado que ve el modelo. */
-  run(input: Record<string, unknown>, ctx: ToolContext): Promise<string>;
+/** Lo que devuelve una tool que además de texto trae una imagen. */
+export interface ResultadoConImagen {
+  texto: string;
+  imagen?: { mediaType: string; data: string };
 }
+
+/** Casi todas devuelven solo texto; las que traen imagen lo dicen en su tipo. */
+export interface Tool<R extends string | ResultadoConImagen = string> {
+  spec: ToolSpec;
+  /** Ejecuta la tool. Devuelve el texto de resultado que ve el modelo (y a veces una imagen). */
+  run(input: Record<string, unknown>, ctx: ToolContext): Promise<R>;
+}
+
+/** Cualquier tool, para el registro. */
+export type CualquierTool = Tool<string | ResultadoConImagen>;
 
 /** Error de tool: se manda de vuelta al modelo como tool_result con is_error. */
 export class ToolError extends Error {}

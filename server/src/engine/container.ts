@@ -2,6 +2,9 @@ import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { join } from "node:path";
 import { mkdir } from "node:fs/promises";
+import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { fileURLToPath } from "node:url";
 import { KeyedMutex } from "./keyed-mutex.js";
 import { homeDir } from "./workspace.js";
 
@@ -24,7 +27,29 @@ const execFileP = promisify(execFile);
  * Así git, el CAS y el historial siguen funcionando sin enterarse de nada.
  */
 
-export const IMAGE_TAG = "multi-room:latest";
+/**
+ * Lo que entra a la imagen: si cambia algo de esto, la imagen es otra.
+ *
+ * Antes la etiqueta era `latest` y solo se construía si no existía, así que un
+ * deploy que cambiaba el Dockerfile no llegaba nunca a las salas: el servidor
+ * seguía con la imagen de la primera vez. Con la huella en la etiqueta, la
+ * imagen nueva "no existe" y se construye sola; los contenedores viejos se van
+ * en el barrido del arranque (`sweepOrphanContainers`).
+ */
+const ARCHIVOS_DE_LA_IMAGEN = ["room.Dockerfile", "qa/package.json", "qa/capturar.mjs"];
+
+function huellaDeLaImagen(): string {
+  const carpeta = fileURLToPath(new URL("../../../docker/", import.meta.url));
+  const h = createHash("sha256");
+  try {
+    for (const f of ARCHIVOS_DE_LA_IMAGEN) h.update(f + "\0" + readFileSync(join(carpeta, f)));
+  } catch {
+    return "latest";
+  }
+  return h.digest("hex").slice(0, 10);
+}
+
+export const IMAGE_TAG = `multi-room:${huellaDeLaImagen()}`;
 const CONTAINER_PREFIX = "multi-room-";
 
 /** Dónde se ve el HOME de la sala desde dentro del contenedor. */
@@ -111,7 +136,9 @@ export async function ensureImage(repoRoot?: string): Promise<void> {
   console.log(`[docker] construyendo la imagen ${IMAGE_TAG}…`);
   await execFileP(
     "docker",
-    ["build", "-t", IMAGE_TAG, "-f", join(raiz, "docker", "room.Dockerfile"), raiz],
+    // El contexto es `docker/` y no la raíz: la raíz trae node_modules y las
+    // carpetas de todas las salas, y Docker las mandaba enteras en cada build.
+    ["build", "-t", IMAGE_TAG, "-f", join(raiz, "docker", "room.Dockerfile"), join(raiz, "docker")],
     { timeout: 600_000, maxBuffer: 10 * 1024 * 1024 },
   );
   imagenVerificada = true;

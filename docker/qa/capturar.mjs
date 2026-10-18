@@ -22,9 +22,24 @@ const MAX_ERRORES = 20;
 /** Tope de todo el trabajo. Un proyecto colgado no cuelga el turno del agente. */
 const TOPE_MS = 40_000;
 
+let saliendo = false;
+/**
+ * Escribe el resultado y sale cuando terminó de escribirse, no antes.
+ *
+ * Hacia un pipe la escritura es asíncrona: un `process.exit` inmediato cortaba
+ * la salida en 80 KB, y cualquier captura con fotos llegaba como JSON a medias.
+ * Pasó con todas las presentaciones de una sala real.
+ *
+ * Devuelve una promesa que nunca se cumple: quien hace `await salir(...)` ya no
+ * sigue, igual que cuando aquí había un exit. Y solo escribe una vez, por si el
+ * tope de tiempo llega mientras otra salida se está escribiendo.
+ */
 function salir(resultado) {
-  process.stdout.write(JSON.stringify(resultado) + "\n");
-  process.exit(0);
+  if (!saliendo) {
+    saliendo = true;
+    process.stdout.write(JSON.stringify(resultado) + "\n", () => process.exit(0));
+  }
+  return new Promise(() => {});
 }
 
 setTimeout(() => salir({ ok: false, error: `la página no terminó de cargar en ${TOPE_MS / 1000}s` }), TOPE_MS).unref();
@@ -33,7 +48,7 @@ let pedido;
 try {
   pedido = JSON.parse(Buffer.from(process.argv[2] ?? "", "base64").toString("utf8"));
 } catch {
-  salir({ ok: false, error: "no entendí qué capturar" });
+  await salir({ ok: false, error: "no entendí qué capturar" });
 }
 const { url, ancho = 1280, alto = 800, completa = false } = pedido;
 
@@ -47,7 +62,7 @@ try {
     args: ["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
   });
 } catch (err) {
-  salir({ ok: false, error: `no se pudo abrir el navegador: ${String(err).split("\n")[0]}` });
+  await salir({ ok: false, error: `no se pudo abrir el navegador: ${String(err).split("\n")[0]}` });
 }
 
 const errores = [];
@@ -107,7 +122,7 @@ try {
   });
 
   await navegador.close();
-  salir({
+  await salir({
     ok: true,
     titulo: vista.titulo,
     enBlanco: vista.enBlanco,
@@ -119,5 +134,5 @@ try {
   });
 } catch (err) {
   await navegador?.close().catch(() => {});
-  salir({ ok: false, error: String(err).split("\n")[0].slice(0, 300), errores });
+  await salir({ ok: false, error: String(err).split("\n")[0].slice(0, 300), errores });
 }

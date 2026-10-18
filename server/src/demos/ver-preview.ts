@@ -50,6 +50,12 @@ const PAGINAS: Record<string, string> = {
     });
     document.addEventListener('DOMContentLoaded', () => document.body.appendChild(document.createElement('vite-error-overlay')));
   </script>`,
+  // Como una diapositiva con fotos: la captura pesa cientos de KB. Con estas
+  // el JSON llegaba cortado en 80 KB y la tool reportaba error.
+  "/pesada": `<!doctype html><meta charset=utf-8><title>Pesada</title><body style="margin:0"><canvas id=c width=1280 height=800></canvas><script>
+    const c = document.getElementById('c').getContext('2d'); const d = c.createImageData(1280, 800);
+    for (let i = 0; i < d.data.length; i++) d.data[i] = Math.random() * 255; c.putImageData(d, 0, 0);
+  </script>`,
   "/larga": `<!doctype html><meta charset=utf-8><title>Larga</title><div style="height:3000px;background:linear-gradient(#fff,#f60)">arriba</div>`,
 };
 
@@ -174,6 +180,12 @@ async function main() {
       const celular = await ver("/larga", { ancho: 390, alto: 844 });
       check("la captura normal es una pantalla", celular.ok && celular.alto === 844, String(celular.ok && celular.alto));
       check("pero sabe cuánto mide la página", celular.ok && celular.altoTotal >= 3000, String(celular.ok && celular.altoTotal));
+      const pesada = await ver("/pesada");
+      check(
+        "una captura pesada (con fotos) llega completa",
+        pesada.ok && pesada.imagen.length > 200_000,
+        pesada.ok ? `${Math.round(pesada.imagen.length / 1024)} KB` : pesada.error.slice(0, 80),
+      );
       const completa = await ver("/larga", { completa: true });
       check("completa llega hasta el tope de 2400", completa.ok && completa.alto === 2400, String(completa.ok && completa.alto));
     }

@@ -1387,6 +1387,60 @@ img.av.av-personaje {
   align-items: center;
   gap: 8px;
 }
+/* En una presentación la barra se hace a un lado: abajo al centro van las
+   flechas de la presentación, y la barra las tapaba. */
+.herramientas-preview.a-la-derecha {
+  left: auto;
+  right: 18px;
+  transform: none;
+}
+.vista-btn.flotante.con-texto {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+.descargar-presentacion {
+  position: relative;
+}
+.menu-presentacion {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  min-width: 170px;
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+  border: 1px solid var(--linea);
+  border-radius: 14px;
+  background: rgba(10, 10, 10, 0.96);
+  backdrop-filter: blur(8px);
+}
+.menu-presentacion button {
+  text-align: left;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--texto);
+  font-size: 13px;
+  cursor: pointer;
+}
+.menu-presentacion button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+}
+.menu-presentacion button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+.menu-presentacion-error {
+  margin: 6px 8px 4px;
+  max-width: 240px;
+  font-size: 12px;
+  color: #ff8a80;
+}
 /* La agarradera: lo único de la barra que la mueve, para que arrastrar no se
    confunda con apretar uno de los botones. */
 .agarradera-herramientas {
@@ -4081,5 +4135,13 @@ img.av.av-personaje {
   }
   .env-corto {
     display: inline;
+  }
+}
+
+/* En el celular la barra no cabe con los textos: Descargar y Presentar se
+   quedan con su ícono, y el título del botón dice qué hacen. */
+@media (max-width: 820px) {
+  .vista-btn.flotante.con-texto span {
+    display: none;
   }
 }

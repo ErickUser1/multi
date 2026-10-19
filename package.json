@@ -58,7 +58,8 @@
     "demo:ver-codigo": "npm run demo:ver-codigo -w server",
     "demo:sin-espacio": "npm run demo:sin-espacio -w server",
     "demo:mensaje-creditos": "npm run demo:mensaje-creditos -w server",
-    "demo:ver-preview": "npm run demo:ver-preview -w server"
+    "demo:ver-preview": "npm run demo:ver-preview -w server",
+    "demo:presentacion": "npm run demo:presentacion -w server"
   },
   "engines": {
     "node": ">=22"

@@ -4,8 +4,10 @@
   "private": true,
   "license": "UNLICENSED",
   "type": "module",
-  "description": "El navegador con el que el agente mira su propia vista previa. Corre dentro del contenedor de la sala.",
+  "description": "El navegador con el que el agente mira su vista previa y con el que Multti exporta las presentaciones. Corre dentro del contenedor de la sala.",
   "dependencies": {
-    "playwright-core": "1.56.1"
+    "pdf-lib": "1.17.1",
+    "playwright-core": "1.56.1",
+    "pptxgenjs": "4.0.1"
   }
 }

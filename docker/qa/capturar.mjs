@@ -13,7 +13,7 @@
  *   { ok: true, titulo, enBlanco, overlay, errores, imagen, alto }
  *   { ok: false, error }
  */
-import { chromium } from "playwright-core";
+import { salir, tope, leerPedido, abrirNavegador } from "./comun.mjs";
 
 /** Lo más alto que se captura con `completa`. Más que esto el modelo lo achica y ya no se lee. */
 const ALTO_MAXIMO = 2400;
@@ -22,48 +22,9 @@ const MAX_ERRORES = 20;
 /** Tope de todo el trabajo. Un proyecto colgado no cuelga el turno del agente. */
 const TOPE_MS = 40_000;
 
-let saliendo = false;
-/**
- * Escribe el resultado y sale cuando terminó de escribirse, no antes.
- *
- * Hacia un pipe la escritura es asíncrona: un `process.exit` inmediato cortaba
- * la salida en 80 KB, y cualquier captura con fotos llegaba como JSON a medias.
- * Pasó con todas las presentaciones de una sala real.
- *
- * Devuelve una promesa que nunca se cumple: quien hace `await salir(...)` ya no
- * sigue, igual que cuando aquí había un exit. Y solo escribe una vez, por si el
- * tope de tiempo llega mientras otra salida se está escribiendo.
- */
-function salir(resultado) {
-  if (!saliendo) {
-    saliendo = true;
-    process.stdout.write(JSON.stringify(resultado) + "\n", () => process.exit(0));
-  }
-  return new Promise(() => {});
-}
-
-setTimeout(() => salir({ ok: false, error: `la página no terminó de cargar en ${TOPE_MS / 1000}s` }), TOPE_MS).unref();
-
-let pedido;
-try {
-  pedido = JSON.parse(Buffer.from(process.argv[2] ?? "", "base64").toString("utf8"));
-} catch {
-  await salir({ ok: false, error: "no entendí qué capturar" });
-}
-const { url, ancho = 1280, alto = 800, completa = false } = pedido;
-
-let navegador;
-try {
-  navegador = await chromium.launch({
-    executablePath: process.env.MULTI_CHROMIUM || undefined,
-    // Sin sandbox porque el encierro ya es el contenedor, y el de Chromium no
-    // arranca dentro de uno sin privilegios extra. /dev/shm de Docker es de
-    // 64MB y con eso Chromium se cae en páginas grandes.
-    args: ["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
-  });
-} catch (err) {
-  await salir({ ok: false, error: `no se pudo abrir el navegador: ${String(err).split("\n")[0]}` });
-}
+tope(TOPE_MS, `la página no terminó de cargar en ${TOPE_MS / 1000}s`);
+const { url, ancho = 1280, alto = 800, completa = false } = await leerPedido("capturar");
+const navegador = await abrirNavegador();
 
 const errores = [];
 function anotar(texto) {

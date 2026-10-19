@@ -35,7 +35,7 @@ import {
   dormirSalasOciosas,
 } from "./rooms.js";
 import { detectLaunch } from "./engine/preview.js";
-import { capturarPreview } from "./engine/captura.js";
+import { capturarPreview, exportarPresentacion } from "./engine/captura.js";
 import { getStorage } from "./storage/index.js";
 import { randomUUID } from "node:crypto";
 import { KeyedMutex } from "./engine/keyed-mutex.js";
@@ -793,6 +793,61 @@ fastify.get<{ Params: { id: string } }>("/rooms/:id/export", async (req, reply) 
     .header("cache-control", "no-store")
     .send(zip);
 });
+
+/**
+ * La presentación de la sala, descargada como PDF o PowerPoint.
+ *
+ * Antes cada agente armaba sus propios archivos (pptxgenjs, jspdf) y su propio
+ * botón, y la presentación se escribía dos o tres veces, a ciegas. Ahora el
+ * agente solo diseña las diapositivas (<presentaciones> en el prompt) y los
+ * archivos salen de lo que el navegador de la sala ya dibujó: exportar.mjs, en
+ * el contenedor, igual que ver_preview.
+ *
+ * Bajo `/rooms` por lo mismo que la exportación de arriba: el proxy del preview
+ * no puede tragarse lo que vive aquí.
+ */
+fastify.get<{ Params: { id: string; formato: string } }>(
+  "/rooms/:id/presentacion.:formato",
+  async (req, reply) => {
+    const formato = req.params.formato;
+    if (formato !== "pdf" && formato !== "pptx") return reply.code(404).send({ error: "formato desconocido" });
+    const room = getRoom(req.params.id) ?? (await wakeRoom(req.params.id));
+    if (!room) return reply.code(404).send({ error: "sala no encontrada" });
+
+    let runner;
+    try {
+      runner = await ensureRunner(room);
+    } catch (err) {
+      if (err instanceof NoHayAislamiento) return reply.code(503).send({ error: AVISO_SIN_AISLAMIENTO });
+      throw err;
+    }
+    const base = direccionDelPreview(room) ?? (await levantarPreviewParaVerla(room));
+    if (!base) return reply.code(409).send({ error: "la sala no tiene vista previa que exportar" });
+
+    const r = await exportarPresentacion(runner, base, formato);
+    if (!r.ok) {
+      console.warn(`[sala ${room.id}] no se pudo exportar la presentación (${formato}): ${r.error}`);
+      return reply.code(422).send({ error: r.error });
+    }
+
+    // El título va en una cabecera: el nombre sencillo, sin acentos, para los
+    // navegadores viejos, y el de verdad en filename*.
+    const titulo = r.titulo.trim().slice(0, 80) || "presentacion";
+    const sencillo = titulo.normalize("NFD").replace(/[^\w\s-]/g, "").replace(/\s+/g, " ").trim() || "presentacion";
+    const tipo =
+      formato === "pdf"
+        ? "application/pdf"
+        : "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+    return reply
+      .header("content-type", tipo)
+      .header(
+        "content-disposition",
+        `attachment; filename="${sencillo}.${formato}"; filename*=UTF-8''${encodeURIComponent(titulo)}.${formato}`,
+      )
+      .header("cache-control", "no-store")
+      .send(Buffer.from(r.archivo, "base64"));
+  },
+);
 
 /**
  * Si la sala se puede exportar y si le falta algo por guardar.

@@ -190,7 +190,7 @@ export class AnthropicProvider implements ModelProvider {
         break;
 
       case "content_block_stop":
-        acc.onBlockStop(data.index);
+        acc.onBlockStop(data.index, callbacks);
         break;
 
       case "message_delta":
@@ -236,6 +236,12 @@ class MessageAccumulator {
     | { type: "text"; text: string }
     | { type: "tool_use"; id: string; name: string; jsonBuf: string }
     | { type: "thinking"; text: string }
+    /**
+     * Lo que corre del lado de Anthropic (ver `crudo` en types.ts). Los
+     * resultados llegan completos en `content_block_start`; un
+     * `server_tool_use` trae su input en deltas, igual que un `tool_use`.
+     */
+    | { type: "crudo"; bloque: Record<string, unknown>; jsonBuf: string }
   >();
 
   onMessageStart(message: any): void {
@@ -256,8 +262,11 @@ class MessageAccumulator {
       this.blocks.set(index, { type: "tool_use", id: cb.id, name: cb.name, jsonBuf: "" });
     } else if (cb.type === "thinking") {
       this.blocks.set(index, { type: "thinking", text: cb.thinking ?? "" });
+    } else if (cb && typeof cb.type === "string" && cb.type !== "redacted_thinking") {
+      // Todo lo demás es de las herramientas de Anthropic y se regresa tal cual.
+      // `redacted_thinking` no: el thinking no se reenvía (ver buildMessage).
+      this.blocks.set(index, { type: "crudo", bloque: { ...cb }, jsonBuf: "" });
     }
-    // otros tipos (server_tool_use, etc.) no aplican a nuestro caso: se ignoran.
   }
 
   onBlockDelta(index: number, delta: any, callbacks: StreamCallbacks): void {
@@ -272,7 +281,7 @@ class MessageAccumulator {
         }
         break;
       case "input_json_delta":
-        if (block.type === "tool_use") {
+        if (block.type === "tool_use" || block.type === "crudo") {
           block.jsonBuf += delta.partial_json ?? "";
         }
         break;
@@ -286,8 +295,26 @@ class MessageAccumulator {
     }
   }
 
-  onBlockStop(_index: number): void {
+  onBlockStop(index: number, callbacks: StreamCallbacks): void {
     // El input del tool_use ya está completo en jsonBuf; se parsea en buildMessage.
+    // El de una herramienta de Anthropic se arma aquí: ya corrió (o corre en la
+    // siguiente llamada) y solo hay que enseñarlo y guardarlo.
+    const block = this.blocks.get(index);
+    if (block?.type !== "crudo" || block.bloque.type !== "server_tool_use") return;
+    const raw = block.jsonBuf.trim();
+    if (raw.length) {
+      try {
+        block.bloque.input = JSON.parse(raw);
+      } catch {
+        // Cortado a media escritura: se queda con lo que traía el start.
+      }
+    }
+    block.bloque.input ??= {};
+    callbacks.onServerTool?.({
+      id: String(block.bloque.id ?? ""),
+      name: String(block.bloque.name ?? ""),
+      input: block.bloque.input as Record<string, unknown>,
+    });
   }
 
   onMessageDelta(delta: any, usage: any): void {
@@ -295,6 +322,9 @@ class MessageAccumulator {
     // usage en message_delta es acumulativo (output_tokens final).
     if (usage && this.usage) {
       this.usage.outputTokens = usage.output_tokens ?? this.usage.outputTokens;
+      const servidor = usage.server_tool_use;
+      if (servidor?.web_search_requests) this.usage.busquedas = servidor.web_search_requests;
+      if (servidor?.web_fetch_requests) this.usage.lecturas = servidor.web_fetch_requests;
     }
   }
 
@@ -337,6 +367,8 @@ class MessageAccumulator {
           }
         }
         content.push({ type: "tool_use", id: b.id, name: b.name, input });
+      } else if (b.type === "crudo") {
+        content.push({ type: "crudo", bloque: b.bloque });
       }
       // thinking no se reenvía al historial en v1 (se muestra en vivo y ya).
     }
@@ -372,14 +404,96 @@ function buildRequestBody(params: StreamParams, defaultModel: string): Record<st
   }
 
   if (params.tools?.length) {
-    body.tools = params.tools.map((t) => ({
-      name: t.name,
-      description: t.description,
-      input_schema: t.input_schema,
-    }));
+    body.tools = [
+      ...params.tools.map((t) => ({
+        name: t.name,
+        description: t.description,
+        input_schema: t.input_schema,
+      })),
+      // Al final y siempre iguales: las tools son el principio del prefijo del
+      // caché, y cualquier cambio aquí lo tira completo.
+      ...herramientasWeb(String(body.model)),
+    ];
   }
 
   return body;
+}
+
+/**
+ * Buscar en internet y leer páginas, las dos corren del lado de Anthropic.
+ *
+ * Buscar cuesta un centavo de dólar por búsqueda y leer no se cobra aparte,
+ * pero en los dos lo caro son los tokens de lo que regresan. Por eso los topes:
+ * `max_uses` es por llamada a la API, y `max_content_tokens` evita que un PDF
+ * de cien páginas se coma el saldo de la sala.
+ *
+ * Las versiones `_20260318` traen el filtrado: Claude escribe código del lado
+ * de Anthropic para quedarse solo con lo que sirve antes de que entre al
+ * contexto, y `response_inclusion: "excluded"` deja fuera de la respuesta lo que
+ * ese código ya leyó. Solo los modelos 4.6 y posteriores lo tienen; los demás
+ * (Haiku 4.5) usan las básicas, que meten los resultados completos.
+ */
+export function herramientasWeb(modelo: string): Record<string, unknown>[] {
+  const ubicacion = { type: "approximate", country: "MX", timezone: "America/Mexico_City" };
+  if (!conFiltrado(modelo)) {
+    return [
+      { type: "web_search_20250305", name: "web_search", max_uses: 5, user_location: ubicacion },
+      { type: "web_fetch_20250910", name: "web_fetch", max_uses: 5, max_content_tokens: 20_000 },
+    ];
+  }
+  return [
+    {
+      type: "web_search_20260318",
+      name: "web_search",
+      max_uses: 5,
+      user_location: ubicacion,
+      response_inclusion: "excluded",
+    },
+    {
+      type: "web_fetch_20260318",
+      name: "web_fetch",
+      max_uses: 5,
+      max_content_tokens: 20_000,
+      response_inclusion: "excluded",
+    },
+  ];
+}
+
+/**
+ * Lo que una herramienta de Anthropic buscó o leyó, para enseñarlo y para
+ * acordarse después.
+ *
+ * Con el filtrado, el modelo casi nunca llama `web_search` directo: escribe
+ * código que lo llama (`code_execution`), y la llamada de adentro ni siquiera
+ * llega en la respuesta (`response_inclusion: "excluded"`). Lo único que queda
+ * es el código, así que de ahí se sacan la búsqueda y la URL.
+ */
+export function busquedasEn(
+  name: string,
+  input: Record<string, unknown>,
+): { name: "web_search" | "web_fetch"; input: Record<string, unknown> }[] {
+  if (name === "web_search" || name === "web_fetch") return [{ name, input }];
+  if (typeof input.code !== "string") return [];
+  const encontradas: { name: "web_search" | "web_fetch"; input: Record<string, unknown> }[] = [];
+  const patron = /(web_search|web_fetch)\(\s*\{\s*["'](query|url)["']\s*:\s*(["'])((?:\\.|(?!\3).)*)\3/g;
+  for (const m of input.code.matchAll(patron)) {
+    // Es para leerlo, no para usarlo: basta con quitar los escapes.
+    const valor = m[4]!.replace(/\\(.)/g, "$1");
+    encontradas.push({ name: m[1] as "web_search" | "web_fetch", input: { [m[2]!]: valor } });
+  }
+  return encontradas;
+}
+
+/** Si el modelo tiene el filtrado de resultados: Claude 4.6 en adelante. */
+function conFiltrado(modelo: string): boolean {
+  const m = /claude-(?:opus|sonnet|haiku|fable)-(\d+)(?:-(\d+))?/.exec(modelo);
+  if (!m) return false;
+  const mayor = Number(m[1]);
+  // "claude-opus-5" no trae menor; "claude-haiku-4-5-20251001" sí. Un menor de
+  // ocho cifras es la fecha, no la versión.
+  const menor = m[2] && m[2].length < 8 ? Number(m[2]) : 0;
+  if (modelo.includes("haiku")) return false;
+  return mayor > 4 || (mayor === 4 && menor >= 6);
 }
 
 /** Traduce un Message neutral al formato de content blocks de la API. */
@@ -410,6 +524,9 @@ function toApiMessage(m: Message): Record<string, unknown> {
             type: "document",
             source: { type: "base64", media_type: block.mediaType, data: block.data },
           };
+        case "crudo":
+          // Tal cual llegó: la API valida el `encrypted_content` byte por byte.
+          return block.bloque;
       }
     }),
   };

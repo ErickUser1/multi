@@ -2926,6 +2926,8 @@ interface AccionAgente {
     | "baseDeDatos"
     | "verBase"
     | "verPreview"
+    | "buscarWeb"
+    | "leerWeb"
     | "adjunto"
     | "documento"
     | "leerDocumento"
@@ -2963,6 +2965,10 @@ function fraseDeAccion(a: AccionAgente, t: Textos): string {
       return t.actVerBase;
     case "verPreview":
       return t.actVerPreview;
+    case "buscarWeb":
+      return t.actBuscarWeb(a.detalle ?? "");
+    case "leerWeb":
+      return t.actLeerWeb(a.archivo ?? "");
     case "adjunto":
       return t.actAdjunto;
     case "documento":

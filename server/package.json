@@ -49,7 +49,9 @@
     "demo:ver-codigo": "tsx src/demos/ver-codigo.ts",
     "demo:sin-espacio": "tsx src/demos/sin-espacio.ts",
     "demo:mensaje-creditos": "tsx src/demos/mensaje-creditos.ts",
-    "demo:ver-preview": "tsx src/demos/ver-preview.ts"
+    "demo:ver-preview": "tsx src/demos/ver-preview.ts",
+    "demo:internet": "tsx src/demos/internet.ts",
+    "probar:internet": "tsx --no-warnings src/demos/internet-real.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.3.0",

@@ -82,6 +82,7 @@ import { MAX_AGENTS_PER_ROOM, resumenDeOtros } from "./engine/agents.js";
 import { fileMutation } from "./engine/file-mutation.js";
 import { leerVariables, modificarVariables, type Variable } from "./engine/env.js";
 import { accionDeTool, type Accion } from "./engine/actividad.js";
+import { busquedasEn } from "./agent/providers/anthropic.js";
 import { WORKSPACES_ROOT } from "./engine/workspace.js";
 import { imagenDelDocumento, CARPETA_DOCUMENTO, esDocumento } from "./engine/documento.js";
 import { quienEres } from "./engine/personajes.js";
@@ -2752,6 +2753,18 @@ async function runAgentTurn(
       agentId,
       callbacks: {
         onText: (delta) => io.to(room.id).emit("agent:delta", { agentId, text: delta }),
+        // Buscar y leer páginas corren del lado de Anthropic: no pasan por
+        // onToolStart, pero se ven igual. Casi siempre llegan dentro del código
+        // del filtrado, y de ahí se sacan (ver busquedasEn).
+        onServerTool: ({ name, input }) => {
+          for (const b of busquedasEn(name, input)) {
+            room.agents.touch(agentId);
+            const accion = accionDeTool(b.name, b.input);
+            if (!ultimaAccion.has(room.id)) ultimaAccion.set(room.id, new Map());
+            ultimaAccion.get(room.id)!.set(agentId, accion);
+            io.to(room.id).emit("agent:tool", { agentId, name: b.name, accion, summary: summarizeTool(b.name, b.input) });
+          }
+        },
         onToolStart: ({ name, input }) => {
           room.agents.touch(agentId);
           const accion = accionDeTool(name, input);
@@ -3005,6 +3018,8 @@ function summarizeTool(name: string, input: Record<string, unknown>): string {
   if (name === "read_file") return `leyendo ${input.path}`;
   if (name === "bash") return `$ ${String(input.command).slice(0, 60)}`;
   if (name === "glob" || name === "grep") return `${name} ${input.pattern ?? ""}`;
+  if (name === "web_search") return `🔎 ${String(input.query ?? "").slice(0, 60)}`;
+  if (name === "web_fetch") return `leyendo ${String(input.url ?? "").slice(0, 60)}`;
   return name;
 }
 

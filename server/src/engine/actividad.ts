@@ -20,6 +20,8 @@ export type TipoDeAccion =
   | "baseDeDatos"
   | "verBase"
   | "verPreview"
+  | "buscarWeb"
+  | "leerWeb"
   | "adjunto"
   | "documento"
   | "leerDocumento"
@@ -61,6 +63,11 @@ export function accionDeTool(nombre: string, input: Record<string, unknown>): Ac
       return { tipo: "baseDeDatos", detalle: texto("descripcion") };
     case "ver_preview":
       return { tipo: "verPreview", detalle: texto("ruta") || undefined };
+    // Las dos de internet corren del lado de Anthropic (ver onServerTool).
+    case "web_search":
+      return { tipo: "buscarWeb", detalle: texto("query") || undefined };
+    case "web_fetch":
+      return { tipo: "leerWeb", archivo: dominio(texto("url")), detalle: texto("url") || undefined };
     case "ver_base":
       return { tipo: "verBase", detalle: texto("consulta") || undefined };
     case "iniciar_documento":
@@ -128,4 +135,13 @@ const REVISAR =
 
 function base(ruta: string): string {
   return ruta.split("/").filter(Boolean).pop() ?? ruta;
+}
+
+/** El sitio de una URL, sin "www.": "es.wikipedia.org" dice más que la URL entera. */
+function dominio(url: string): string | undefined {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return undefined;
+  }
 }

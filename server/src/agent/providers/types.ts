@@ -38,7 +38,19 @@ export type ContentBlock =
    * descarta. El agente igual ve el nombre en el texto del mensaje y puede
    * meterlo al proyecto con `usar_adjunto`.
    */
-  | { type: "documento"; mediaType: string; data: string };
+  | { type: "documento"; mediaType: string; data: string }
+  /**
+   * Un bloque de Anthropic tal como llegó, para regresarlo idéntico.
+   *
+   * Son los de las herramientas que corren del lado de Anthropic (buscar y leer
+   * páginas): `server_tool_use`, `web_search_tool_result`, `web_fetch_tool_result`
+   * y los de código del filtrado. La API pide que vuelvan sin tocar un byte
+   * (traen `encrypted_content`) y si no, es un 400. Guardarlos crudos en vez de
+   * modelar cada uno hace que un tipo nuevo que saquen tampoco rompa nada.
+   *
+   * Solo los entiende Anthropic: los demás proveedores los ignoran.
+   */
+  | { type: "crudo"; bloque: Record<string, unknown> };
 
 export interface Message {
   role: Role;
@@ -98,6 +110,10 @@ export interface Usage {
   outputTokens: number;
   cacheReadTokens?: number;
   cacheCreationTokens?: number;
+  /** Búsquedas en internet de la vuelta (cada una se cobra aparte). */
+  busquedas?: number;
+  /** Páginas leídas de internet en la vuelta. */
+  lecturas?: number;
 }
 
 // ── Callbacks del stream (para reaccionar en vivo) ─────────────────────────
@@ -109,6 +125,11 @@ export interface StreamCallbacks {
   onThinking?: (delta: string) => void;
   /** Aviso de reintento tras rate-limit / overload. */
   onRetry?: (info: { attempt: number; waitMs: number; reason: string }) => void;
+  /**
+   * El modelo usó una herramienta que corre del lado del proveedor (buscar o
+   * leer una página). No hay nada que ejecutar: es para enseñarlo en la sala.
+   */
+  onServerTool?: (info: { id: string; name: string; input: Record<string, unknown> }) => void;
 }
 
 // ── La interfaz del proveedor ──────────────────────────────────────────────

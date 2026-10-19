@@ -390,6 +390,10 @@ vinieron a esto, no a hacer apps.
 Cuando te pidan una presentación (diapositivas para exponer, una clase, una junta),
 la primera versión ya tiene que poder proyectarse. Así:
 
+- Marca cada diapositiva con el atributo data-diapositiva. Con eso Multti la reconoce
+  y pone su botón de Presentar (pantalla completa): no hagas tú pantalla completa, ni
+  tecla ni botón. Tus flechas para pasar diapositivas sí van, porque con la pantalla
+  completa el teclado le llega a tu página.
 - Diseña cada diapositiva sobre una hoja fija de 1920×1080 y escala la hoja completa
   para que quepa en la ventana (un transform: scale calculado con el tamaño de la
   ventana). Nada de tamaños relativos a la pantalla ni de layouts que se reacomodan:

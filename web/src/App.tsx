@@ -33,6 +33,7 @@ import { useTextos, type Textos } from "./i18n.js";
 import { MenuSalas } from "./MenuSalas.js";
 import { recordarSala, olvidarSala, recordarNombre, guardarSalas, siguienteLlave } from "./historial-salas.js";
 import { CuentaPanel } from "./CuentaPanel.js";
+import { BotonPresentar } from "./Presentacion.js";
 import {
   quienSoy,
   sincronizarSalas,
@@ -773,6 +774,11 @@ function Sala({
    */
   const [errorDeCompilacion, setErrorDeCompilacion] = useState(false);
   /**
+   * Cuántas diapositivas trae la vista previa (data-diapositiva), según el
+   * inspector. Con alguna, la sala ofrece presentarla en pantalla completa.
+   */
+  const [diapositivas, setDiapositivas] = useState(0);
+  /**
    * Unos segundos después de que el agente termina se sigue tapando: el último
    * cambio todavía está compilando y Vite quita el overlay solo al acabar. Sin
    * esto el rojo se asomaba justo al terminar, que es cuando todos miran.
@@ -979,8 +985,10 @@ function Sala({
     // Otro iframe: lo que dijo el anterior ya no vale. El inspector del nuevo
     // avisa en cuanto carga si trae el overlay o no.
     setErrorDeCompilacion(false);
+    setDiapositivas(0);
   }, [previewSrc, previewReady, relanzadas]);
   // Origen del proxy, para validar postMessage — cuidado 1.
+  const esPresentacion = diapositivas > 0 && tipo !== "documento";
   const proxyOrigin = new URL(SERVER_URL).origin;
 
   useEffect(() => {
@@ -1359,6 +1367,8 @@ function Sala({
         socketRef.current?.emit("cursor", { x: marco.left - esc.left + x, y: marco.top - esc.top + y });
       } else if (m.type === "compilacion") {
         setErrorDeCompilacion(!!(m.data as { conError?: boolean })?.conError);
+      } else if (m.type === "presentacion") {
+        setDiapositivas(Number((m.data as { diapositivas?: number })?.diapositivas) || 0);
       } else if (m.type === "element:gone") {
         // El elemento que tenía seleccionado desapareció (HMR) — cuidado edge case.
         setMySelection(null);
@@ -2467,7 +2477,11 @@ function Sala({
           )}
           {roomId && panel === "preview" && (previewReady || tipo === "documento") && (
             <div
-              className={`herramientas-preview${moviendoHerramientas ? " moviendo" : ""}`}
+              className={`herramientas-preview${moviendoHerramientas ? " moviendo" : ""}${
+                // En una presentación, abajo al centro van sus flechas: la barra
+                // se hace a un lado, salvo que alguien ya la haya acomodado.
+                esPresentacion && !posHerramientas ? " a-la-derecha" : ""
+              }`}
               style={
                 posHerramientas
                   ? {
@@ -2489,6 +2503,7 @@ function Sala({
             />
             {tipo !== "documento" && previewReady && (
             <>
+            {esPresentacion && <BotonPresentar iframeRef={iframeRef} previewSrc={previewSrc} t={t} />}
             <button
               className={`inspect-flotante ${inspect ? "on" : ""}`}
               onClick={() => setInspect((v) => !v)}

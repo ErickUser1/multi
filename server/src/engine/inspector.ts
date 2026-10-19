@@ -157,7 +157,20 @@ export const INSPECTOR_SCRIPT = String.raw`
   }
   revisarErrorDeCompilacion();
 
-  var mo = new MutationObserver(function () { revalidate(); revisarErrorDeCompilacion(); });
+  // ── es una presentación ─────────────────────────────────────────────────
+  // Las diapositivas vienen marcadas con data-diapositiva (lo pide el prompt).
+  // La sala, al saberlo, ofrece descargarla y presentarla ella misma, en vez de
+  // depender de un botón del agente.
+  var diapositivas = -1;
+  function revisarPresentacion() {
+    var ahora = document.querySelectorAll('[data-diapositiva]').length;
+    if (ahora === diapositivas) return;
+    diapositivas = ahora;
+    send('presentacion', { diapositivas: ahora });
+  }
+  revisarPresentacion();
+
+  var mo = new MutationObserver(function () { revalidate(); revisarErrorDeCompilacion(); revisarPresentacion(); });
   mo.observe(document.documentElement, { childList: true, subtree: true, attributes: true });
 
   // reposicionar overlays al hacer scroll/resize (las coords son fixed)

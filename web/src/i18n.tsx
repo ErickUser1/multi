@@ -319,6 +319,8 @@ const TEXTOS = {
     ocultarChat: "Ocultar el chat",
     ajustarAncho: "Arrastra para ajustar el ancho",
     tituloHistorial: "Versiones del proyecto",
+    presPresentar: "Presentar",
+    presPresentarTitulo: "Pantalla completa. Pasa las diapositivas con las flechas; Esc para salir",
     moverHerramientas: "Arrastra para mover (doble clic para regresarla)",
 
     // Filtro del chat
@@ -667,6 +669,8 @@ const TEXTOS = {
     ocultarChat: "Hide the chat",
     ajustarAncho: "Drag to resize",
     tituloHistorial: "Project versions",
+    presPresentar: "Present",
+    presPresentarTitulo: "Full screen. Move through the slides with the arrow keys; Esc to exit",
     moverHerramientas: "Drag to move (double-click to reset)",
 
     // Chat filter

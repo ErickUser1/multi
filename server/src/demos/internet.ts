@@ -1,10 +1,10 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { runAgent, sinBusquedas, servidorPendiente, BUSQUEDA_RETIRADA } from "../agent/loop.js";
+import { runAgent, sinBusquedas, servidorPendiente } from "../agent/loop.js";
 import { localRunner } from "../engine/runner.js";
 import { accionDeTool } from "../engine/actividad.js";
-import { AnthropicProvider, herramientasWeb } from "../agent/providers/anthropic.js";
+import { AnthropicProvider, herramientasWeb, busquedasEn } from "../agent/providers/anthropic.js";
 import type { ContentBlock, Message, ModelProvider, StopReason, StreamEvent } from "../agent/providers/types.js";
 
 /**
@@ -244,10 +244,12 @@ async function main() {
       ];
       const limpio = sinBusquedas(historial);
       check("no queda ningún bloque crudo", !limpio.some((m) => m.content.some((c) => c.type === "crudo")));
-      check("el texto se queda", JSON.stringify(limpio[1]?.content) === JSON.stringify([{ type: "text", text: "Busco." }, { type: "text", text: "Listo." }]));
+      const textos = (limpio[1]?.content ?? []).map((c) => (c.type === "text" ? c.text : c.type));
+      check("el texto se queda, con la nota en medio", textos.length === 3 && textos[0] === "Busco." && textos[2] === "Listo.", JSON.stringify(textos));
+      check("la nota dice qué buscó (para que no diga que fue de memoria)", textos[1]?.includes("“ciclo del agua wikimedia”") ?? false, textos[1]);
       check(
-        "un mensaje que solo traía búsquedas deja una nota",
-        limpio[3]?.content.length === 1 && limpio[3]?.content[0]?.type === "text" && (limpio[3].content[0] as any).text === BUSQUEDA_RETIRADA,
+        "un mensaje que solo traía búsquedas queda con la nota",
+        limpio[3]?.content.length === 1 && limpio[3]?.content[0]?.type === "text" && (limpio[3].content[0] as any).text.includes("busqué"),
       );
       check("no toca el original", historial[1]!.content.length === 4);
 
@@ -260,6 +262,19 @@ async function main() {
 
     console.log("\n8. La sala lo cuenta como lo diría una persona");
     {
+      // Así llega de verdad con Sonnet 5.5: la búsqueda va dentro del código del filtrado.
+      const codigo = 'r = await web_search({"query": "población Ciudad de México \\"censo\\" 2020"})\np = await web_fetch({"url": "https://www.inegi.org.mx/x.pdf"})';
+      const dentro = busquedasEn("code_execution", { code: codigo });
+      check(
+        "saca la búsqueda y la lectura del código del filtrado",
+        dentro.length === 2 && dentro[0]?.name === "web_search" && dentro[0]?.input.query === 'población Ciudad de México "censo" 2020' && dentro[1]?.input.url === "https://www.inegi.org.mx/x.pdf",
+        JSON.stringify(dentro),
+      );
+      check("código sin búsquedas no enseña nada", busquedasEn("code_execution", { code: "print(r)" }).length === 0);
+      check("una llamada directa pasa tal cual", busquedasEn("web_search", { query: "x" })[0]?.input.query === "x");
+      const nota = sinBusquedas([{ role: "assistant", content: [crudo({ type: "server_tool_use", id: "s", name: "code_execution", input: { code: codigo } })] }]);
+      check("y la nota del historial también lo dice", JSON.stringify(nota).includes("censo") && JSON.stringify(nota).includes("inegi.org.mx"), JSON.stringify(nota));
+
       const busca = accionDeTool("web_search", { query: "ciclo del agua" });
       check("buscar", busca.tipo === "buscarWeb" && busca.detalle === "ciclo del agua", JSON.stringify(busca));
       const lee = accionDeTool("web_fetch", { url: "https://www.es.wikipedia.org/wiki/Ciclo_del_agua" });

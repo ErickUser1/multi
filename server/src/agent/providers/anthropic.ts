@@ -459,6 +459,31 @@ export function herramientasWeb(modelo: string): Record<string, unknown>[] {
   ];
 }
 
+/**
+ * Lo que una herramienta de Anthropic buscó o leyó, para enseñarlo y para
+ * acordarse después.
+ *
+ * Con el filtrado, el modelo casi nunca llama `web_search` directo: escribe
+ * código que lo llama (`code_execution`), y la llamada de adentro ni siquiera
+ * llega en la respuesta (`response_inclusion: "excluded"`). Lo único que queda
+ * es el código, así que de ahí se sacan la búsqueda y la URL.
+ */
+export function busquedasEn(
+  name: string,
+  input: Record<string, unknown>,
+): { name: "web_search" | "web_fetch"; input: Record<string, unknown> }[] {
+  if (name === "web_search" || name === "web_fetch") return [{ name, input }];
+  if (typeof input.code !== "string") return [];
+  const encontradas: { name: "web_search" | "web_fetch"; input: Record<string, unknown> }[] = [];
+  const patron = /(web_search|web_fetch)\(\s*\{\s*["'](query|url)["']\s*:\s*(["'])((?:\\.|(?!\3).)*)\3/g;
+  for (const m of input.code.matchAll(patron)) {
+    // Es para leerlo, no para usarlo: basta con quitar los escapes.
+    const valor = m[4]!.replace(/\\(.)/g, "$1");
+    encontradas.push({ name: m[1] as "web_search" | "web_fetch", input: { [m[2]!]: valor } });
+  }
+  return encontradas;
+}
+
 /** Si el modelo tiene el filtrado de resultados: Claude 4.6 en adelante. */
 function conFiltrado(modelo: string): boolean {
   const m = /claude-(?:opus|sonnet|haiku|fable)-(\d+)(?:-(\d+))?/.exec(modelo);

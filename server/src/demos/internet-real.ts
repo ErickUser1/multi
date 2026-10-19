@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runAgent } from "../agent/loop.js";
 import { localRunner } from "../engine/runner.js";
-import { AnthropicProvider } from "../agent/providers/anthropic.js";
+import { AnthropicProvider, busquedasEn } from "../agent/providers/anthropic.js";
 
 /**
  * Prueba contra la API de verdad: el agente busca, escribe un archivo con lo que
@@ -25,8 +25,10 @@ async function main() {
   const provider = new AnthropicProvider(key);
   const dir = await mkdtemp(join(tmpdir(), "multi-internet-real-"));
   const callbacks = {
-    onServerTool: ({ name, input }: { name: string; input: Record<string, unknown> }) =>
-      console.log(`  · ${name} ${JSON.stringify(input).slice(0, 100)}`),
+    // Lo mismo que vería la Sala (ver onServerTool en index.ts).
+    onServerTool: ({ name, input }: { name: string; input: Record<string, unknown> }) => {
+      for (const b of busquedasEn(name, input)) console.log(`  · ${b.name} ${JSON.stringify(b.input).slice(0, 100)}`);
+    },
     onToolStart: ({ name, input }: { name: string; input: Record<string, unknown> }) =>
       console.log(`  · ${name} ${JSON.stringify(input).slice(0, 100)}`),
   };

@@ -6,6 +6,7 @@ import {
   type Usage,
 } from "./providers/types.js";
 import { toolRegistry, toolSpecs, type ToolContext, type ToolEvent, ToolError } from "./tools/index.js";
+import { busquedasEn } from "./providers/anthropic.js";
 
 const MAX_TURNS = 50;
 /**
@@ -891,8 +892,21 @@ export function servidorPendiente(m: Message): boolean {
   return crudos.some((b) => b.type === "server_tool_use" && !resueltos.has(b.id));
 }
 
-/** Lo que queda en un mensaje que solo traía búsquedas, cuando se quitan. */
-export const BUSQUEDA_RETIRADA = "(aquí busqué en internet)";
+/** La nota que queda donde hubo búsquedas, cuando se quitan. */
+export function notaDeBusqueda(bloques: Record<string, unknown>[]): string {
+  const hechas = bloques.flatMap((b) =>
+    b.type === "server_tool_use" ? busquedasEn(String(b.name ?? ""), (b.input ?? {}) as Record<string, unknown>) : [],
+  );
+  const buscado = hechas.filter((h) => h.name === "web_search").map((h) => `“${String(h.input.query)}”`);
+  const leido = hechas.filter((h) => h.name === "web_fetch").map((h) => String(h.input.url));
+  const partes = [
+    buscado.length ? `busqué ${buscado.join(", ")}` : "",
+    leido.length ? `leí ${leido.join(", ")}` : "",
+  ].filter(Boolean);
+  return partes.length
+    ? `(aquí busqué en internet: ${partes.join("; ")}. Los resultados ya no están a la vista; lo que saqué de ahí es lo que escribí)`
+    : "(aquí busqué en internet; los resultados ya no están a la vista)";
+}
 
 /**
  * Una copia del historial sin las búsquedas, para guardarlo.
@@ -900,14 +914,31 @@ export const BUSQUEDA_RETIRADA = "(aquí busqué en internet)";
  * Lo que trajo una búsqueda son miles de tokens que se reenviarían en cada
  * turno siguiente de la sala, y para entonces ya cumplieron: el agente escribió
  * lo que sacó de ahí. Se quitan completos (llamada y resultado juntos), que la
- * API sí acepta, y no editados, que es un 400. Un mensaje que se queda vacío
- * deja una nota en su lugar, para no juntar dos mensajes del mismo lado.
+ * API sí acepta, y no editados, que es un 400.
+ *
+ * En su lugar queda una nota con lo que buscó. Sin ella, en la prueba real el
+ * agente contestó en el turno siguiente que "no buscó, lo escribió de
+ * memoria", sobre un dato que sí había sacado del INEGI.
  */
 export function sinBusquedas(messages: Message[]): Message[] {
   return messages.map((m) => {
     if (!m.content.some((c) => c.type === "crudo")) return m;
-    const content = m.content.filter((c) => c.type !== "crudo");
-    return { ...m, content: content.length ? content : [{ type: "text", text: BUSQUEDA_RETIRADA }] };
+    const content: ContentBlock[] = [];
+    let tramo: Record<string, unknown>[] = [];
+    const cerrar = () => {
+      if (tramo.length) content.push({ type: "text", text: notaDeBusqueda(tramo) });
+      tramo = [];
+    };
+    for (const c of m.content) {
+      if (c.type === "crudo") {
+        tramo.push(c.bloque);
+        continue;
+      }
+      cerrar();
+      content.push(c);
+    }
+    cerrar();
+    return { ...m, content };
   });
 }
 

@@ -2752,6 +2752,16 @@ async function runAgentTurn(
       agentId,
       callbacks: {
         onText: (delta) => io.to(room.id).emit("agent:delta", { agentId, text: delta }),
+        // Buscar y leer páginas corren del lado de Anthropic: no pasan por
+        // onToolStart, pero se ven igual. Los pasos de código del filtrado no.
+        onServerTool: ({ name, input }) => {
+          if (name !== "web_search" && name !== "web_fetch") return;
+          room.agents.touch(agentId);
+          const accion = accionDeTool(name, input);
+          if (!ultimaAccion.has(room.id)) ultimaAccion.set(room.id, new Map());
+          ultimaAccion.get(room.id)!.set(agentId, accion);
+          io.to(room.id).emit("agent:tool", { agentId, name, accion, summary: summarizeTool(name, input) });
+        },
         onToolStart: ({ name, input }) => {
           room.agents.touch(agentId);
           const accion = accionDeTool(name, input);
@@ -3005,6 +3015,8 @@ function summarizeTool(name: string, input: Record<string, unknown>): string {
   if (name === "read_file") return `leyendo ${input.path}`;
   if (name === "bash") return `$ ${String(input.command).slice(0, 60)}`;
   if (name === "glob" || name === "grep") return `${name} ${input.pattern ?? ""}`;
+  if (name === "web_search") return `🔎 ${String(input.query ?? "").slice(0, 60)}`;
+  if (name === "web_fetch") return `leyendo ${String(input.url ?? "").slice(0, 60)}`;
   return name;
 }
 

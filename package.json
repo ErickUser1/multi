@@ -58,7 +58,9 @@
     "demo:ver-codigo": "npm run demo:ver-codigo -w server",
     "demo:sin-espacio": "npm run demo:sin-espacio -w server",
     "demo:mensaje-creditos": "npm run demo:mensaje-creditos -w server",
-    "demo:ver-preview": "npm run demo:ver-preview -w server"
+    "demo:ver-preview": "npm run demo:ver-preview -w server",
+    "demo:internet": "npm run demo:internet -w server",
+    "probar:internet": "npm run probar:internet -w server"
   },
   "engines": {
     "node": ">=22"

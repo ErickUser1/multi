@@ -392,8 +392,13 @@ la primera versión ya tiene que poder proyectarse. Así:
 
 - Marca cada diapositiva con el atributo data-diapositiva. Con eso Multti la reconoce
   y pone su botón de Presentar (pantalla completa): no hagas tú pantalla completa, ni
-  tecla ni botón. Tus flechas para pasar diapositivas sí van, porque con la pantalla
-  completa el teclado le llega a tu página.
+  tecla ni botón.
+- Navegación visible: botones ◀ y ▶ en pantalla, abajo al centro, con el número de
+  diapositiva (3 / 12), fuera de la hoja. Además de los botones, las flechas del
+  teclado. No basta con el teclado ni con tocar los lados: quien presenta busca los
+  botones, y en el celular no hay teclado.
+- Botón de descargar ARRIBA a la derecha, con dos opciones: PDF y PowerPoint (.pptx).
+  Abajo a la derecha no: ahí se pone la barra de Multti y lo tapa.
 - Diseña cada diapositiva sobre una hoja fija de 1920×1080 y escala la hoja completa
   para que quepa en la ventana (un transform: scale calculado con el tamaño de la
   ventana). Nada de tamaños relativos a la pantalla ni de layouts que se reacomodan:
@@ -411,8 +416,10 @@ la primera versión ya tiene que poder proyectarse. Así:
 - Un hilo que se siga: abre con la pregunta o la tesis, desarrolla, y cierra
   contestándola. Si te dieron un texto, el argumento sale de ahí, no de lo que sabes
   del tema.
-- Antes de decir que quedó, mírala con ver_preview: la portada, la diapositiva con más
-  texto y que el botón de descargar se vea.
+- Antes de decir que quedó, mírala con ver_preview solo dos veces: la portada (ruta
+  "/#1") y la diapositiva con más texto. No revises una por una: las capturas por
+  turno son pocas y se acaban antes de que veas tus últimos cambios. Arregla lo que
+  veas en esas dos y aplica lo mismo a las demás.
 
 Por qué: una persona hizo tres presentaciones de clase en un día y en las tres tuvo
 que pedir "que se lea desde lejos, se va a presentar en vivo"; en una, además, "está

@@ -892,7 +892,7 @@ export function servidorPendiente(m: Message): boolean {
   return crudos.some((b) => b.type === "server_tool_use" && !resueltos.has(b.id));
 }
 
-/** La nota que queda donde hubo búsquedas, cuando se quitan. */
+/** La nota que queda donde hubo una búsqueda que no alcanzó a correr. */
 export function notaDeBusqueda(bloques: Record<string, unknown>[]): string {
   const hechas = bloques.flatMap((b) =>
     b.type === "server_tool_use" ? busquedasEn(String(b.name ?? ""), (b.input ?? {}) as Record<string, unknown>) : [],
@@ -904,25 +904,28 @@ export function notaDeBusqueda(bloques: Record<string, unknown>[]): string {
     leido.length ? `leí ${leido.join(", ")}` : "",
   ].filter(Boolean);
   return partes.length
-    ? `(aquí busqué en internet: ${partes.join("; ")}. Los resultados ya no están a la vista; lo que saqué de ahí es lo que escribí)`
-    : "(aquí busqué en internet; los resultados ya no están a la vista)";
+    ? `(aquí iba a buscar en internet: ${partes.join("; ")}, pero el turno se cerró antes)`
+    : "(aquí iba a buscar en internet, pero el turno se cerró antes)";
 }
 
 /**
- * Una copia del historial sin las búsquedas, para guardarlo.
+ * Una copia del historial sin búsquedas colgadas, para guardarlo.
  *
- * Lo que trajo una búsqueda son miles de tokens que se reenviarían en cada
- * turno siguiente de la sala, y para entonces ya cumplieron: el agente escribió
- * lo que sacó de ahí. Se quitan completos (llamada y resultado juntos), que la
- * API sí acepta, y no editados, que es un 400.
+ * Las búsquedas se quedan en el historial completas. Es lo que pide la doc de
+ * Anthropic (context editing): el historial se guarda entero, y si hiciera
+ * falta recortar lo hace la API de su lado con `context_management`, no el
+ * cliente. Lo probamos al revés: quitarlas y dejar una nota. En el turno
+ * siguiente el agente dijo que "no hizo la búsqueda, lo sacó de memoria" sobre
+ * un dato que sí sacó del INEGI; solo se cree que buscó si ve la búsqueda. Y con
+ * el filtrado una deja poco: unos 1,500 tokens, leídos del caché.
  *
- * En su lugar queda una nota con lo que buscó. Sin ella, en la prueba real el
- * agente contestó en el turno siguiente que "no buscó, lo escribió de
- * memoria", sobre un dato que sí había sacado del INEGI.
+ * Lo único que se quita es una búsqueda que se quedó sin correr (un turno que se
+ * cerró a media pausa): con ella colgada, el siguiente mensaje sería un 400. Se
+ * quita completa y queda una nota de lo que iba a buscar.
  */
-export function sinBusquedas(messages: Message[]): Message[] {
+export function sinBusquedasColgadas(messages: Message[]): Message[] {
   return messages.map((m) => {
-    if (!m.content.some((c) => c.type === "crudo")) return m;
+    if (!servidorPendiente(m)) return m;
     const content: ContentBlock[] = [];
     let tramo: Record<string, unknown>[] = [];
     const cerrar = () => {
@@ -942,9 +945,9 @@ export function sinBusquedas(messages: Message[]): Message[] {
   });
 }
 
-/** Lo que se guarda de un turno: sin capturas ni búsquedas. */
+/** Lo que se guarda de un turno: sin capturas ni búsquedas colgadas. */
 export function paraGuardar(messages: Message[]): Message[] {
-  return sinBusquedas(sinCapturas(messages));
+  return sinBusquedasColgadas(sinCapturas(messages));
 }
 
 function textOf(message: Message): string {

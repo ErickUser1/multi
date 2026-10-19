@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { runAgent, sinBusquedas, servidorPendiente } from "../agent/loop.js";
+import { runAgent, sinBusquedasColgadas, servidorPendiente } from "../agent/loop.js";
 import { localRunner } from "../engine/runner.js";
 import { accionDeTool } from "../engine/actividad.js";
 import { AnthropicProvider, herramientasWeb, busquedasEn } from "../agent/providers/anthropic.js";
@@ -16,7 +16,7 @@ import type { ContentBlock, Message, ModelProvider, StopReason, StreamEvent } fr
  * cambia, el turno siguiente es un 400. Aquí se revisa que esos bloques se
  * regresen idénticos, que una pausa se retome sin mensaje nuevo, que una
  * búsqueda que espera a una tool nuestra no reciba nada más que tool_result, y
- * que lo guardado no siga cargando las búsquedas.
+ * que lo guardado no deje ninguna colgada.
  *
  * Sin red ni API key: un `fetch` falso con el SSE a mano y un proveedor con guion.
  */
@@ -234,30 +234,26 @@ async function main() {
       );
     }
 
-    console.log("\n7. Lo que se guarda ya no carga las búsquedas");
+    console.log("\n7. Lo que se guarda conserva las búsquedas, salvo las colgadas");
     {
       const historial: Message[] = [
         { role: "user", content: [{ type: "text", text: "busca" }] },
         { role: "assistant", content: [{ type: "text", text: "Busco." }, crudo(USO), crudo(RESULTADO), { type: "text", text: "Listo." }] },
         { role: "user", content: [{ type: "text", text: "otra" }] },
-        { role: "assistant", content: [crudo(USO), crudo(RESULTADO)] },
+        { role: "assistant", content: [{ type: "text", text: "Busco otra." }, crudo(USO)] },
       ];
-      const limpio = sinBusquedas(historial);
-      check("no queda ningún bloque crudo", !limpio.some((m) => m.content.some((c) => c.type === "crudo")));
-      const textos = (limpio[1]?.content ?? []).map((c) => (c.type === "text" ? c.text : c.type));
-      check("el texto se queda, con la nota en medio", textos.length === 3 && textos[0] === "Busco." && textos[2] === "Listo.", JSON.stringify(textos));
-      check("la nota dice qué buscó (para que no diga que fue de memoria)", textos[1]?.includes("“ciclo del agua wikimedia”") ?? false, textos[1]);
-      check(
-        "un mensaje que solo traía búsquedas queda con la nota",
-        limpio[3]?.content.length === 1 && limpio[3]?.content[0]?.type === "text" && (limpio[3].content[0] as any).text.includes("busqué"),
-      );
-      check("no toca el original", historial[1]!.content.length === 4);
+      const limpio = sinBusquedasColgadas(historial);
+      check("una búsqueda completa se queda tal cual", JSON.stringify(limpio[1]) === JSON.stringify(historial[1]));
+      const colgada = (limpio[3]?.content ?? []).map((c) => (c.type === "text" ? c.text : c.type));
+      check("la colgada se quita y deja una nota", colgada.length === 2 && colgada[0] === "Busco otra." && colgada[1]!.includes("“ciclo del agua wikimedia”"), JSON.stringify(colgada));
+      check("ya no queda ninguna colgada", !limpio.some(servidorPendiente));
+      check("no toca el original", historial[3]!.content.length === 2);
 
       const { provider } = proveedor([
         { stop: "end_turn", content: [{ type: "text", text: "Busco." }, crudo(USO), crudo(RESULTADO), { type: "text", text: "Listo." }] },
       ]);
       const r = await runAgent({ ...base, provider });
-      check("runAgent lo guarda sin búsquedas", !r.messages.some((m) => m.content.some((c) => c.type === "crudo")));
+      check("runAgent guarda la búsqueda completa", r.messages.some((m) => m.content.some((c) => c.type === "crudo" && c.bloque.type === "web_search_tool_result")));
     }
 
     console.log("\n8. La sala lo cuenta como lo diría una persona");
@@ -272,7 +268,7 @@ async function main() {
       );
       check("código sin búsquedas no enseña nada", busquedasEn("code_execution", { code: "print(r)" }).length === 0);
       check("una llamada directa pasa tal cual", busquedasEn("web_search", { query: "x" })[0]?.input.query === "x");
-      const nota = sinBusquedas([{ role: "assistant", content: [crudo({ type: "server_tool_use", id: "s", name: "code_execution", input: { code: codigo } })] }]);
+      const nota = sinBusquedasColgadas([{ role: "assistant", content: [crudo({ type: "server_tool_use", id: "s", name: "code_execution", input: { code: codigo } })] }]);
       check("y la nota del historial también lo dice", JSON.stringify(nota).includes("censo") && JSON.stringify(nota).includes("inegi.org.mx"), JSON.stringify(nota));
 
       const busca = accionDeTool("web_search", { query: "ciclo del agua" });

@@ -478,10 +478,25 @@ documento no hay build: basta con que no quede ninguna sección pendiente.
 </antes_de_cerrar>
 
 <respuesta>
-Cuando termines, di en una o dos líneas qué hiciste, en términos de lo que cambió para
-quien lo va a ver. Nada de resúmenes largos ni de repetir el código que escribiste.
-La comprobación de antes de cerrar es para ti: no la cuentes, ni los nombres de lo que
-usaste por debajo. Solo si algo quedó roto y no lo pudiste arreglar, di qué no funciona.
+Cuando termines, di en una o dos líneas qué quedó, en términos de lo que la persona ve
+y puede hacer, y cierra con una sugerencia corta de qué probar o pedir después. Por
+ejemplo: "Listo, ya está tu app tipo Uber: elige origen y destino y pide un viaje. Si
+quieres, le agrego el registro de conductores."
+
+Habla como con alguien que no programa. Lo que revisaste y lo que no, los errores que
+arreglaste en el camino ("ya no tiene el hueco en blanco que tenía antes"), el
+compilado, la vista de celular, los nombres de archivos o de lo que usaste por debajo:
+nada de eso va en la respuesta. Esa comprobación es para ti. Tampoco hagas listas de
+todo lo que tiene la app: la persona la está viendo. Aparte de los avisos que se te
+piden en otras partes (que una base local solo vive en esta sala, que algo se conecta
+desde Variables), solo si algo quedó roto y no lo pudiste arreglar, dilo en una línea,
+con lo que no funciona y no con cómo lo revisaste.
+
+Por qué: casi todos los que llegan mandan un solo mensaje para ver qué tan bueno es, y
+esta respuesta es lo primero que leen. Con gente real el agente contestaba "la parte de
+arriba la revisé en pantalla, las de abajo solo compilan" o "no probé el flujo completo
+de pedir un viaje", sobre apps que funcionaban bien: para quien no programa eso se lee
+como que algo está mal.
 </respuesta>`;
 
 export interface AgentCallbacks extends StreamCallbacks {

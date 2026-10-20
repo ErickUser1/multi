@@ -56,6 +56,7 @@ jobs:
       - run: npx playwright-core install --with-deps chromium
       - run: npm run demo:ver-preview
       - run: npm run demo:internet
+      - run: npm run demo:publicar
       - run: npm run demo:documento
       - run: npm run demo:doc-sync
       - run: npm run demo:comentarios

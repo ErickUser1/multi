@@ -1,8 +1,10 @@
-import { writeFile, mkdir } from "node:fs/promises";
+import { writeFile, mkdir, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createWorkspace } from "../engine/workspace.js";
 import { detectBuild, buscarSalida } from "../engine/preview.js";
-import { credencialDeDeploy, motivoDeFallo, sacarUrl } from "../engine/publicar.js";
+import { credencialDeDeploy, motivoDeFallo, sacarUrl, nombreDeApp } from "../engine/publicar.js";
+import { SqliteStorage } from "../storage/sqlite.js";
 
 /**
  * Demo: qué se compila y qué se sube al publicar la app de una sala.
@@ -125,6 +127,47 @@ async function main() {
     check("si no es del proyecto, se respeta lo que dijo", otra === "https://otra-cosa.pages.dev");
 
     check("sin URL en la salida, no se inventa una", sacarUrl("todo mal", "una-sala") === null);
+  }
+
+  console.log("\n9b. El nombre lo elige quien publica");
+  {
+    check("Página tipo Uber!! → pagina-tipo-uber", nombreDeApp("Página tipo Uber!!") === "pagina-tipo-uber", String(nombreDeApp("Página tipo Uber!!")));
+    check("ñ y espacios de sobra", nombreDeApp("  Año   Ñandú ") === "ano-nandu", String(nombreDeApp("  Año   Ñandú ")));
+    check("solo símbolos no da nombre", nombreDeApp("!!! ???") === null);
+    const largo = nombreDeApp("a".repeat(57) + "-bcd") ?? "";
+    check("se corta a 58 y sin guion al final", largo.length <= 58 && !largo.endsWith("-"), largo);
+    check("un id de sala se queda igual", nombreDeApp("vibe-fiesta-45") === "vibe-fiesta-45");
+
+    // Los subdominios de pages.dev son de todo Cloudflare: si otra cuenta ya
+    // tiene el nombre, el proyecto queda con un sufijo.
+    const conSufijo = "✨ Deployment complete! Take a peek over at https://9f1c2a3b.mi-banco-3xk.pages.dev";
+    check(
+      "con sufijo de Cloudflare devuelve la estable con sufijo",
+      sacarUrl(conSufijo, "mi-banco") === "https://mi-banco-3xk.pages.dev",
+      String(sacarUrl(conSufijo, "mi-banco")),
+    );
+    check("sin hash ni sufijo", sacarUrl("https://mi-banco.pages.dev/", "mi-banco") === "https://mi-banco.pages.dev");
+
+    const dir = await mkdtemp(join(tmpdir(), "multi-nombres-"));
+    try {
+      const db = new SqliteStorage(join(dir, "multi.db"));
+      await db.init();
+      const sala = (id: string) => ({ id, workspaceDir: join(dir, id), createdAt: 1, lastActiveAt: 1 });
+      await db.createRoom(sala("vieja-sala-1"));
+      await db.createRoom(sala("nueva-sala-2"));
+      await db.createRoom(sala("otra-sala-3"));
+      // Una que publicó antes de que se pudiera elegir: su proyecto se llama como su id.
+      await db.setPublicacion("vieja-sala-1", "https://vieja-sala-1.pages.dev", "vieja-sala-1");
+      await db.setPublicacion("nueva-sala-2", "https://mi-banco.pages.dev", "mi-banco");
+      check("un nombre que usa otra sala está tomado", await db.nombreEnUso("mi-banco", "otra-sala-3"));
+      check("pero no para la sala que lo tiene", !(await db.nombreEnUso("mi-banco", "nueva-sala-2")));
+      check("el id de una sala vieja publicada está tomado", await db.nombreEnUso("vieja-sala-1", "otra-sala-3"));
+      check("un nombre libre no", !(await db.nombreEnUso("mi-tienda", "otra-sala-3")));
+      const leida = await db.getRoom("nueva-sala-2");
+      check("se guarda y se lee el nombre", leida?.nombrePublicado === "mi-banco", JSON.stringify(leida));
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   }
 
   console.log("\n10. Una app con servidor propio no cabe, y se dice antes de subir");

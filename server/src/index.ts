@@ -131,6 +131,7 @@ import {
 } from "./supabase.js";
 import {
   publicarSala,
+  nombreDeApp,
   credencialDeDeploy,
   NoSePudoPublicar,
   type Credencial,
@@ -1456,7 +1457,7 @@ fastify.delete<{ Params: { id: string } }>("/rooms/:id/supabase", async (req) =>
  * petición colgada ese rato la mataría por timeout. Lo que pasa después viaja
  * por socket, que además llega a TODA la sala y no solo a quien lo pidió.
  */
-fastify.post<{ Params: { id: string } }>("/rooms/:id/publicar", async (req, reply) => {
+fastify.post<{ Params: { id: string }; Body: { nombre?: unknown } | undefined }>("/rooms/:id/publicar", async (req, reply) => {
   const room = getRoom(req.params.id) ?? (await wakeRoom(req.params.id));
   if (!room) return reply.code(404).send({ error: "sala no encontrada" });
 
@@ -1470,11 +1471,55 @@ fastify.post<{ Params: { id: string } }>("/rooms/:id/publicar", async (req, repl
     return reply.code(409).send({ error: "ya se está publicando", etapa: room.publicando });
   }
 
-  void publicarEnSegundoPlano(room, cred);
+  const nombre = await nombreParaPublicar(room, req.body?.nombre);
+  if ("error" in nombre) return reply.code(nombre.codigo).send({ error: nombre.error });
+
+  void publicarEnSegundoPlano(room, cred, nombre.nombre);
   return { ok: true };
 });
 
-async function publicarEnSegundoPlano(room: Room, cred: Credencial): Promise<void> {
+/**
+ * Con qué nombre se publica: la dirección `nombre.pages.dev`.
+ *
+ * Se elige una vez, antes de la primera publicación. Cloudflare no deja
+ * renombrar un proyecto: cambiarlo después dejaría el link que ya se compartió
+ * apuntando a una versión vieja, o roto. Así que una sala que ya publicó sigue
+ * con el suyo y lo que llegue en el pedido se ignora; una que publicó antes de
+ * que se pudiera elegir se llama como su id, que era la regla de entonces.
+ *
+ * Para la primera vez: lo que escribió la persona, o el nombre de la sala, o el
+ * id, en ese orden.
+ */
+async function nombreParaPublicar(
+  room: Room,
+  pedido: unknown,
+): Promise<{ nombre: string } | { error: string; codigo: 400 | 409 }> {
+  if (room.nombrePublicado) return { nombre: room.nombrePublicado };
+  if (room.urlPublicada) return { nombre: nombreDeApp(room.id) ?? room.id };
+
+  const escrito = typeof pedido === "string" && pedido.trim() ? pedido : null;
+  const nombre = escrito
+    ? nombreDeApp(escrito)
+    : (room.nombre ? nombreDeApp(room.nombre) : null) ?? nombreDeApp(room.id);
+  if (!nombre) return { error: "ese nombre no sirve: usa letras o números", codigo: 400 };
+  const otraLoEstaPublicando = [...nombresPublicandose].some(([sala, n]) => n === nombre && sala !== room.id);
+  if (otraLoEstaPublicando || (await (await getStorage()).nombreEnUso(nombre, room.id))) {
+    return { error: "ese nombre ya lo usa otra app de Multti", codigo: 409 };
+  }
+  return { nombre };
+}
+
+/**
+ * Los nombres que se están publicando ahorita, por sala.
+ *
+ * El nombre se guarda en la base hasta que la publicación sale, y un build tarda
+ * minutos: sin esto, dos salas que publican al mismo tiempo con el mismo nombre
+ * pasarían las dos la revisión y la segunda pisaría a la primera.
+ */
+const nombresPublicandose = new Map<string, string>();
+
+async function publicarEnSegundoPlano(room: Room, cred: Credencial, nombre: string): Promise<void> {
+  nombresPublicandose.set(room.id, nombre);
   const avisar = (etapa: EtapaDeploy) => {
     room.publicando = etapa;
     io.to(room.id).emit("deploy:progreso", { etapa });
@@ -1482,10 +1527,13 @@ async function publicarEnSegundoPlano(room: Room, cred: Credencial): Promise<voi
 
   try {
     avisar("compilando");
-    const url = await publicarSala(room.workspace, await ensureRunner(room), cred, avisar);
+    const url = await publicarSala(room.workspace, await ensureRunner(room), cred, nombre, avisar);
+    // El nombre se guarda hasta aquí, cuando ya salió: un intento que falló no
+    // se queda con él, y la persona lo puede cambiar antes de volver a probar.
     room.urlPublicada = url;
-    await (await getStorage()).setUrlPublicada(room.id, url);
-    io.to(room.id).emit("deploy:listo", { url });
+    room.nombrePublicado = nombre;
+    await (await getStorage()).setPublicacion(room.id, url, nombre);
+    io.to(room.id).emit("deploy:listo", { url, nombre });
     // Y al chat, para que el link quede en el historial de la sala y no solo en
     // la pantalla de quien estaba mirando cuando terminó.
     systemMsg(room, `la app está publicada: ${url}`);
@@ -1501,6 +1549,7 @@ async function publicarEnSegundoPlano(room: Room, cred: Credencial): Promise<voi
     systemMsg(room, `no se pudo publicar: ${mensaje}`, "#d95d63");
   } finally {
     room.publicando = null;
+    nombresPublicandose.delete(room.id);
   }
 }
 
@@ -1697,6 +1746,7 @@ io.on("connection", (socket) => {
       // Dónde está publicada, si lo está: es un dato de la sala, no una noticia
       // de hace rato. Quien entra mañana tiene que poder abrirla igual.
       urlPublicada: room.urlPublicada ?? null,
+      nombrePublicado: room.nombrePublicado ?? null,
       agents: room.agents.list(),
       actividad: Object.fromEntries(ultimaAccion.get(room.id) ?? []),
       orphanTurns: room.orphanTurns ?? [],

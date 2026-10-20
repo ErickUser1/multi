@@ -52,8 +52,20 @@ export async function publicarSala(
   workspace: Workspace,
   runner: Runner,
   cred: Credencial,
+  /**
+   * El nombre del proyecto en Cloudflare, que es la dirección de la app.
+   *
+   * Siempre el mismo para la misma sala: así republicar pisa lo anterior y el
+   * link que alguien ya compartió sigue sirviendo, en vez de acumular una URL
+   * nueva cada vez. Lo decide quien llama (ver /rooms/:id/publicar).
+   */
+  nombre: string,
   onEtapa?: (etapa: EtapaDeploy) => void,
 ): Promise<string> {
+  // Se filtra aunque ya venga limpio: acaba en un dominio y en un comando.
+  const proyecto = nombreDeApp(nombre);
+  if (!proyecto) throw new NoSePudoPublicar("ese nombre no sirve para una dirección web");
+
   const build = await detectBuild(workspace.dir);
   if (!build) {
     throw new NoSePudoPublicar(
@@ -89,17 +101,6 @@ export async function publicarSala(
         "apps que se ven en el navegador; una que necesita servidor propio no cabe aquí",
     );
   }
-
-  /**
-   * El nombre del proyecto en Cloudflare es el id de la sala.
-   *
-   * Así republicar pisa lo anterior y el link que alguien ya compartió sigue
-   * sirviendo, en vez de acumular una URL nueva por cada vez que se publica.
-   *
-   * Se filtra aunque los ids ya vengan limpios: acaba en un dominio público y en
-   * un argumento de línea de comandos.
-   */
-  const proyecto = workspace.roomId.replace(/[^a-z0-9-]/gi, "").toLowerCase().slice(0, 58);
 
   onEtapa?.("subiendo");
 
@@ -163,11 +164,39 @@ export async function publicarSala(
  * lo esperado y es mejor no inventar una URL que quizá no carga.
  */
 export function sacarUrl(salida: string, proyecto: string): string | null {
-  const conPrefijo = salida.match(/https:\/\/[a-z0-9.-]*\.pages\.dev[^\s]*/i)?.[0];
-  if (!conPrefijo) return null;
-  return conPrefijo.includes(`${proyecto}.pages.dev`)
-    ? `https://${proyecto}.pages.dev`
-    : conPrefijo;
+  const urls = salida.match(/https:\/\/[a-z0-9.-]*\.pages\.dev[^\s]*/gi);
+  if (!urls) return null;
+  for (const url of urls) {
+    const etiquetas = new URL(url).hostname.split(".");
+    // `hash.sub.pages.dev` o `sub.pages.dev`.
+    const sub = etiquetas.length === 4 ? etiquetas[1]! : etiquetas[0]!;
+    // Los subdominios de pages.dev son de todo Cloudflare, no de esta cuenta:
+    // si el nombre ya lo tiene otra cuenta, el proyecto queda en
+    // `nombre-abc.pages.dev`. Esa es la estable, aunque no sea la que se pidió.
+    if (sub === proyecto || sub.startsWith(`${proyecto}-`)) return `https://${sub}.pages.dev`;
+  }
+  return urls[0]!;
+}
+
+/**
+ * El nombre de una app para su dirección: `nombre.pages.dev`.
+ *
+ * Lo escribe la persona ("Página tipo Uber!!"), así que se pasa a lo que acepta
+ * un subdominio: minúsculas sin acentos, guiones en lugar de lo demás, y el tope
+ * de 58 que pone Cloudflare. Acaba en un dominio público y en un argumento de
+ * línea de comandos, así que se filtra siempre, venga de donde venga.
+ * `null` si no quedó nada.
+ */
+export function nombreDeApp(texto: string): string | null {
+  const limpio = texto
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 58)
+    .replace(/-+$/g, "");
+  return limpio || null;
 }
 
 /**

@@ -44,6 +44,9 @@ export class SqliteStorage implements Storage {
         nombre         TEXT,
         -- Dónde quedó publicada la app, si es que se publicó.
         url_publicada  TEXT,
+        -- Con qué nombre se publicó (nombre.pages.dev). Null en las salas que
+        -- publicaron antes de esta columna: su proyecto se llama como su id.
+        nombre_publicado TEXT,
         -- Si hay que mencionar al agente. Null es "multi": las salas de antes
         -- de esta columna siguen comportándose igual que siempre.
         modo           TEXT
@@ -139,6 +142,13 @@ export class SqliteStorage implements Storage {
     // sin esto no hay forma de saber, al volver mañana, si la sala está en vivo.
     try {
       this.db.exec(`ALTER TABLE rooms ADD COLUMN url_publicada TEXT`);
+    } catch {
+      // ya la tiene
+    }
+
+    // Con qué nombre se publicó, que elige quien publica la primera vez.
+    try {
+      this.db.exec(`ALTER TABLE rooms ADD COLUMN nombre_publicado TEXT`);
     } catch {
       // ya la tiene
     }
@@ -250,8 +260,19 @@ export class SqliteStorage implements Storage {
     this.db.prepare(`UPDATE rooms SET modo = ? WHERE id = ?`).run(modo, id);
   }
 
-  async setUrlPublicada(id: string, url: string): Promise<void> {
-    this.db.prepare(`UPDATE rooms SET url_publicada = ? WHERE id = ?`).run(url, id);
+  async setPublicacion(id: string, url: string, nombre: string): Promise<void> {
+    this.db.prepare(`UPDATE rooms SET url_publicada = ?, nombre_publicado = ? WHERE id = ?`).run(url, nombre, id);
+  }
+
+  async nombreEnUso(nombre: string, salaId: string): Promise<boolean> {
+    // Una sala que publicó antes de que se pudiera elegir el nombre tiene su
+    // proyecto con el nombre de su id: ese también está tomado.
+    const fila = this.db
+      .prepare(
+        `SELECT 1 FROM rooms WHERE id != ? AND (nombre_publicado = ? OR (nombre_publicado IS NULL AND url_publicada IS NOT NULL AND id = ?)) LIMIT 1`,
+      )
+      .get(salaId, nombre, nombre);
+    return fila !== undefined;
   }
 
   /**
@@ -622,6 +643,7 @@ function toRoom(r: Record<string, unknown>): StoredRoom {
     // cae al id.
     nombre: r.nombre == null ? null : String(r.nombre),
     urlPublicada: r.url_publicada == null ? null : String(r.url_publicada),
+    nombrePublicado: r.nombre_publicado == null ? null : String(r.nombre_publicado),
     // Solo "solo" cuenta como tal: null y cualquier cosa rara caen a multi, que
     // es el comportamiento que ya tenían todas las salas.
     modo: r.modo === "solo" ? "solo" : "multi",

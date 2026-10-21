@@ -2638,6 +2638,57 @@ img.av.av-personaje {
   line-height: 1.5;
   margin: 0 0 12px;
 }
+.publicar-nombre {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin-bottom: 6px;
+}
+.publicar-nombre input {
+  background: var(--fondo2);
+  border: 1px solid var(--linea);
+  border-radius: 4px;
+  padding: 8px 10px;
+  color: var(--texto);
+  /* 16px en celular: con menos, iOS hace zoom al enfocar. */
+  font-size: 16px;
+  font-family: inherit;
+  letter-spacing: normal;
+  text-transform: none;
+  outline: none;
+}
+@media (min-width: 700px) {
+  .publicar-nombre input {
+    font-size: 12px;
+  }
+}
+.publicar-nombre input:focus {
+  border-color: var(--lavanda);
+}
+.publicar-nombre input[aria-invalid="true"] {
+  border-color: #d95d63;
+}
+.publicar-direccion {
+  font-size: 11.5px;
+  color: var(--lavanda);
+  margin: 0 0 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.publicar-direccion.mal,
+.publicar-error {
+  color: #d95d63;
+}
+.publicar-error {
+  font-size: 11px;
+  line-height: 1.5;
+  margin: -4px 0 10px;
+}
 .publicar-btn {
   width: 100%;
   font-size: 10px;
@@ -2824,6 +2875,19 @@ img.av.av-personaje {
     max-width: calc(100vw - 24px);
     right: 0;
     left: auto;
+  }
+  /* El de publicar tampoco: en el teléfono su botón queda a la izquierda de la
+     barra, y anclado a su derecha crecía hacia afuera y cortaba el campo del
+     nombre. Va a lo ancho de la pantalla, justo debajo del botón (sin `top`,
+     se queda en el lugar donde le toca). */
+  .publicar-caja {
+    position: fixed;
+    top: auto;
+    left: 12px;
+    right: 12px;
+    width: auto;
+    max-width: none;
+    margin-top: 8px;
   }
   /**
    * El menú de salas NO entra en la regla de arriba: su botón está pegado al

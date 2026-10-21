@@ -258,6 +258,9 @@ const TEXTOS = {
     republicar: "Publicar los cambios",
     publicadaTitulo: "Publicada",
     sinPublicarTitulo: "Sin publicar",
+    publicarNombre: "Nombre de tu app",
+    publicarNombreNota: "Después de publicar ya no se puede cambiar.",
+    publicarNombreVacio: "Escribe un nombre con letras o números",
     publicarNota:
       "Publicar pone la app en internet, con un link que puedes pasarle a quien sea. Nadie tiene que entrar a Multti para verla.",
     publicarNotaViva:
@@ -612,6 +615,9 @@ const TEXTOS = {
     republicar: "Publish changes",
     publicadaTitulo: "Published",
     sinPublicarTitulo: "Not published",
+    publicarNombre: "Your app's name",
+    publicarNombreNota: "It can't be changed after publishing.",
+    publicarNombreVacio: "Type a name with letters or numbers",
     publicarNota:
       "Publishing puts the app online, with a link you can send to anyone. They don't need to join Multti to see it.",
     publicarNotaViva: "What you change here isn't live until you publish again.",

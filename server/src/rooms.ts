@@ -87,6 +87,13 @@ export interface Room {
    */
   urlPublicada?: string | null;
   /**
+   * Con qué nombre se publicó: `nombre.pages.dev`. Se elige una sola vez, antes
+   * de la primera publicación, porque Cloudflare no deja renombrar un proyecto.
+   * Null en una sala sin publicar, o en una que publicó antes de que se pudiera
+   * elegir (esa se llama como su id).
+   */
+  nombrePublicado?: string | null;
+  /**
    * Si en esta sala hay que mencionar al agente para despertarlo.
    *
    * En "multi" sí, que es la regla de siempre. En "solo" no hace falta, porque
@@ -277,6 +284,7 @@ async function despertarSala(id: string): Promise<Room | null> {
     id,
     nombre: stored.nombre ?? null,
     urlPublicada: stored.urlPublicada ?? null,
+    nombrePublicado: stored.nombrePublicado ?? null,
     // Las salas anteriores a esta columna vuelven en multi, que es como se
     // comportaron siempre: nada cambia debajo de quien ya las usaba.
     modo: stored.modo ?? "multi",

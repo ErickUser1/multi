@@ -13,24 +13,57 @@ import { useTextos } from "./i18n.js";
  * dónde, y el botón para volver a subir lo último.
  */
 
+/**
+ * El nombre tal como va a quedar en la dirección: `nombre.pages.dev`.
+ *
+ * Lo mismo que hace `nombreDeApp` en el server (engine/publicar.ts), para que lo
+ * que se ve mientras se escribe sea lo que va a salir. El server lo vuelve a
+ * filtrar: esto es solo para enseñarlo.
+ */
+export function nombreDeApp(texto: string): string {
+  return texto
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 58)
+    .replace(/-+$/g, "");
+}
+
 export function PublicarPanel({
   roomId,
+  nombreDeSala,
   urlPublicada,
   publicando,
   puedePublicar,
+  errorDeNombre,
   onPublicar,
 }: {
   roomId: string | null;
+  /** Con lo que arranca el campo del nombre: el nombre de la sala, o su id. */
+  nombreDeSala: string | null;
   urlPublicada: string | null;
   publicando: "compilando" | "subiendo" | null;
   /** Si la sala tiene algo guardado que valga la pena subir. */
   puedePublicar: boolean;
-  onPublicar: () => void;
+  /** Por qué el server no aceptó el nombre, para decirlo junto al campo. */
+  errorDeNombre: string | null;
+  onPublicar: (nombre?: string) => void;
 }) {
   const { t } = useTextos();
   const [abierto, setAbierto] = useState(false);
   const [copiado, setCopiado] = useState(false);
   const cajaRef = useRef<HTMLDivElement>(null);
+  /**
+   * El nombre que se escribe, solo antes de la primera publicación: Cloudflare
+   * no deja renombrar un proyecto, así que después el link se queda como está.
+   * Null mientras nadie lo toca, y ahí se usa el de la sala.
+   */
+  const [escrito, setEscrito] = useState<string | null>(null);
+  const sugerido = nombreDeApp(nombreDeSala ?? roomId ?? "");
+  const nombre = escrito ?? sugerido;
+  const direccion = nombreDeApp(nombre);
 
   // Cerrar al hacer click fuera o con Escape, como los demás paneles.
   useEffect(() => {
@@ -94,13 +127,32 @@ export function PublicarPanel({
               <p className="publicar-nota">{t.publicarNotaViva}</p>
             </>
           ) : (
-            <p className="publicar-nota">{t.publicarNota}</p>
+            <>
+              <label className="publicar-nombre">
+                <span>{t.publicarNombre}</span>
+                <input
+                  value={nombre}
+                  onChange={(e) => setEscrito(e.target.value)}
+                  maxLength={80}
+                  placeholder={sugerido}
+                  disabled={!!publicando}
+                  spellCheck={false}
+                  aria-invalid={!!errorDeNombre || !direccion}
+                />
+              </label>
+              <p className={`publicar-direccion ${direccion ? "" : "mal"}`}>
+                {direccion ? `${direccion}.pages.dev` : t.publicarNombreVacio}
+              </p>
+              {errorDeNombre && <p className="publicar-error">{errorDeNombre}</p>}
+              <p className="publicar-nota">{t.publicarNombreNota}</p>
+              <p className="publicar-nota">{t.publicarNota}</p>
+            </>
           )}
 
           <button
             className="publicar-btn"
-            onClick={onPublicar}
-            disabled={!puedePublicar || !!publicando}
+            onClick={() => onPublicar(urlPublicada ? undefined : direccion)}
+            disabled={!puedePublicar || !!publicando || (!urlPublicada && !direccion)}
           >
             {publicando
               ? t.etapaDeploy[publicando]

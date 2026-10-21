@@ -25,6 +25,11 @@ export interface StoredRoom {
   /** Dónde quedó publicada la app, o null si la sala nunca se publicó. */
   urlPublicada?: string | null;
   /**
+   * Con qué nombre se publicó (`nombre.pages.dev`). Null en las que publicaron
+   * antes de que se pudiera elegir: su proyecto se llama como su id.
+   */
+  nombrePublicado?: string | null;
+  /**
    * Si en esta sala hay que mencionar al agente para despertarlo.
    *
    * En "multi" sí, que es la regla de siempre: el chat sirve para hablar entre
@@ -170,13 +175,20 @@ export interface Storage {
   /** Marca actividad reciente (para saber qué salas siguen vivas). */
   touchRoom(id: string): Promise<void>;
   /**
-   * Anota dónde quedó publicada la app.
+   * Anota dónde quedó publicada la app y con qué nombre.
    *
    * Se guarda para que al volver mañana la sala siga sabiendo que está en vivo:
    * sin esto, la única señal de que se publicó era un mensaje en el chat que se
    * pierde entre los demás.
    */
-  setUrlPublicada(id: string, url: string): Promise<void>;
+  setPublicacion(id: string, url: string, nombre: string): Promise<void>;
+  /**
+   * Si otra sala ya publicó con ese nombre.
+   *
+   * Dos salas con el mismo nombre serían el mismo proyecto en Cloudflare: la
+   * segunda en publicar le borraría la app a la primera.
+   */
+  nombreEnUso(nombre: string, salaId: string): Promise<boolean>;
   /** Le pone nombre a la sala. `null` lo quita y se vuelve a ver el id. */
   renameRoom(id: string, nombre: string | null): Promise<void>;
   /** Si en esta sala hay que mencionar al agente para despertarlo. */

@@ -646,6 +646,8 @@ function Sala({
    * de la sala, no un mensaje de hace rato.
    */
   const [urlPublicada, setUrlPublicada] = useState<string | null>(null);
+  /** Por qué no se aceptó el nombre que se escribió para publicar. */
+  const [errorDeNombre, setErrorDeNombre] = useState<string | null>(null);
   /**
    * La base de datos de la sala.
    *
@@ -1699,15 +1701,26 @@ function Sala({
    * llega por socket. Un build tarda minutos, y una petición colgada ese rato se
    * moriría por timeout antes de contar nada.
    */
-  const publicar = async () => {
+  const publicar = async (nombreElegido?: string) => {
     if (!roomId) return;
     setPublicando("compilando"); // respuesta inmediata; el server confirma en seguida
+    setErrorDeNombre(null);
     try {
-      const r = await fetch(`${SERVER_URL}/rooms/${roomId}/publicar`, { method: "POST" });
+      const r = await fetch(`${SERVER_URL}/rooms/${roomId}/publicar`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(nombreElegido ? { nombre: nombreElegido } : {}),
+      });
       if (!r.ok) {
         const d = (await r.json().catch(() => null)) as { error?: string } | null;
         setPublicando(null);
-        alert(d?.error ?? t.publicarFallo);
+        // Un nombre que no sirve o que ya está tomado se dice junto al campo,
+        // donde se arregla; lo demás, como siempre.
+        if (r.status === 400 || (r.status === 409 && d?.error?.includes("nombre"))) {
+          setErrorDeNombre(d?.error ?? t.publicarFallo);
+        } else {
+          alert(d?.error ?? t.publicarFallo);
+        }
       }
     } catch {
       setPublicando(null);
@@ -2396,9 +2409,11 @@ function Sala({
             )}
             <PublicarPanel
               roomId={roomId}
+              nombreDeSala={nombre}
               urlPublicada={urlPublicada}
               publicando={publicando}
               puedePublicar={sePuedeExportar}
+              errorDeNombre={errorDeNombre}
               onPublicar={publicar}
             />
             {/* Las variables son del proyecto de la sala, así que sin sala no

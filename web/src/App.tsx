@@ -2408,9 +2408,9 @@ function Sala({
                 que volver a ofrecerlo es montar el panel otra vez.
 
                 El de descargar .zip lo usaron cero personas de las 35 del
-                experimento. Sacar la app de la sala ya se resuelve con
-                Publicar, que da un enlace en vez de una carpeta que alguien
-                tendría que saber correr. La ruta del server sigue ahí. */}
+                experimento, así que salió de esta barra: sacar la app de la
+                sala se resuelve con Publicar. Volvió a la pestaña Código
+                (CodigoView), que es donde lo busca quien sí quiere el código. */}
             {/* El modo sube aquí desde la cabecera del chat, donde competía por
                 ancho con el nombre de la sala y quedaba apretado.
 

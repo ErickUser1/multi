@@ -4264,3 +4264,11 @@ img.av.av-personaje {
     padding: 0 14px 10px;
   }
 }
+
+/* Lo que avisa el .zip de la pestaña Código (nada guardado, o trabajo a medias). */
+.codigo-aviso {
+  padding: 8px 14px;
+  font-size: 11px;
+  color: var(--dim);
+  border-bottom: 1px solid var(--linea);
+}

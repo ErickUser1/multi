@@ -125,6 +125,8 @@ export function CodigoView({ roomId, socket }: { roomId: string; socket: Socket 
   const [cerradas, setCerradas] = useState<Set<string>>(new Set());
   const [recien, setRecien] = useState<string | null>(null);
   const [copiado, setCopiado] = useState(false);
+  /** Lo que hay que avisar del .zip: que no hay nada guardado, o que falta lo de ahorita. */
+  const [avisoZip, setAvisoZip] = useState<string | null>(null);
   const abiertoRef = useRef<string | null>(null);
   abiertoRef.current = abierto;
 
@@ -196,6 +198,40 @@ export function CodigoView({ roomId, socket }: { roomId: string; socket: Socket 
     [archivo],
   );
   const lineas = archivo && "contenido" in archivo ? archivo.contenido.split("\n").length : 0;
+
+  /**
+   * Descargar el proyecto como .zip.
+   *
+   * Pregunta antes cómo está la sala: el .zip sale de lo último guardado, así
+   * que si un agente está a media escritura se avisa que eso no viaja, y si la
+   * sala no ha guardado nada todavía se dice en vez de bajar un error.
+   */
+  const descargar = async () => {
+    const sala = `${SERVER_URL}/rooms/${encodeURIComponent(roomId)}`;
+    try {
+      const r = await fetch(`${sala}/export/estado`);
+      const estado = (await r.json()) as { hayCommits: boolean; cambiosSinCommitear: boolean };
+      if (!estado.hayCommits) {
+        setAvisoZip(t.zipSalaVacia);
+        return;
+      }
+      setAvisoZip(estado.cambiosSinCommitear ? t.zipTrabajoSinGuardar : null);
+      const a = document.createElement("a");
+      a.href = `${sala}/export`;
+      a.download = "";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch {
+      setAvisoZip(t.zipFallo);
+    }
+  };
+
+  useEffect(() => {
+    if (!avisoZip) return;
+    const id = setTimeout(() => setAvisoZip(null), 5000);
+    return () => clearTimeout(id);
+  }, [avisoZip]);
 
   const copiar = async () => {
     if (!archivo || !("contenido" in archivo)) return;
@@ -272,7 +308,11 @@ export function CodigoView({ roomId, socket }: { roomId: string; socket: Socket 
               {copiado ? t.codigoCopiado : t.codigoCopiar}
             </button>
           )}
+          <button type="button" className="codigo-copiar" onClick={() => void descargar()} title={t.descargarZipTitulo}>
+            {t.descargarZip}
+          </button>
         </div>
+        {avisoZip && <div className="codigo-aviso">{avisoZip}</div>}
         {!archivo ? (
           <div className="codigo-vacio">{t.codigoCargando}</div>
         ) : "binario" in archivo ? (

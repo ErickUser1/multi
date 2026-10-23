@@ -243,10 +243,10 @@ const TEXTOS = {
     docQuitarSerie: "− serie",
     copiarLink: "Compartir",
     copiado: "Copiado",
-    // Los textos del .zip se quedan aunque su botón ya no se monte: la ruta del
-    // server sigue en pie, así que volver a ofrecerlo es poner el botón y nada
-    // más. Borrarlos obligaría a reescribirlos en los dos idiomas.
-    descargarZip: "Descargar .zip",
+    // El botón vive en la pestaña Código (CodigoView), donde lo busca quien
+    // quiere llevarse el proyecto.
+    descargarZip: "Descargar código",
+    descargarZipTitulo: "Baja el proyecto como .zip, con lo último guardado",
     publicar: "Publicar",
     publicarTitulo: "Poner la app en internet, con un link para compartir",
     etapaDeploy: {
@@ -611,7 +611,8 @@ const TEXTOS = {
     docQuitarSerie: "− series",
     copiarLink: "Share",
     copiado: "Copied",
-    descargarZip: "Download .zip",
+    descargarZip: "Download code",
+    descargarZipTitulo: "Download the project as a .zip, with the last saved point",
     publicar: "Publish",
     publicarTitulo: "Put the app online, with a link you can share",
     etapaDeploy: {

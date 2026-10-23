@@ -82,6 +82,11 @@ const ROOM_COOKIE = "multi_room";
  */
 const ESPERAS = [250, 500, 1000, 2000];
 
+/** Una cabecera que Node puede dar como lista, tomada como texto. */
+function headerUnico(v: string | string[] | undefined): string | undefined {
+  return Array.isArray(v) ? v[0] : v;
+}
+
 /** Lee el roomId de la cookie (si viene). */
 function roomFromCookie(cookieHeader?: string): string | null {
   if (!cookieHeader) return null;
@@ -100,7 +105,7 @@ function roomFromCookie(cookieHeader?: string): string | null {
  */
 export function parsePreviewUrl(
   url: string,
-  headers: { referer?: string; cookie?: string },
+  headers: { referer?: string; cookie?: string; dest?: string },
 ): { roomId: string; rest: string } | null {
   // Caso 1: URL explícita bajo /preview/:roomId/...
   if (url.startsWith(PREFIX)) {
@@ -112,15 +117,25 @@ export function parsePreviewUrl(
     return { roomId, rest };
   }
 
-  // La raíz SIEMPRE es la Sala. La cookie del preview sobrevive en la pestaña,
-  // así que sin esto abrir Multi después de ver un preview te daría la app del
-  // proyecto en lugar de la Sala.
   const soloRuta = url.split("?")[0];
-  if (soloRuta === "/") return null;
+  const fromReferer = headers.referer?.match(/\/preview\/([a-z0-9-]{1,64})(?:\/|$)/i)?.[1];
+
+  // La raíz es la Sala, salvo que la pida el iframe del preview.
+  //
+  // La cookie del preview sobrevive en la pestaña, así que sin la primera regla
+  // abrir Multti después de ver un preview te daría la app del proyecto en vez
+  // de la Sala. Pero una app que navega a su inicio (un link "Inicio", el logo,
+  // un router que redirige a "/") pide la raíz DESDE el iframe, y ahí se le
+  // servía la Sala entera: el chat de Multti aparecía dentro de la vista previa
+  // hasta que alguien recargaba. El navegador dice quién pide con
+  // Sec-Fetch-Dest, y la Sala nunca se abre dentro de un iframe.
+  if (soloRuta === "/" || soloRuta === "/index.html") {
+    if (headers.dest !== "iframe") return null;
+    const roomId = fromReferer ?? roomFromCookie(headers.cookie);
+    return roomId ? { roomId, rest: url } : null;
+  }
 
   if (RUTAS_DE_LA_SALA.some((p) => soloRuta === p || soloRuta.startsWith(p))) return null;
-
-  const fromReferer = headers.referer?.match(/\/preview\/([a-z0-9-]{1,64})(?:\/|$)/i)?.[1];
 
   // `/assets/` lo usan los dos: solo va al preview si la petición viene de ahí.
   if (soloRuta.startsWith(RUTA_COMPARTIDA) && !fromReferer) return null;
@@ -175,6 +190,7 @@ export function handlePreviewRequest(
   const parsed = parsePreviewUrl(req.url ?? "", {
     referer: req.headers.referer,
     cookie: req.headers.cookie,
+    dest: headerUnico(req.headers["sec-fetch-dest"]),
   });
   if (D) console.log(`[proxy] IN url=${req.url} parsed=${JSON.stringify(parsed)}`);
   if (!parsed) return false;

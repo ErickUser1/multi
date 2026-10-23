@@ -29,6 +29,8 @@ export interface StoredRoom {
    * antes de que se pudiera elegir: su proyecto se llama como su id.
    */
   nombrePublicado?: string | null;
+  /** La sala de la que esta es remix (ver createRemix en rooms.ts). Null si no lo es. */
+  origenId?: string | null;
   /**
    * Si en esta sala hay que mencionar al agente para despertarlo.
    *
@@ -132,6 +134,13 @@ export interface ConexionSupabase {
 }
 
 /** Una sala que alguien con cuenta visitó, para que le siga entre dispositivos. */
+/** Un remix de una sala, para la lista de la Sala. */
+export interface RemixDeSala {
+  id: string;
+  nombre: string | null;
+  createdAt: number;
+}
+
 export interface SalaDeUsuario {
   roomId: string;
   visitadaEn: number;
@@ -189,6 +198,8 @@ export interface Storage {
    * segunda en publicar le borraría la app a la primera.
    */
   nombreEnUso(nombre: string, salaId: string): Promise<boolean>;
+  /** Los remixes de una sala, del más nuevo al más viejo. */
+  remixesDe(id: string): Promise<RemixDeSala[]>;
   /** Le pone nombre a la sala. `null` lo quita y se vuelve a ver el id. */
   renameRoom(id: string, nombre: string | null): Promise<void>;
   /** Si en esta sala hay que mencionar al agente para despertarlo. */

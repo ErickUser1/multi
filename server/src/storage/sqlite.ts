@@ -7,6 +7,7 @@ import type {
   ConexionSupabase,
   ModoDeSala,
   SalaDeUsuario,
+  RemixDeSala,
   Storage,
   StoredMessage,
   StoredRoom,
@@ -47,6 +48,8 @@ export class SqliteStorage implements Storage {
         -- Con qué nombre se publicó (nombre.pages.dev). Null en las salas que
         -- publicaron antes de esta columna: su proyecto se llama como su id.
         nombre_publicado TEXT,
+        -- La sala de la que es remix. Null en las salas normales.
+        origen_id      TEXT,
         -- Si hay que mencionar al agente. Null es "multi": las salas de antes
         -- de esta columna siguen comportándose igual que siempre.
         modo           TEXT
@@ -153,6 +156,13 @@ export class SqliteStorage implements Storage {
       // ya la tiene
     }
 
+    // De qué sala es remix, para el "Volver al original" y la lista de remixes.
+    try {
+      this.db.exec(`ALTER TABLE rooms ADD COLUMN origen_id TEXT`);
+    } catch {
+      // ya la tiene
+    }
+
     // El nombre que la gente le pone a la sala. Nullable a propósito: sin él la
     // interfaz cae al id, que es lo que se ha visto siempre.
     try {
@@ -228,10 +238,21 @@ export class SqliteStorage implements Storage {
   async createRoom(room: StoredRoom): Promise<void> {
     this.db
       .prepare(
-        `INSERT OR REPLACE INTO rooms (id, workspace_dir, created_at, last_active_at, modo)
-         VALUES (?, ?, ?, ?, ?)`,
+        `INSERT OR REPLACE INTO rooms (id, workspace_dir, created_at, last_active_at, modo, origen_id)
+         VALUES (?, ?, ?, ?, ?, ?)`,
       )
-      .run(room.id, room.workspaceDir, room.createdAt, room.lastActiveAt, room.modo ?? null);
+      .run(room.id, room.workspaceDir, room.createdAt, room.lastActiveAt, room.modo ?? null, room.origenId ?? null);
+  }
+
+  async remixesDe(id: string): Promise<RemixDeSala[]> {
+    const filas = this.db
+      .prepare(`SELECT id, nombre, created_at FROM rooms WHERE origen_id = ? ORDER BY created_at DESC`)
+      .all(id) as Record<string, unknown>[];
+    return filas.map((r) => ({
+      id: String(r.id),
+      nombre: r.nombre == null ? null : String(r.nombre),
+      createdAt: Number(r.created_at),
+    }));
   }
 
   async getRoom(id: string): Promise<StoredRoom | null> {
@@ -644,6 +665,7 @@ function toRoom(r: Record<string, unknown>): StoredRoom {
     nombre: r.nombre == null ? null : String(r.nombre),
     urlPublicada: r.url_publicada == null ? null : String(r.url_publicada),
     nombrePublicado: r.nombre_publicado == null ? null : String(r.nombre_publicado),
+    origenId: r.origen_id == null ? null : String(r.origen_id),
     // Solo "solo" cuenta como tal: null y cualquier cosa rara caen a multi, que
     // es el comportamiento que ya tenían todas las salas.
     modo: r.modo === "solo" ? "solo" : "multi",

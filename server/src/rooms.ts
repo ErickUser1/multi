@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { readFile, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { createWorkspace, homeDir, type Workspace } from "./engine/workspace.js";
+import { extractTo, commitAll, hayCommits } from "./engine/git.js";
 import { startPreview, detectLaunch, type Preview } from "./engine/preview.js";
 import {
   isDockerAvailable,
@@ -93,6 +94,8 @@ export interface Room {
    * elegir (esa se llama como su id).
    */
   nombrePublicado?: string | null;
+  /** La sala de la que esta es remix (ver createRemix). Null si no lo es. */
+  origenId?: string | null;
   /**
    * Si en esta sala hay que mencionar al agente para despertarlo.
    *
@@ -285,6 +288,7 @@ async function despertarSala(id: string): Promise<Room | null> {
     nombre: stored.nombre ?? null,
     urlPublicada: stored.urlPublicada ?? null,
     nombrePublicado: stored.nombrePublicado ?? null,
+    origenId: stored.origenId ?? null,
     // Las salas anteriores a esta columna vuelven en multi, que es como se
     // comportaron siempre: nada cambia debajo de quien ya las usaba.
     modo: stored.modo ?? "multi",
@@ -872,6 +876,72 @@ export async function renameRoom(room: Room, crudo: unknown): Promise<string | n
   room.nombre = nombre;
   await (await getStorage()).renameRoom(room.id, nombre);
   return nombre;
+}
+
+/** La sala no tiene nada guardado que copiar todavía. */
+export class NadaQueRemixear extends Error {}
+
+/**
+ * Un remix: una sala nueva con una copia del proyecto de otra, ligada a ella.
+ *
+ * Es una sala aparte y no una rama dentro de la misma por lo multijugador: si
+ * alguien cambiara de rama, la vista previa y los archivos cambiarían para
+ * todos los que están adentro. Así el original sigue corriendo intacto mientras
+ * alguien experimenta, y cada quien está en su versión al mismo tiempo. En la
+ * Sala se ve como una versión: "Remix de…" y "Volver al original".
+ *
+ * Se copia lo último guardado (`git archive HEAD`, lo mismo que el .zip), no el
+ * directorio. Eso deja fuera el .env, node_modules, dist y la base *.db sin un
+ * filtro aparte que se pueda equivocar: cualquiera con el link puede hacer un
+ * remix, y copiar los secretos sería regalarlos. Tampoco viajan el chat, la
+ * conexión de Supabase ni lo publicado: el remix empieza limpio.
+ */
+export async function createRemix(origen: Room): Promise<Room> {
+  if (!(await hayCommits(origen.workspace.dir))) {
+    throw new NadaQueRemixear("esta sala todavía no tiene nada guardado que copiar");
+  }
+  const storage = await getStorage();
+  let id = genId();
+  while (rooms.has(id) || (await storage.getRoom(id))) id = genId();
+
+  const workspace = await createWorkspace(id, { clean: true });
+  await extractTo(origen.workspace.dir, "HEAD", workspace.dir);
+  const deQuien = origen.nombre ?? origen.id;
+  await commitAll(workspace.dir, { message: `Remix de ${deQuien}`, author: "Multti" });
+
+  // Numerados para que se distingan en la lista: "(remix)", "(remix 2)"…
+  const cuantos = (await storage.remixesDe(origen.id)).length;
+  const sufijo = cuantos === 0 ? " (remix)" : ` (remix ${cuantos + 1})`;
+
+  const room: Room = {
+    id,
+    nombre: `${deQuien.slice(0, MAX_NOMBRE_SALA - sufijo.length)}${sufijo}`,
+    origenId: origen.id,
+    modo: "solo",
+    workspace,
+    preview: null,
+    members: new Map(),
+    histories: new Map(),
+    selections: new Map(),
+    agents: new AgentRegistry(),
+    coordinator: new RunCoordinator(),
+    vaciaDesde: Date.now(),
+  };
+  rooms.set(id, room);
+
+  const now = Date.now();
+  await storage.createRoom({
+    id,
+    workspaceDir: workspace.dir,
+    createdAt: now,
+    lastActiveAt: now,
+    modo: room.modo,
+    origenId: origen.id,
+  });
+  await storage.renameRoom(id, room.nombre ?? null);
+
+  void bootPreview(room);
+  return room;
 }
 
 /**

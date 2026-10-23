@@ -30,7 +30,10 @@ jobs:
   # de formatos entre proveedores y el analizador del back. Los que levantan
   # salas o contenedores quedan fuera — necesitan Docker y varios minutos.
   demos:
-    runs-on: ubuntu-latest
+    # Fijo y no ubuntu-latest: cuando latest pasó a 26.04, Playwright 1.56.1
+    # (el de docker/qa) ya no pudo instalar Chromium ahí y el job se cayó antes
+    # de la demo de ver_preview. Se sube cuando se suba Playwright.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

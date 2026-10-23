@@ -31,6 +31,7 @@
     "demo:agentes-se-ven": "npm run demo:agentes-se-ven -w server",
     "demo:imagenes": "npm run demo:imagenes -w server",
     "demo:proxy-rutas": "npm run demo:proxy-rutas -w server",
+    "demo:remix": "npm run demo:remix -w server",
     "demo:providers": "npm run demo:providers -w server",
     "dev:test": "npm run dev:test -w server",
     "demo:presupuesto": "npm run demo:presupuesto -w server",

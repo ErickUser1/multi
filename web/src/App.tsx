@@ -29,6 +29,7 @@ import { Historial } from "./Historial.js";
 import { loadStoredCredencial } from "./KeyPanel.js";
 import { EnvPanel, type EstadoSupabase } from "./EnvPanel.js";
 import { PublicarPanel } from "./PublicarPanel.js";
+import { VersionesSala, type OrigenDeSala, type RemixDeSala } from "./Remix.js";
 import { useTextos, type Textos } from "./i18n.js";
 import { MenuSalas } from "./MenuSalas.js";
 import { recordarSala, olvidarSala, recordarNombre, guardarSalas, siguienteLlave } from "./historial-salas.js";
@@ -646,6 +647,10 @@ function Sala({
    * de la sala, no un mensaje de hace rato.
    */
   const [urlPublicada, setUrlPublicada] = useState<string | null>(null);
+  /** De qué sala es remix esta (para "Volver al original"), y los remixes de esta. */
+  const [origen, setOrigen] = useState<OrigenDeSala | null>(null);
+  const [remixes, setRemixes] = useState<RemixDeSala[]>([]);
+  const [haciendoRemix, setHaciendoRemix] = useState(false);
   /** Por qué no se aceptó el nombre que se escribió para publicar. */
   const [errorDeNombre, setErrorDeNombre] = useState<string | null>(null);
   /**
@@ -1041,6 +1046,8 @@ function Sala({
       recordarNombre(roomId, p.nombre ?? null);
       setPublicando(p.publicando ?? null);
       setUrlPublicada(p.urlPublicada ?? null);
+      setOrigen(p.origen ?? null);
+      setRemixes(p.remixes ?? []);
       if (p.previewUrl) setPreviewReady(true);
       if (p.agents) setAgents(p.agents);
       // Lo que se pintó en vivo antes de este `joined` puede haber caducado: en
@@ -1176,6 +1183,8 @@ function Sala({
       setUrlPublicada(url);
     });
     socket.on("deploy:fallo", () => setPublicando(null));
+    // Alguien hizo un remix de esta sala: la lista se actualiza sin recargar.
+    socket.on("room:remixes", ({ remixes }: { remixes: RemixDeSala[] }) => setRemixes(remixes));
     socket.on("preview:ready", ({ relanzada }: { relanzada?: boolean }) => {
       setNovedadEnPreview(true);
       if (relanzada) setRelanzadas((n) => n + 1);
@@ -1729,6 +1738,32 @@ function Sala({
   };
 
   /**
+   * Hacer un remix: una copia del proyecto para experimentar sin tocar el
+   * original. El server arma la sala y aquí solo se navega a ella.
+   */
+  const hacerRemix = async () => {
+    if (!roomId || haciendoRemix) return;
+    setHaciendoRemix(true);
+    try {
+      const r = await fetch(`${SERVER_URL}/rooms/${roomId}/remix`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ autor: yo?.name ?? "" }),
+      });
+      const d = (await r.json().catch(() => null)) as { id?: string; error?: string } | null;
+      if (!r.ok || !d?.id) {
+        alert(d?.error ?? t.remixFallo);
+        return;
+      }
+      window.location.hash = `#/sala/${d.id}`;
+    } catch {
+      alert(t.remixFallo);
+    } finally {
+      setHaciendoRemix(false);
+    }
+  };
+
+  /**
    * Crear una sala en blanco. El `+` de la cabecera.
    *
    * Lo que se llevara escrito se va con ella: el `+` es para empezar de nuevo,
@@ -1900,6 +1935,8 @@ function Sala({
             +
           </button>
         </div>
+
+        {roomId && <VersionesSala origen={origen} remixes={remixes} t={t} />}
 
         {/* Los agentes de la sala, como jugadores visibles */}
         <AgentList agents={agents} />
@@ -2427,6 +2464,16 @@ function Sala({
                 versionVariables={versionVariables}
               />
             )}
+            {/* Una copia para experimentar sin tocar el original. Sin nada
+                guardado no hay qué copiar. */}
+            <button
+              className="invitar"
+              onClick={() => void hacerRemix()}
+              disabled={!roomId || !sePuedeExportar || haciendoRemix}
+              title={sePuedeExportar ? t.remixTitulo : t.remixVacio}
+            >
+              {haciendoRemix ? t.haciendoRemix : t.remix}
+            </button>
             {/* Sin sala no hay link que compartir: copiaría la URL pelada. */}
             <button
               className={`invitar ${copiado ? "copiado" : ""}`}

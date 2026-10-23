@@ -10,6 +10,8 @@ import { existsSync } from "node:fs";
 
 import {
   createRoom,
+  createRemix,
+  NadaQueRemixear,
   getRoom,
   allRooms,
   addMember,
@@ -532,6 +534,32 @@ fastify.post("/rooms", async () => {
   const room = await createRoom();
   return { id: room.id };
 });
+
+/**
+ * Hacer un remix: una copia del proyecto en una sala nueva, ligada a esta.
+ *
+ * Responde el id y la Sala navega ahí. A la sala original se le avisa, para que
+ * su lista de remixes se actualice sin recargar, y queda una línea en su chat.
+ * Bajo /rooms, como el export, para que el proxy del preview no se lo quede.
+ */
+fastify.post<{ Params: { id: string }; Body: { autor?: unknown } | undefined }>(
+  "/rooms/:id/remix",
+  async (req, reply) => {
+    const origen = getRoom(req.params.id) ?? (await wakeRoom(req.params.id));
+    if (!origen) return reply.code(404).send({ error: "sala no encontrada" });
+    try {
+      const remix = await createRemix(origen);
+      const autor = typeof req.body?.autor === "string" ? req.body.autor.trim().slice(0, 40) : "";
+      io.to(origen.id).emit("room:remixes", { remixes: await (await getStorage()).remixesDe(origen.id) });
+      systemMsg(origen, autor ? `${autor} hizo un remix de este proyecto` : "alguien hizo un remix de este proyecto");
+      return { id: remix.id };
+    } catch (err) {
+      if (err instanceof NadaQueRemixear) return reply.code(409).send({ error: err.message });
+      console.error(`[sala ${origen.id}] no se pudo hacer el remix:`, err);
+      return reply.code(500).send({ error: "no se pudo hacer el remix" });
+    }
+  },
+);
 
 // La línea de tiempo de una sala (alimenta el scrubber).
 fastify.get<{ Params: { id: string } }>("/rooms/:id/history", async (req, reply) => {
@@ -1746,6 +1774,10 @@ io.on("connection", (socket) => {
       // Dónde está publicada, si lo está: es un dato de la sala, no una noticia
       // de hace rato. Quien entra mañana tiene que poder abrirla igual.
       urlPublicada: room.urlPublicada ?? null,
+      // De qué sala es remix, y los remixes de esta: para "Volver al original"
+      // y la lista para brincar entre versiones.
+      origen: await origenDe(room),
+      remixes: await (await getStorage()).remixesDe(room.id),
       nombrePublicado: room.nombrePublicado ?? null,
       agents: room.agents.list(),
       actividad: Object.fromEntries(ultimaAccion.get(room.id) ?? []),
@@ -2586,6 +2618,16 @@ async function say(
   } catch (err) {
     console.error(`[sala ${room.id}] no se pudo persistir el mensaje:`, err);
   }
+}
+
+/** La sala de la que esta es remix, con su nombre, o null. */
+async function origenDe(room: Room): Promise<{ id: string; nombre: string | null } | null> {
+  if (!room.origenId) return null;
+  const vivo = getRoom(room.origenId);
+  if (vivo) return { id: vivo.id, nombre: vivo.nombre ?? null };
+  const guardado = await (await getStorage()).getRoom(room.origenId);
+  // El original pudo haberse borrado: entonces el remix ya no tiene a dónde volver.
+  return guardado ? { id: guardado.id, nombre: guardado.nombre ?? null } : null;
 }
 
 function systemMsg(room: Room, text: string, color = "#a9abd0"): void {

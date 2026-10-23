@@ -130,6 +130,25 @@ function main() {
     check("un módulo sin cookie ni referer", aLaSala("/src/main.tsx", {}));
   }
 
+  console.log("\n6b. Una app que navega a su inicio se queda en el preview");
+  {
+    /**
+     * El bug que cubre: un link "Inicio" (href="/") dentro de la app pedía la
+     * raíz desde el iframe, y se le servía la Sala entera: el chat de Multti
+     * aparecía dentro de la vista previa hasta que alguien recargaba.
+     */
+    const desdeElIframe = { ...COOKIE, dest: "iframe" };
+    check("la raíz pedida desde el iframe va al preview", alPreview("/", desdeElIframe));
+    check("con query también", alPreview("/?pagina=2", desdeElIframe));
+    check("index.html desde el iframe también", alPreview("/index.html", desdeElIframe));
+    check("con el referer del preview basta, sin cookie", alPreview("/", { ...REFERER, dest: "iframe" }));
+    check("y conserva la ruta tal cual", parsePreviewUrl("/?pagina=2", desdeElIframe)?.rest === "/?pagina=2");
+    check("la raíz abierta como página sigue siendo la Sala", aLaSala("/", { ...COOKIE, dest: "document" }));
+    check("sin cabecera, sigue siendo la Sala", aLaSala("/"));
+    check("desde un iframe sin sala identificada, la Sala", aLaSala("/", { dest: "iframe" }));
+    check("lo de la Sala no cambia aunque venga de un iframe", aLaSala("/socket.io/?EIO=4", desdeElIframe));
+  }
+
   console.log("\n7. La página de la sala se distingue de sus archivos");
   {
     /**

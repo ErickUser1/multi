@@ -45,10 +45,27 @@ async function medir(eager) {
   let pedazos = 0;
   let pings = 0;
   let salida = 0;
+  let textoYPensar = 0;
+  let bytesInput = 0;
+  let ultimoPing = null;
+  // Cada 10 s una línea, para ver en vivo si llega algo o si la conexión está muda.
+  const latido = setInterval(() => {
+    const desdeAlgo = ((Date.now() - ultimoReal) / 1000).toFixed(0);
+    const desdePing = ultimoPing ? ((Date.now() - ultimoPing) / 1000).toFixed(0) + "s" : "nunca";
+    console.log(`  ${seg()}s  pedazos ${pedazos} (${bytesInput} chars)  texto/pensar ${textoYPensar}  pings ${pings}  sin datos hace ${desdeAlgo}s  último ping hace ${desdePing}`);
+  }, 10_000);
+  const tope = setTimeout(() => {
+    console.log(`  ${seg()}s  15 min sin terminar: corto`);
+    reader.cancel().catch(() => {});
+  }, 15 * 60_000);
+  console.log(`\n${eager ? "CON" : "SIN"} eager_input_streaming (respuesta HTTP a los ${seg()}s)`);
   const dec = new TextDecoder();
   const reader = res.body.getReader();
   for (;;) {
-    const { done, value } = await reader.read();
+    const { done, value } = await reader.read().catch((e) => {
+      console.log(`  ${seg()}s  la lectura falló: ${e}`);
+      return { done: true };
+    });
     if (done) break;
     buffer += dec.decode(value, { stream: true });
     let i;
@@ -60,6 +77,7 @@ async function medir(eager) {
       const ev = JSON.parse(data.slice(6));
       if (ev.type === "ping") {
         pings++;
+        ultimoPing = Date.now();
         continue;
       }
       const ahora = Date.now();
@@ -67,13 +85,18 @@ async function medir(eager) {
       ultimoReal = ahora;
       if (ev.type === "content_block_delta" && ev.delta?.type === "input_json_delta") {
         pedazos++;
+        bytesInput += ev.delta.partial_json.length;
         if (primerInput === null) primerInput = seg();
       }
+      if (ev.type === "content_block_delta" && ev.delta?.type !== "input_json_delta") textoYPensar++;
+      if (ev.type === "content_block_start") console.log(`  ${seg()}s  empieza bloque ${ev.content_block.type}${ev.content_block.name ? " " + ev.content_block.name : ""}`);
       if (ev.type === "message_delta") salida = ev.usage?.output_tokens ?? salida;
       if (ev.type === "error") console.log("  error del stream:", JSON.stringify(ev.error));
     }
   }
-  console.log(`\n${eager ? "CON" : "SIN"} eager_input_streaming`);
+  clearInterval(latido);
+  clearTimeout(tope);
+  console.log(`  resultado ${eager ? "CON" : "SIN"} eager:`);
   console.log(`  primer pedazo del archivo: a los ${primerInput}s`);
   console.log(`  pedazos del archivo:       ${pedazos}`);
   console.log(`  silencio más largo:        ${(huecoMax / 1000).toFixed(1)}s (solo pings: ${pings})`);

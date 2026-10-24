@@ -8,6 +8,7 @@ import {
   type StopReason,
   ProviderError,
 } from "./types.js";
+import { rutaEnJsonParcial } from "./json-parcial.js";
 
 /**
  * Proveedor para cualquier API que hable el formato de OpenAI.
@@ -247,10 +248,12 @@ export class OpenAICompatProvider implements ModelProvider {
     // raro) y el turno se marca como sin espacio, igual que en anthropic.ts.
     const sinEspacio = finishReason === "length";
     let herramientaCortada = false;
+    let archivoCortado: string | undefined;
 
     for (const [i, tc] of [...toolCalls.entries()].sort((a, b) => a[0] - b[0])) {
       if (sinEspacio && !jsonCompleto(tc.args)) {
         herramientaCortada = true;
+        archivoCortado ??= rutaEnJsonParcial(tc.args);
         continue;
       }
       content.push({
@@ -277,6 +280,7 @@ export class OpenAICompatProvider implements ModelProvider {
       message: { role: "assistant", content },
       usage,
       herramientaCortada,
+      archivoCortado,
     };
   }
 }

@@ -8,6 +8,7 @@ import {
   type StopReason,
   ProviderError,
 } from "./types.js";
+import { rutaEnJsonParcial } from "./json-parcial.js";
 
 const API_URL = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION = "2023-06-01";
@@ -47,6 +48,19 @@ const DEFAULT_MAX_TOKENS = 32_000;
 const RETRY = { maxRetries: 5, baseMs: 1000, capMs: 60_000 };
 
 /**
+ * Cuánto puede pasar sin que llegue NADA por el stream antes de darlo por muerto.
+ *
+ * `fetch` no tiene límite entre pedazo y pedazo: si la conexión se queda abierta
+ * pero ya no llega nada, `reader.read()` espera para siempre, y la sala se queda
+ * en "trabajando" hasta que alguien reinicia el server (pasó). Anthropic manda
+ * pings mientras el modelo piensa o escribe, así que un silencio de minuto y
+ * medio no es un modelo lento: es una conexión muerta. Se corta y se reintenta.
+ *
+ * Se lee en cada request para que la demo lo pueda bajar a un segundo.
+ */
+const silencioMaximoMs = () => Number(process.env.MULTI_STREAM_SILENCIO_MS) || 90_000;
+
+/**
  * Proveedor Claude — cliente HTTP directo a la API de Mensajes de Anthropic.
  * Sin SDK. Parsea el stream SSE a mano y lo traduce a StreamEvent neutrales.
  *
@@ -71,6 +85,10 @@ export class AnthropicProvider implements ModelProvider {
       try {
         return await this.streamOnce(params, callbacks);
       } catch (err) {
+        // Alguien de la sala interrumpió: cortar la conexión no es una falla de
+        // red y no se reintenta. Antes se reintentaba cinco veces, y el "@agente"
+        // tardaba medio minuto en soltar al agente.
+        if (params.signal?.aborted) throw err;
         const pe = err instanceof ProviderError ? err : new ProviderError(String(err), "network", { cause: err });
         if (!pe.retryable || attempt >= RETRY.maxRetries) throw pe;
         attempt++;
@@ -87,32 +105,47 @@ export class AnthropicProvider implements ModelProvider {
   ): Promise<Extract<StreamEvent, { type: "end" }>> {
     const body = buildRequestBody(params, this.defaultModel);
 
-    let res: Response;
+    // Un corte propio, para poder soltar una conexión muda sin tocar la señal de
+    // la sala. Si la sala interrumpe, también corta este.
+    const corte = new AbortController();
+    const interrumpir = () => corte.abort();
+    if (params.signal?.aborted) corte.abort();
+    params.signal?.addEventListener("abort", interrumpir, { once: true });
+    const vigilante = vigilarSilencio(corte);
+
     try {
-      res = await fetch(API_URL, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-api-key": this.apiKey,
-          "anthropic-version": ANTHROPIC_VERSION,
-        },
-        body: JSON.stringify(body),
-        signal: params.signal,
-      });
-    } catch (err) {
-      throw new ProviderError("fallo de red al llamar la API", "network", { cause: err });
+      let res: Response;
+      try {
+        res = await fetch(API_URL, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-api-key": this.apiKey,
+            "anthropic-version": ANTHROPIC_VERSION,
+          },
+          body: JSON.stringify(body),
+          signal: corte.signal,
+        });
+      } catch (err) {
+        if (vigilante.mudo()) throw vigilante.error();
+        throw new ProviderError("fallo de red al llamar la API", "network", { cause: err });
+      }
+
+      if (!res.ok) throw await httpError(res);
+      if (!res.body) throw new ProviderError("respuesta sin body", "api", { status: res.status });
+
+      return await this.consumeStream(res.body, callbacks, vigilante);
+    } finally {
+      vigilante.parar();
+      params.signal?.removeEventListener("abort", interrumpir);
     }
-
-    if (!res.ok) throw await httpError(res);
-    if (!res.body) throw new ProviderError("respuesta sin body", "api", { status: res.status });
-
-    return this.consumeStream(res.body, callbacks);
   }
 
   /** Lee el stream SSE byte a byte, reensambla bloques, emite el evento `end`. */
   private async consumeStream(
     body: ReadableStream<Uint8Array>,
     callbacks: StreamCallbacks,
+    vigilante: ReturnType<typeof vigilarSilencio>,
   ): Promise<Extract<StreamEvent, { type: "end" }>> {
     const reader = body.getReader();
     const decoder = new TextDecoder();
@@ -125,6 +158,7 @@ export class AnthropicProvider implements ModelProvider {
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
+        vigilante.latido();
         buffer += decoder.decode(value, { stream: true });
 
         // Los eventos SSE se separan por línea en blanco (\n\n).
@@ -136,6 +170,7 @@ export class AnthropicProvider implements ModelProvider {
         }
       }
     } catch (err) {
+      if (vigilante.mudo()) throw vigilante.error();
       throw new ProviderError("error leyendo el stream", "network", { cause: err });
     } finally {
       reader.releaseLock();
@@ -153,6 +188,8 @@ export class AnthropicProvider implements ModelProvider {
       message,
       usage: acc.usage,
       herramientaCortada: acc.herramientaCortada,
+      archivoCortado: acc.archivoCortado,
+      inputsInvalidos: acc.inputsInvalidos.length ? acc.inputsInvalidos : undefined,
     };
   }
 
@@ -228,13 +265,22 @@ class MessageAccumulator {
   stopReason: StopReason | null = null;
   /** Si `buildMessage` descartó un tool_use que el tope dejó a medias. */
   herramientaCortada = false;
+  /** La ruta del archivo que el tope dejó a medias, si se alcanzó a leer. */
+  archivoCortado: string | undefined;
+  /**
+   * Los tool_use cuyo input llegó completo pero no es JSON válido. Con
+   * `eager_input_streaming` la API ya no valida el JSON antes de mandarlo, y la
+   * doc avisa que puede pasar: se le contesta a esa tool con un error en vez de
+   * tumbar el turno entero.
+   */
+  inputsInvalidos: string[] = [];
   usage: Extract<StreamEvent, { type: "end" }>["usage"];
 
   // Bloques por índice, en construcción.
   private blocks = new Map<
     number,
     | { type: "text"; text: string }
-    | { type: "tool_use"; id: string; name: string; jsonBuf: string }
+    | { type: "tool_use"; id: string; name: string; jsonBuf: string; anunciada?: boolean }
     | { type: "thinking"; text: string }
     /**
      * Lo que corre del lado de Anthropic (ver `crudo` en types.ts). Los
@@ -283,6 +329,16 @@ class MessageAccumulator {
       case "input_json_delta":
         if (block.type === "tool_use" || block.type === "crudo") {
           block.jsonBuf += delta.partial_json ?? "";
+        }
+        // En cuanto se sabe a qué archivo va, se anuncia: escribir uno grande
+        // tarda minutos. La ruta va al principio, así que solo se busca en los
+        // primeros caracteres (y no se reescanea un archivo entero en cada delta).
+        if (block.type === "tool_use" && !block.anunciada && block.jsonBuf.length < 2_000) {
+          const path = rutaEnJsonParcial(block.jsonBuf);
+          if (path) {
+            block.anunciada = true;
+            callbacks.onToolPreparing?.({ id: block.id, name: block.name, input: { path } });
+          }
         }
         break;
       case "thinking_delta":
@@ -351,6 +407,15 @@ class MessageAccumulator {
             // AVISO_SIN_ESPACIO en loop.ts). Antes esto culpaba a los créditos.
             if (this.stopReason === "max_tokens") {
               this.herramientaCortada = true;
+              this.archivoCortado ??= rutaEnJsonParcial(raw);
+              continue;
+            }
+            // El modelo terminó de escribirlo y pidió correrlo, pero no parsea.
+            // Va con input vacío (el historial necesita uno) y el loop le
+            // contesta con un error para que lo repita.
+            if (this.stopReason === "tool_use") {
+              this.inputsInvalidos.push(b.id);
+              content.push({ type: "tool_use", id: b.id, name: b.name, input: {} });
               continue;
             }
             // Casi siempre es un stream que se cortó a media generación: el JSON
@@ -409,6 +474,12 @@ function buildRequestBody(params: StreamParams, defaultModel: string): Record<st
         name: t.name,
         description: t.description,
         input_schema: t.input_schema,
+        // Los argumentos llegan mientras el modelo los escribe, no hasta que
+        // termina. Sin esto Anthropic junta el input completo antes de mandarlo:
+        // un archivo grande eran minutos sin un solo byte, la sala sin enseñar
+        // nada y la conexión callada justo donde se puede quedar muda. El costo
+        // es que el JSON ya no viene validado (ver `inputsInvalidos`).
+        eager_input_streaming: true,
       })),
       // Al final y siempre iguales: las tools son el principio del prefijo del
       // caché, y cualquier cambio aquí lo tira completo.
@@ -554,6 +625,34 @@ async function httpError(res: Response): Promise<ProviderError> {
 }
 
 // ── Utilidades de retry ─────────────────────────────────────────────────────
+
+/**
+ * El timer de `silencioMaximoMs`: se rearma con cada pedazo que llega (pings
+ * incluidos) y, si vence, corta la conexión.
+ */
+function vigilarSilencio(corte: AbortController) {
+  const limite = silencioMaximoMs();
+  const inicio = Date.now();
+  let vencio = false;
+  let timer: ReturnType<typeof setTimeout>;
+  const armar = () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      vencio = true;
+      console.warn(
+        `[agente] el stream lleva ${Math.round(limite / 1000)}s sin datos (a los ${Math.round((Date.now() - inicio) / 1000)}s del request) — se corta y se reintenta`,
+      );
+      corte.abort();
+    }, limite);
+  };
+  armar();
+  return {
+    latido: armar,
+    parar: () => clearTimeout(timer),
+    mudo: () => vencio,
+    error: () => new ProviderError(`el stream se quedó ${Math.round(limite / 1000)}s sin datos`, "network"),
+  };
+}
 
 function backoff(attempt: number): number {
   // Exponencial con tope y jitter.

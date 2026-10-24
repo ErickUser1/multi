@@ -49,6 +49,7 @@
     "demo:preview-caido": "tsx src/demos/preview-caido.ts",
     "demo:ver-codigo": "tsx src/demos/ver-codigo.ts",
     "demo:sin-espacio": "tsx src/demos/sin-espacio.ts",
+    "demo:stream-vivo": "tsx src/demos/stream-vivo.ts",
     "demo:mensaje-creditos": "tsx src/demos/mensaje-creditos.ts",
     "demo:ver-preview": "tsx src/demos/ver-preview.ts",
     "demo:internet": "tsx src/demos/internet.ts",

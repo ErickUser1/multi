@@ -95,6 +95,10 @@ export type StreamEvent =
        * acabó pensando": lo primero sí se arregla con más espacio.
        */
       herramientaCortada?: boolean;
+      /** La ruta del archivo que se cortó, si se alcanzó a leer. Va en el aviso. */
+      archivoCortado?: string;
+      /** Ids de tool_use cuyo input no era JSON válido: se contestan con error. */
+      inputsInvalidos?: string[];
     };
 
 export type StopReason =
@@ -130,6 +134,12 @@ export interface StreamCallbacks {
    * leer una página). No hay nada que ejecutar: es para enseñarlo en la sala.
    */
   onServerTool?: (info: { id: string; name: string; input: Record<string, unknown> }) => void;
+  /**
+   * Una herramienta empezó a escribirse y ya se sabe a qué archivo va, aunque
+   * sus argumentos sigan llegando. Un archivo grande tarda minutos en llegar
+   * completo: sin esto la sala no enseñaba nada en todo ese rato.
+   */
+  onToolPreparing?: (info: { id: string; name: string; input: Record<string, unknown> }) => void;
 }
 
 // ── La interfaz del proveedor ──────────────────────────────────────────────

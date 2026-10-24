@@ -2857,6 +2857,16 @@ async function runAgentTurn(
             io.to(room.id).emit("agent:tool", { agentId, name: b.name, accion, summary: summarizeTool(b.name, b.input) });
           }
         },
+        // Un archivo grande tarda minutos en llegar completo. En cuanto se sabe
+        // a cuál va, la sala lo dice con la misma línea de actividad; cuando
+        // llega completo, onToolStart la repite con lo demás.
+        onToolPreparing: ({ name, input }) => {
+          room.agents.touch(agentId);
+          const accion = accionDeTool(name, input);
+          if (!ultimaAccion.has(room.id)) ultimaAccion.set(room.id, new Map());
+          ultimaAccion.get(room.id)!.set(agentId, accion);
+          io.to(room.id).emit("agent:tool", { agentId, name, accion, summary: summarizeTool(name, input) });
+        },
         onToolStart: ({ name, input }) => {
           room.agents.touch(agentId);
           const accion = accionDeTool(name, input);

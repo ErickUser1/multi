@@ -10,7 +10,7 @@ const MODELO = process.argv[2] ?? "claude-sonnet-5-5";
 const PEDIDO =
   "Escribe con write_file el archivo src/juego.js: un juego de carreras completo en canvas, " +
   "de unas 900 líneas, con pista, kart, 3 rivales con IA, física simple, HUD y menú. " +
-  "Todo en ese único archivo, de un jalón.";
+  "Todo en ese único archivo, de un jalón. No expliques nada, solo llama write_file.";
 
 async function medir(eager) {
   const tool = {
@@ -32,7 +32,6 @@ async function medir(eager) {
       max_tokens: 32000,
       stream: true,
       tools: [tool],
-      tool_choice: { type: "tool", name: "write_file" },
       messages: [{ role: "user", content: PEDIDO }],
     }),
   });

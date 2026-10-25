@@ -48,6 +48,14 @@ son las únicas que dejan rastro para el historial de la sala y para el aviso en
 así que los cambios de contenido pasan por ahí. Deja bash para lo que es proceso —
 instalar dependencias, git, builds, comandos del framework.
 
+Escribe en archivos chicos, uno por pieza (en un juego: pista, jugador, rivales,
+cámara, controles, HUD, main), y nunca toda la app en un solo archivo. Vale igual para
+un proyecto nuevo que para rehacer o reorganizar uno que ya existe ("pásalo a 3D",
+"cámbiale el motor"): escribe las piezas una por una, no todo de un jalón. Si un archivo
+ya es largo y hay que cambiar mucho, pártelo en módulos.
+Por qué: tu respuesta tiene un tope de largo. Un archivo enorme no cabe, se corta a la
+mitad y se pierde entero, y mientras lo escribes la sala no ve nada durante minutos.
+
 Bash te devuelve el exit code y la salida: LÉELOS. Un comando que falló y das por
 bueno te deja construyendo sobre nada, y quien está en la sala ve una pantalla vacía
 sin saber por qué. Si algo no salió como esperabas, arréglalo antes de seguir.
@@ -104,8 +112,7 @@ no preguntes por dónde empezar.
     3. Los archivos de config del stack y el punto de entrada.
     4. Ya con eso, el código que te pidieron. En proyectos grandes (juegos, páginas
        con mucho contenido) empieza por lo mínimo que funcione y crece en archivos
-       chicos: nunca escribas toda la app en un solo archivo. Una respuesta tuya
-       tiene un tope de largo, y un archivo enorme no cabe.
+       chicos (ver <uso_de_tools>).
   Mira antes qué hay: si un paso ya está hecho, sáltatelo y sigue desde donde se
   quedó. Un turno anterior pudo haberse cortado a la mitad.
   El orden importa porque hasta que no hay manifiesto no hay instalación, sin
@@ -537,20 +544,33 @@ export interface RunResult {
  *
  * Reintentar igual daría lo mismo. Lo que cambia el resultado es pedirle que
  * escriba ya y en pedazos chicos.
- */
-/**
- * El tope de salida del reintento cuando lo que se cortó fue una herramienta.
  *
- * Es lo que recomienda Anthropic para un `tool_use` cortado por `max_tokens`:
- * repetir con más espacio. Solo en ese caso: si se lo gastó pensando, más
- * espacio solo sería pensar más (y pagar más) para terminar igual. Y solo con
- * Anthropic, donde se sabe que el modelo da para esto; en otros proveedores el
- * techo de salida varía por modelo y pedir de más es un 400.
+ * Antes, si lo cortado era un archivo, primero se reintentaba con más tope
+ * (48k). En una sala real eso fue el mismo archivo gigante otra vez: 32k y luego
+ * 48k de salida tirados, unos quince minutos con la sala en "trabajando" sin
+ * enseñar nada, y al final igual no cupo. Ahora se le dice de una qué archivo
+ * no cupo y que lo parta.
  */
-export const TOPE_REINTENTO = 48_000;
-
 export const AVISO_SIN_ESPACIO =
   "Te quedaste sin espacio antes de terminar tu respuesta. No le des más vueltas: escribe ya, archivo por archivo, empezando por lo mínimo que haga funcionar la app. Ningún archivo debe ser enorme: divide en componentes chicos.";
+
+/** El aviso cuando lo que no cupo fue un archivo: se le dice cuál. */
+export function avisoDeArchivoCortado(ruta: string | undefined): string {
+  const cual = ruta ? `\`${ruta}\`` : "El archivo que estabas escribiendo";
+  return (
+    `${cual} no cupo en tu respuesta y no se guardó nada de él. No lo vuelvas a escribir entero: ` +
+    "pártelo en varios archivos chicos (un módulo por pieza) y escríbelos uno por uno."
+  );
+}
+
+/** Cuántas veces por turno se le avisa que se quedó sin espacio antes de rendirse. */
+export const AVISOS_SIN_ESPACIO = 2;
+
+/** Una tool que tarde más que esto queda en el log, para saber dónde se fue el tiempo. */
+const TOOL_LENTA_MS = 30_000;
+
+/** Lo que recibe una tool que seguía corriendo cuando interrumpieron al agente. */
+export const TOOL_INTERRUMPIDA = "interrumpido: alguien de la sala te pidió otra cosa antes de que esto terminara";
 
 /**
  * EL loop del agente. Blueprint: doc oficial de Anthropic + ~/ccx-rs.
@@ -621,8 +641,7 @@ export async function runAgent(opts: {
   // se guarda y se reenvía en cada turno siguiente, y una imagen ahí se pagaría
   // cada vez. El texto de lo que se vio sí se queda.
   const onProgreso = (m: Message[]) => opts.onProgreso?.(paraGuardar(m));
-  // Puede subir una vez si el tope cortó una herramienta (ver TOPE_REINTENTO).
-  let maxTokens = opts.maxTokens;
+  const maxTokens = opts.maxTokens;
 
   const messages: Message[] = [
     ...opts.messages,
@@ -650,8 +669,8 @@ export async function runAgent(opts: {
 
   let finalText = "";
   let turn = 0;
-  /** Si ya se le avisó en este turno que se quedó sin espacio. */
-  let yaSeAviso = false;
+  /** Cuántas veces se le avisó en este turno que se quedó sin espacio. */
+  let avisos = 0;
   /** Cuántas veces Anthropic pausó este turno a media búsqueda (ver pause_turn). */
   let pausas = 0;
   /** Si la vuelta anterior terminó en pausa: lo que llegue sigue el mismo mensaje. */
@@ -735,9 +754,20 @@ export async function runAgent(opts: {
       (c): c is Extract<ContentBlock, { type: "tool_use" }> => c.type === "tool_use",
     );
 
-    // Ejecutar TODAS en paralelo. Cada una produce un tool_result.
-    const salidas = await Promise.all(
-      toolUses.map((tu) => executeTool(tu, toolCtx, callbacks, opts.ve === true)),
+    // Ejecutar TODAS en paralelo. Cada una produce un tool_result. Si alguien
+    // interrumpe mientras corren, no se espera a que acaben: una tool lenta
+    // dejaba al "@agente" sin efecto hasta que terminara (o para siempre). Las
+    // que seguían reciben un resultado de interrumpidas para que cada tool_use
+    // tenga el suyo; el proceso de adentro se muere con su propio timeout.
+    const invalidos = new Set(end.inputsInvalidos ?? []);
+    const salidas = await conInterrupcion(
+      toolUses.map((tu) =>
+        invalidos.has(tu.id)
+          ? Promise.resolve(inputInvalido(tu, callbacks))
+          : executeTool(tu, toolCtx, callbacks, opts.ve === true),
+      ),
+      toolUses,
+      signal,
     );
     const results = salidas.map((s) => s.resultado);
     // Las capturas de ver_preview van como bloques `image` normales, DESPUÉS de
@@ -766,8 +796,8 @@ export async function runAgent(opts: {
     // Sin espacio: las tools que alcanzaron a salir completas ya corrieron
     // arriba, así que lo que haya escrito no se pierde y cada tool_use tiene su
     // resultado. Lo que falta decidir es si se le da otra oportunidad.
-    if (sinEspacio && yaSeAviso) {
-      // Segunda vez en el mismo turno: otro intento serían otros 32k tirados.
+    if (sinEspacio && avisos >= AVISOS_SIN_ESPACIO) {
+      // Ya se le dijo y sigue sin caber: otro intento serían otros 32k tirados.
       console.warn("[agente] sin espacio (max_tokens) otra vez — se rinde");
       onProgreso(messages);
       return { finalText, turns: turn + 1, messages: paraGuardar(messages), sinEspacio: true };
@@ -776,21 +806,18 @@ export async function runAgent(opts: {
       // Primera vez: se le dice qué hacer distinto y se sigue. Va pegado al
       // último mensaje del usuario (el de los resultados, o el pedido mismo si
       // no hubo tools) para no dejar dos mensajes de usuario seguidos.
-      yaSeAviso = true;
-      const masEspacio =
-        end.herramientaCortada && provider.name === "anthropic" && (maxTokens ?? 32_000) < TOPE_REINTENTO;
-      if (masEspacio) maxTokens = TOPE_REINTENTO;
+      avisos++;
+      const aviso = end.herramientaCortada ? avisoDeArchivoCortado(end.archivoCortado) : AVISO_SIN_ESPACIO;
       console.warn(
-        `[agente] sin espacio (max_tokens) — reintento con aviso${masEspacio ? ` y tope de ${TOPE_REINTENTO}` : ""}`,
+        `[agente] sin espacio (max_tokens)${end.herramientaCortada ? ` escribiendo ${end.archivoCortado ?? "un archivo"}` : ""} — aviso ${avisos} de ${AVISOS_SIN_ESPACIO}`,
       );
       const ultimo = messages[messages.length - 1];
       if (esperaAlServidor) {
-        // Ahí no cabe texto (ver arriba). Va sin aviso: el espacio
-        // extra ya es lo que más ayuda.
+        // Ahí no cabe texto (ver arriba). Va sin aviso.
       } else if (ultimo?.role === "user") {
-        ultimo.content = [...ultimo.content, { type: "text", text: AVISO_SIN_ESPACIO }];
+        ultimo.content = [...ultimo.content, { type: "text", text: aviso }];
       } else {
-        messages.push({ role: "user", content: [{ type: "text", text: AVISO_SIN_ESPACIO }] });
+        messages.push({ role: "user", content: [{ type: "text", text: aviso }] });
       }
     }
 
@@ -809,6 +836,47 @@ export async function runAgent(opts: {
 
 type ToolResult = Extract<ContentBlock, { type: "tool_result" }>;
 type BloqueDeImagen = Extract<ContentBlock, { type: "image" }>;
+
+type SalidaDeTool = { resultado: ToolResult; imagen?: BloqueDeImagen };
+
+/** Espera las tools, o deja de esperarlas si interrumpen (ver arriba). */
+async function conInterrupcion(
+  corriendo: Promise<SalidaDeTool>[],
+  toolUses: Extract<ContentBlock, { type: "tool_use" }>[],
+  signal: AbortSignal | undefined,
+): Promise<SalidaDeTool[]> {
+  if (!signal) return Promise.all(corriendo);
+  const listas: (SalidaDeTool | undefined)[] = new Array(corriendo.length);
+  corriendo.forEach((p, i) => void p.then((s) => (listas[i] = s)));
+  let alAbortar = () => {};
+  const abortada = new Promise<void>((resolve) => {
+    alAbortar = () => resolve();
+    if (signal.aborted) resolve();
+    else signal.addEventListener("abort", alAbortar, { once: true });
+  });
+  try {
+    const todas = await Promise.race([Promise.all(corriendo), abortada.then(() => null)]);
+    if (todas) return todas;
+  } finally {
+    signal.removeEventListener("abort", alAbortar);
+  }
+  // Se deja que terminen las que ya iban de salida (un microtask), y las demás
+  // se dan por interrumpidas.
+  await new Promise((r) => setTimeout(r, 0));
+  return toolUses.map(
+    (tu, i) =>
+      listas[i] ?? {
+        resultado: { type: "tool_result", tool_use_id: tu.id, content: TOOL_INTERRUMPIDA, is_error: true },
+      },
+  );
+}
+
+/** La respuesta a un tool_use cuyo input no llegó como JSON válido. */
+function inputInvalido(tu: Extract<ContentBlock, { type: "tool_use" }>, callbacks: AgentCallbacks): SalidaDeTool {
+  const result = `los argumentos de "${tu.name}" no llegaron como JSON válido y no se ejecutó nada. Vuelve a llamarla.`;
+  callbacks.onToolEnd?.({ id: tu.id, name: tu.name, result, isError: true });
+  return { resultado: { type: "tool_result", tool_use_id: tu.id, content: result, is_error: true } };
+}
 
 /** Ejecuta un tool_use (con gate de permisos) → tool_result, y la imagen si trajo una. */
 async function executeTool(
@@ -833,8 +901,11 @@ async function executeTool(
   const tool = toolRegistry.get(tu.name);
   if (!tool) return emit(`tool desconocida: ${tu.name}`, true);
 
+  const inicio = Date.now();
   try {
     const result = await tool.run(tu.input, ctx);
+    const tardo = Date.now() - inicio;
+    if (tardo > TOOL_LENTA_MS) console.warn(`[agente] ${tu.name} tardó ${Math.round(tardo / 1000)}s`);
     if (typeof result === "string") return emit(result, false);
     // A un modelo que no ve, una imagen le es un 400: le llega solo el texto.
     const salida = emit(result.texto, false);

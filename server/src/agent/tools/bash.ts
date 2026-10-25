@@ -1,6 +1,12 @@
 import { type Tool, ToolError, reqString } from "./base.js";
 
 const DEFAULT_TIMEOUT_MS = 120_000;
+/**
+ * Lo más que puede pedir el modelo. Sin tope, un `timeout_ms` enorme sobre un
+ * comando que no termina (un dev server, un watch) dejaba el turno esperando
+ * horas con la sala en "trabajando".
+ */
+const MAX_TIMEOUT_MS = 10 * 60_000;
 const MAX_OUTPUT = 30_000; // truncar salidas enormes para no reventar el contexto
 
 /**
@@ -21,14 +27,15 @@ export const bashTool: Tool = {
       type: "object",
       properties: {
         command: { type: "string", description: "Comando de shell a ejecutar" },
-        timeout_ms: { type: "number", description: "Timeout en ms (default 120000)" },
+        timeout_ms: { type: "number", description: "Timeout en ms (default 120000, máximo 600000)" },
       },
       required: ["command"],
     },
   },
   async run(input, ctx) {
     const command = reqString(input, "command");
-    const timeoutMs = typeof input.timeout_ms === "number" ? input.timeout_ms : DEFAULT_TIMEOUT_MS;
+    const pedido = typeof input.timeout_ms === "number" && input.timeout_ms > 0 ? input.timeout_ms : DEFAULT_TIMEOUT_MS;
+    const timeoutMs = Math.min(pedido, MAX_TIMEOUT_MS);
 
     ctx.emit?.({ type: "tool:bash", command });
 

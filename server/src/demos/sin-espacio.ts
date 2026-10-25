@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { runAgent, AVISO_SIN_ESPACIO, TOPE_REINTENTO } from "../agent/loop.js";
+import { runAgent, AVISO_SIN_ESPACIO, AVISOS_SIN_ESPACIO, avisoDeArchivoCortado } from "../agent/loop.js";
 import { localRunner } from "../engine/runner.js";
 import { AnthropicProvider } from "../agent/providers/anthropic.js";
 import type { ContentBlock, Message, ModelProvider, StopReason, StreamEvent } from "../agent/providers/types.js";
@@ -32,7 +32,7 @@ function check(name: string, ok: boolean, detail = ""): void {
   }
 }
 
-type Vuelta = { stop: StopReason; content: ContentBlock[]; herramientaCortada?: boolean };
+type Vuelta = { stop: StopReason; content: ContentBlock[]; herramientaCortada?: boolean; archivoCortado?: string };
 
 /** Proveedor falso: una respuesta por vuelta, en orden. Guarda lo que se le mandó. */
 function proveedor(
@@ -56,6 +56,7 @@ function proveedor(
         message: { role: "assistant", content: v.content },
         usage: { inputTokens: 0, outputTokens: v.stop === "max_tokens" ? 32000 : 10 },
         herramientaCortada: v.herramientaCortada,
+        archivoCortado: v.archivoCortado,
       };
     },
   };
@@ -69,9 +70,9 @@ function hayAssistantVacio(msgs: Message[]): boolean {
   return msgs.some((m) => m.role === "assistant" && m.content.length === 0);
 }
 
-function llevaElAviso(msgs: Message[]): boolean {
+function llevaElAviso(msgs: Message[], aviso = AVISO_SIN_ESPACIO): boolean {
   const ultimo = msgs[msgs.length - 1];
-  return ultimo?.role === "user" && ultimo.content.some((c) => c.type === "text" && c.text === AVISO_SIN_ESPACIO);
+  return ultimo?.role === "user" && ultimo.content.some((c) => c.type === "text" && c.text === aviso);
 }
 
 /** Cada tool_use del historial tiene su tool_result. Es lo que la API exige. */
@@ -135,11 +136,12 @@ async function main() {
       check("ni en lo que se le mandó al modelo", !llamadas.some(hayAssistantVacio));
     }
 
-    console.log("\n2. Se lo gasta dos veces: se rinde y lo dice, sin un tercer intento");
+    const intentos = AVISOS_SIN_ESPACIO + 1;
+    console.log(`\n2. Se lo gasta ${intentos} veces: se rinde y lo dice, sin otro intento`);
     {
-      const { provider, llamadas } = proveedor([VACIO, VACIO, listo("no debería llegar aquí")]);
+      const { provider, llamadas } = proveedor([...Array(intentos).fill(VACIO), listo("no debería llegar aquí")]);
       const r = await runAgent({ ...base, provider });
-      check("solo dos llamadas (no se queman otros 32k)", llamadas.length === 2, `${llamadas.length} llamadas`);
+      check(`solo ${intentos} llamadas (no se queman otros 32k)`, llamadas.length === intentos, `${llamadas.length} llamadas`);
       check("sale marcado como sin espacio", r.sinEspacio === true);
       check("el texto viene vacío (lo pone index.ts)", r.finalText === "", r.finalText);
       check("el historial no tiene ningún assistant vacío", !hayAssistantVacio(r.messages));
@@ -164,21 +166,19 @@ async function main() {
       check("termina normal", r.finalText === "Listo, ya hay App.tsx." && !r.sinEspacio, r.finalText);
     }
 
-    console.log("\n4. Si lo que se cortó fue una herramienta, el reintento lleva más espacio");
+    console.log("\n4. Si lo que no cupo fue un archivo, se le dice cuál y que lo parta (sin subir el tope)");
     {
-      const cortada: Vuelta = { stop: "max_tokens", content: [], herramientaCortada: true };
+      const cortada: Vuelta = { stop: "max_tokens", content: [], herramientaCortada: true, archivoCortado: "src/juego.js" };
       const a = proveedor([cortada, listo("ya")], "anthropic");
       await runAgent({ ...base, provider: a.provider });
-      check(`con Anthropic el reintento pide ${TOPE_REINTENTO}`, a.topes[1] === TOPE_REINTENTO, String(a.topes[1]));
-      check("y el primer intento no", a.topes[0] === undefined, String(a.topes[0]));
+      const aviso = avisoDeArchivoCortado("src/juego.js");
+      check("el aviso nombra el archivo", llevaElAviso(a.llamadas[1] ?? [], aviso) && aviso.includes("src/juego.js"));
+      check("y le pide partirlo", aviso.includes("pártelo"));
+      check("el reintento NO sube el tope (eran otros 48k tirados)", a.topes[1] === undefined, String(a.topes[1]));
 
-      const pensando = proveedor([VACIO, listo("ya")], "anthropic");
-      await runAgent({ ...base, provider: pensando.provider });
-      check("si se lo gastó pensando, el tope no sube", pensando.topes[1] === undefined, String(pensando.topes[1]));
-
-      const otro = proveedor([cortada, listo("ya")], "openrouter");
-      await runAgent({ ...base, provider: otro.provider });
-      check("con otro proveedor no se sube (su techo varía por modelo)", otro.topes[1] === undefined, String(otro.topes[1]));
+      const sinRuta = proveedor([{ ...cortada, archivoCortado: undefined }, listo("ya")], "anthropic");
+      await runAgent({ ...base, provider: sinRuta.provider });
+      check("sin ruta también avisa", llevaElAviso(sinRuta.llamadas[1] ?? [], avisoDeArchivoCortado(undefined)));
     }
 
     console.log("\n5. Anthropic: un tool_use truncado por el tope no es un error");
@@ -191,16 +191,16 @@ async function main() {
         check("stop_reason max_tokens", fin.stopReason === "max_tokens", fin.stopReason);
         check("el bloque truncado se descarta", !fin.message.content.some((c) => c.type === "tool_use"));
         check("y avisa que fue una herramienta", fin.herramientaCortada === true);
+        check("con la ruta del archivo", fin.archivoCortado === "src/App.tsx", String(fin.archivoCortado));
         check("el texto de antes se queda", fin.message.content.some((c) => c.type === "text" && c.text === "Va el archivo."));
 
+        // Con eager_input_streaming la API ya no valida el JSON: si el modelo
+        // pidió correr la tool y no parsea, se le contesta con error a esa tool.
         globalThis.fetch = fetchConSse(sseConToolTruncado("tool_use"));
-        let lanzo = "";
-        try {
-          await new AnthropicProvider("sk-falsa").stream({ messages: [] });
-        } catch (err) {
-          lanzo = String(err);
-        }
-        check("con otra stop_reason sigue siendo un error", lanzo.includes("se cortó a media escritura"), lanzo.slice(0, 80));
+        const invalido = await new AnthropicProvider("sk-falsa").stream({ messages: [] });
+        const tu = invalido.message.content.find((c) => c.type === "tool_use");
+        check("con stop tool_use no lanza: la tool va con input vacío", tu?.type === "tool_use" && Object.keys(tu.input).length === 0);
+        check("y queda marcada como inválida", invalido.inputsInvalidos?.includes("tu_1") === true, JSON.stringify(invalido.inputsInvalidos));
       } finally {
         globalThis.fetch = original;
       }

@@ -236,6 +236,10 @@ export async function startContainer(
       "--cpus", CPU_LIMIT,
       // Sin privilegios extra y sin poder ganarlos (un sudo dentro no escala).
       "--security-opt", "no-new-privileges",
+      // Un init de verdad como PID 1. El proceso principal es `sleep infinity`,
+      // que no recoge a los hijos que mueren: cada captura de ver_preview dejaba
+      // sus Chromium como zombies (<defunct>) hasta que se recreaba el contenedor.
+      "--init",
       // Si el server de Multi muere, el contenedor no se queda huérfano para siempre.
       "--label", "multi.room=" + roomId,
       IMAGE_TAG,

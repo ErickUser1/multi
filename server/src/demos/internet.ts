@@ -217,7 +217,7 @@ async function main() {
         { stop: "tool_use", content: [crudo(RESULTADO), { type: "tool_use", id: "tu_2", name: "read_file", input: { path: "nada.txt" } }] },
         { stop: "end_turn", content: [{ type: "text", text: "Listo." }] },
       ]);
-      await runAgent({ ...base, provider, verPreview: async () => capturaFalsa(), ve: true });
+      const r6 = await runAgent({ ...base, provider, verPreview: async () => capturaFalsa(), ve: true });
       const resultados = llamadas[1]?.at(-1);
       check("detecta la búsqueda pendiente", servidorPendiente({ role: "assistant", content: [crudo(USO)] }));
       check("y no cuando ya trae su resultado", !servidorPendiente({ role: "assistant", content: [crudo(USO), crudo(RESULTADO)] }));
@@ -232,6 +232,37 @@ async function main() {
         siguiente?.role === "user" && siguiente.content.some((c) => c.type === "image"),
         JSON.stringify(siguiente?.content.map((c) => c.type)),
       );
+      // El resultado llegó un mensaje después de su búsqueda: guardado, los dos
+      // se quedan. Antes la búsqueda se quitaba por "colgada" y el resultado
+      // quedaba huérfano: el turno siguiente era un 400 (pasó en una sala real).
+      const bloques = r6.messages.flatMap((m) => m.content.flatMap((c) => (c.type === "crudo" ? [c.bloque] : [])));
+      check(
+        "lo guardado conserva la búsqueda y su resultado, aunque lleguen en mensajes distintos",
+        bloques.some((b) => b.type === "server_tool_use" && b.id === "srvtoolu_1") &&
+          bloques.some((b) => b.type === "web_search_tool_result" && b.tool_use_id === "srvtoolu_1"),
+        JSON.stringify(bloques.map((b) => b.type)),
+      );
+    }
+
+    console.log("\n6b. Un historial que ya se guardó roto se manda sano");
+    {
+      // Como quedó en la sala: el resultado sin su búsqueda.
+      const roto: Message[] = [
+        { role: "user", content: [{ type: "text", text: "haz la presentación" }] },
+        { role: "assistant", content: [{ type: "text", text: "(aquí iba a buscar en internet, pero el turno se cerró antes)" }, { type: "tool_use", id: "tu_a", name: "read_file", input: { path: "x" } }] },
+        { role: "user", content: [{ type: "tool_result", tool_use_id: "tu_a", content: "x" }] },
+        { role: "assistant", content: [crudo(RESULTADO), { type: "text", text: "Listo." }] },
+        { role: "user", content: [{ type: "text", text: "no se pudo descargar" }] },
+        { role: "assistant", content: [crudo(RESULTADO)] },
+      ];
+      const { provider, llamadas } = proveedor([{ stop: "end_turn", content: [{ type: "text", text: "Ya quedó." }] }]);
+      await runAgent({ ...base, provider, messages: roto });
+      const mandado = llamadas[0] ?? [];
+      const huerfanos = mandado.flatMap((m) => m.content).filter((c) => c.type === "crudo");
+      check("ya no lleva el resultado huérfano", huerfanos.length === 0, JSON.stringify(huerfanos));
+      check("lo demás del mensaje se queda", JSON.stringify(mandado[3]?.content) === JSON.stringify([{ type: "text", text: "Listo." }]));
+      check("y ningún assistant queda vacío", mandado.every((m) => m.content.length > 0));
+      check("no toca el historial original", roto[3]!.content.length === 2);
     }
 
     console.log("\n7. Lo que se guarda conserva las búsquedas, salvo las colgadas");
@@ -240,7 +271,8 @@ async function main() {
         { role: "user", content: [{ type: "text", text: "busca" }] },
         { role: "assistant", content: [{ type: "text", text: "Busco." }, crudo(USO), crudo(RESULTADO), { type: "text", text: "Listo." }] },
         { role: "user", content: [{ type: "text", text: "otra" }] },
-        { role: "assistant", content: [{ type: "text", text: "Busco otra." }, crudo(USO)] },
+        // Otra búsqueda, con su propio id (la API nunca repite uno).
+        { role: "assistant", content: [{ type: "text", text: "Busco otra." }, crudo({ ...USO, id: "srvtoolu_2" })] },
       ];
       const limpio = sinBusquedasColgadas(historial);
       check("una búsqueda completa se queda tal cual", JSON.stringify(limpio[1]) === JSON.stringify(historial[1]));

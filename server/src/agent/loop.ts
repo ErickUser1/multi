@@ -644,7 +644,9 @@ export async function runAgent(opts: {
   const maxTokens = opts.maxTokens;
 
   const messages: Message[] = [
-    ...opts.messages,
+    // Pasado por la misma limpieza que al guardar: un historial que quedó roto
+    // antes del arreglo (ver sinBusquedasColgadas) se manda ya sano.
+    ...sinBusquedasColgadas(opts.messages),
     {
       role: "user",
       // Las imágenes primero: las dos APIs recomiendan que el modelo vea antes
@@ -1008,10 +1010,35 @@ export function notaDeBusqueda(bloques: Record<string, unknown>[]): string {
  * Lo único que se quita es una búsqueda que se quedó sin correr (un turno que se
  * cerró a media pausa): con ella colgada, el siguiente mensaje sería un 400. Se
  * quita completa y queda una nota de lo que iba a buscar.
+ *
+ * "Sin correr" se mira en TODO el historial y no mensaje por mensaje. Cuando el
+ * modelo pide buscar junto con una tool nuestra, Anthropic busca hasta que le
+ * llegan nuestros resultados, y el resultado de la búsqueda llega en el
+ * SIGUIENTE mensaje del assistant. Antes se veía cada mensaje solo: la búsqueda
+ * parecía colgada, se quitaba, y su resultado se quedaba huérfano dos mensajes
+ * después. El turno siguiente de esa sala era un 400 ("unexpected tool_use_id
+ * found in code_execution_tool_result") y ya no salía de ahí. Pasó con un
+ * profe que pidió una presentación.
+ *
+ * Por eso también se quitan los resultados huérfanos: así un historial que ya
+ * se guardó roto se arregla solo la próxima vez que se manda.
  */
 export function sinBusquedasColgadas(messages: Message[]): Message[] {
+  const pedidas = new Set<string>();
+  const resueltas = new Set<string>();
+  for (const m of messages) {
+    for (const c of m.content) {
+      if (c.type !== "crudo") continue;
+      if (c.bloque.type === "server_tool_use") pedidas.add(String(c.bloque.id));
+      else if (c.bloque.tool_use_id != null) resueltas.add(String(c.bloque.tool_use_id));
+    }
+  }
+  const colgada = (b: Record<string, unknown>) => b.type === "server_tool_use" && !resueltas.has(String(b.id));
+  const huerfano = (b: Record<string, unknown>) =>
+    b.type !== "server_tool_use" && b.tool_use_id != null && !pedidas.has(String(b.tool_use_id));
+
   return messages.map((m) => {
-    if (!servidorPendiente(m)) return m;
+    if (!m.content.some((c) => c.type === "crudo" && (colgada(c.bloque) || huerfano(c.bloque)))) return m;
     const content: ContentBlock[] = [];
     let tramo: Record<string, unknown>[] = [];
     const cerrar = () => {
@@ -1019,14 +1046,18 @@ export function sinBusquedasColgadas(messages: Message[]): Message[] {
       tramo = [];
     };
     for (const c of m.content) {
-      if (c.type === "crudo") {
+      if (c.type === "crudo" && colgada(c.bloque)) {
         tramo.push(c.bloque);
         continue;
       }
+      // Su búsqueda ya no está: no se puede mandar, y no hay nada que contar.
+      if (c.type === "crudo" && huerfano(c.bloque)) continue;
       cerrar();
       content.push(c);
     }
     cerrar();
+    // Un mensaje vacío también es un 400.
+    if (content.length === 0) content.push({ type: "text", text: "(aquí hubo una búsqueda en internet que ya no está)" });
     return { ...m, content };
   });
 }

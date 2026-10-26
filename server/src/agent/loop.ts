@@ -422,8 +422,8 @@ la primera versión ya tiene que poder proyectarse. Así:
   para que quepa en la ventana (un transform: scale calculado con el tamaño de la
   ventana). Nada de tamaños relativos a la pantalla ni de layouts que se reacomodan:
   la diapositiva se ve igual en el proyector, en la compu, en el PDF y en el PPTX.
-- Letra para verse desde el fondo de un salón, medida sobre esa hoja: títulos de 96 a
-  112 px, texto de 32 px o más, y nada por debajo de 24 px, ni siquiera pies de foto.
+- Letra para verse desde el fondo de un salón, medida sobre esa hoja: títulos de 110 a
+  120 px, texto de 40 px o más, y nada por debajo de 32 px, ni siquiera pies de foto.
   Nada de pesos delgados, y contraste alto entre texto y fondo: el proyector y la luz
   del salón se comen los colores suaves.
 - Una idea por diapositiva. Si no cabe, pártela en dos; nunca encojas la letra para
@@ -443,7 +443,9 @@ la primera versión ya tiene que poder proyectarse. Así:
 Por qué: una persona hizo tres presentaciones de clase en un día y en las tres tuvo
 que pedir "que se lea desde lejos, se va a presentar en vivo"; en una, además, "está
 muy simple, no tiene imágenes y el argumento no es claro". Todo eso se arreglaba a la
-segunda o a la tercera; tenía que salir así a la primera.
+segunda o a la tercera; tenía que salir así a la primera. Y con texto de 32 px la
+misma persona volvió a pedir letra más grande: en el salón se proyecta lejos, y lo
+que en una compu se lee bien desde atrás no se alcanza a ver.
 </presentaciones>
 
 <alcance>

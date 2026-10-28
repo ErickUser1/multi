@@ -18,6 +18,7 @@ import {
   type SelectionInfo,
   type Agent,
   type OrphanTurn,
+  type PlataformaDePublicacion,
 } from "./socket.js";
 import { AgentList, textoDeEstado } from "./AgentList.js";
 import { AvatarDeAgente } from "./personajes.js";
@@ -647,6 +648,8 @@ function Sala({
    * de la sala, no un mensaje de hace rato.
    */
   const [urlPublicada, setUrlPublicada] = useState<string | null>(null);
+  /** A dónde se puede publicar (las que configuró quien corre este Multti). */
+  const [plataformas, setPlataformas] = useState<PlataformaDePublicacion[]>([]);
   /** De qué sala es remix esta (para "Volver al original"), y los remixes de esta. */
   const [origen, setOrigen] = useState<OrigenDeSala | null>(null);
   const [remixes, setRemixes] = useState<RemixDeSala[]>([]);
@@ -1046,6 +1049,7 @@ function Sala({
       recordarNombre(roomId, p.nombre ?? null);
       setPublicando(p.publicando ?? null);
       setUrlPublicada(p.urlPublicada ?? null);
+      setPlataformas(p.plataformasPublicacion ?? []);
       setOrigen(p.origen ?? null);
       setRemixes(p.remixes ?? []);
       if (p.previewUrl) setPreviewReady(true);
@@ -1710,7 +1714,7 @@ function Sala({
    * llega por socket. Un build tarda minutos, y una petición colgada ese rato se
    * moriría por timeout antes de contar nada.
    */
-  const publicar = async (nombreElegido?: string) => {
+  const publicar = async (nombreElegido?: string, plataforma?: string) => {
     if (!roomId) return;
     setPublicando("compilando"); // respuesta inmediata; el server confirma en seguida
     setErrorDeNombre(null);
@@ -1718,7 +1722,10 @@ function Sala({
       const r = await fetch(`${SERVER_URL}/rooms/${roomId}/publicar`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(nombreElegido ? { nombre: nombreElegido } : {}),
+        body: JSON.stringify({
+          ...(nombreElegido ? { nombre: nombreElegido } : {}),
+          ...(plataforma ? { plataforma } : {}),
+        }),
       });
       if (!r.ok) {
         const d = (await r.json().catch(() => null)) as { error?: string } | null;
@@ -2448,6 +2455,7 @@ function Sala({
               roomId={roomId}
               nombreDeSala={nombre}
               urlPublicada={urlPublicada}
+              plataformas={plataformas}
               publicando={publicando}
               puedePublicar={sePuedeExportar}
               errorDeNombre={errorDeNombre}

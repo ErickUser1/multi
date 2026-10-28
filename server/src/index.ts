@@ -135,6 +135,10 @@ import {
   publicarSala,
   nombreDeApp,
   credencialDeDeploy,
+  plataformasDisponibles,
+  plataformaParaPublicar,
+  plataformaDeUrl,
+  DOMINIOS,
   NoSePudoPublicar,
   type Credencial,
   type EtapaDeploy,
@@ -1485,16 +1489,16 @@ fastify.delete<{ Params: { id: string } }>("/rooms/:id/supabase", async (req) =>
  * petición colgada ese rato la mataría por timeout. Lo que pasa después viaja
  * por socket, que además llega a TODA la sala y no solo a quien lo pidió.
  */
-fastify.post<{ Params: { id: string }; Body: { nombre?: unknown } | undefined }>("/rooms/:id/publicar", async (req, reply) => {
+fastify.post<{ Params: { id: string }; Body: { nombre?: unknown; plataforma?: unknown } | undefined }>("/rooms/:id/publicar", async (req, reply) => {
   const room = getRoom(req.params.id) ?? (await wakeRoom(req.params.id));
   if (!room) return reply.code(404).send({ error: "sala no encontrada" });
 
-  const cred = credencialDeDeploy();
-  if (!cred) {
-    // Sin credencial no se degrada en silencio: se dice que este Multi no tiene
-    // publicación configurada, que es algo que solo su dueño puede resolver.
-    return reply.code(409).send({ error: "este Multti no tiene configurada la publicación" });
-  }
+  // Sin credencial no se degrada en silencio: se dice que este Multi no tiene
+  // publicación configurada, que es algo que solo su dueño puede resolver.
+  const donde = plataformaParaPublicar(room.urlPublicada, req.body?.plataforma, plataformasDisponibles());
+  if ("error" in donde) return reply.code(409).send({ error: donde.error });
+  const cred = credencialDeDeploy(donde.plataforma);
+  if (!cred) return reply.code(409).send({ error: "este Multti no tiene configurada la publicación" });
   if (room.publicando) {
     return reply.code(409).send({ error: "ya se está publicando", etapa: room.publicando });
   }
@@ -1507,11 +1511,12 @@ fastify.post<{ Params: { id: string }; Body: { nombre?: unknown } | undefined }>
 });
 
 /**
- * Con qué nombre se publica: la dirección `nombre.pages.dev`.
+ * Con qué nombre se publica: la dirección `nombre.vercel.app` o `nombre.pages.dev`.
  *
- * Se elige una vez, antes de la primera publicación. Cloudflare no deja
- * renombrar un proyecto: cambiarlo después dejaría el link que ya se compartió
- * apuntando a una versión vieja, o roto. Así que una sala que ya publicó sigue
+ * Se elige una vez, antes de la primera publicación. El nombre es el proyecto en
+ * la plataforma, y Cloudflare no deja renombrarlo: cambiarlo después dejaría el
+ * link que ya se compartió apuntando a una versión vieja, o roto. Así que una
+ * sala que ya publicó sigue
  * con el suyo y lo que llegue en el pedido se ignora; una que publicó antes de
  * que se pudiera elegir se llama como su id, que era la regla de entonces.
  *
@@ -1561,7 +1566,7 @@ async function publicarEnSegundoPlano(room: Room, cred: Credencial, nombre: stri
     room.urlPublicada = url;
     room.nombrePublicado = nombre;
     await (await getStorage()).setPublicacion(room.id, url, nombre);
-    io.to(room.id).emit("deploy:listo", { url, nombre });
+    io.to(room.id).emit("deploy:listo", { url, nombre, plataforma: plataformaDeUrl(url) });
     // Y al chat, para que el link quede en el historial de la sala y no solo en
     // la pantalla de quien estaba mirando cuando terminó.
     systemMsg(room, `la app está publicada: ${url}`);
@@ -1774,6 +1779,11 @@ io.on("connection", (socket) => {
       // Dónde está publicada, si lo está: es un dato de la sala, no una noticia
       // de hace rato. Quien entra mañana tiene que poder abrirla igual.
       urlPublicada: room.urlPublicada ?? null,
+      // A dónde se puede publicar (las que tiene configuradas quien corre este
+      // Multti), con su dominio para que el panel enseñe la dirección que de
+      // verdad va a salir. Y dónde quedó, si ya se publicó.
+      plataformasPublicacion: plataformasDisponibles().map((id) => ({ id, dominio: DOMINIOS[id] })),
+      plataformaPublicada: room.urlPublicada ? plataformaDeUrl(room.urlPublicada) : null,
       // De qué sala es remix, y los remixes de esta: para "Volver al original"
       // y la lista para brincar entre versiones.
       origen: await origenDe(room),

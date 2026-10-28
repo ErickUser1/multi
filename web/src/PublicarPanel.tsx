@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { SERVER_URL } from "./socket.js";
+import { SERVER_URL, type PlataformaDePublicacion } from "./socket.js";
 import { useTextos } from "./i18n.js";
 
 /**
@@ -14,7 +14,7 @@ import { useTextos } from "./i18n.js";
  */
 
 /**
- * El nombre tal como va a quedar en la dirección: `nombre.pages.dev`.
+ * El nombre tal como va a quedar en la dirección: `nombre.vercel.app`.
  *
  * Lo mismo que hace `nombreDeApp` en el server (engine/publicar.ts), para que lo
  * que se ve mientras se escribe sea lo que va a salir. El server lo vuelve a
@@ -35,6 +35,7 @@ export function PublicarPanel({
   roomId,
   nombreDeSala,
   urlPublicada,
+  plataformas,
   publicando,
   puedePublicar,
   errorDeNombre,
@@ -44,26 +45,36 @@ export function PublicarPanel({
   /** Con lo que arranca el campo del nombre: el nombre de la sala, o su id. */
   nombreDeSala: string | null;
   urlPublicada: string | null;
+  /**
+   * A dónde se puede publicar: las que configuró quien corre este Multti. Con
+   * más de una, quien publica escoge la primera vez; después la app se queda
+   * donde quedó, para que el link que ya se compartió siga sirviendo.
+   */
+  plataformas: PlataformaDePublicacion[];
   publicando: "compilando" | "subiendo" | null;
   /** Si la sala tiene algo guardado que valga la pena subir. */
   puedePublicar: boolean;
   /** Por qué el server no aceptó el nombre, para decirlo junto al campo. */
   errorDeNombre: string | null;
-  onPublicar: (nombre?: string) => void;
+  onPublicar: (nombre?: string, plataforma?: string) => void;
 }) {
   const { t } = useTextos();
   const [abierto, setAbierto] = useState(false);
   const [copiado, setCopiado] = useState(false);
   const cajaRef = useRef<HTMLDivElement>(null);
   /**
-   * El nombre que se escribe, solo antes de la primera publicación: Cloudflare
-   * no deja renombrar un proyecto, así que después el link se queda como está.
+   * El nombre que se escribe, solo antes de la primera publicación: el nombre
+   * es el proyecto en la plataforma, y cambiarlo dejaría roto el link que ya se
+   * compartió, así que después se queda como está.
    * Null mientras nadie lo toca, y ahí se usa el de la sala.
    */
   const [escrito, setEscrito] = useState<string | null>(null);
   const sugerido = nombreDeApp(nombreDeSala ?? roomId ?? "");
   const nombre = escrito ?? sugerido;
   const direccion = nombreDeApp(nombre);
+  /** La que se escogió; mientras nadie toque nada, la primera (la preferida). */
+  const [elegida, setElegida] = useState<string | null>(null);
+  const plataforma = plataformas.find((p) => p.id === elegida) ?? plataformas[0] ?? null;
 
   // Cerrar al hacer click fuera o con Escape, como los demás paneles.
   useEffect(() => {
@@ -140,8 +151,27 @@ export function PublicarPanel({
                   aria-invalid={!!errorDeNombre || !direccion}
                 />
               </label>
+              {plataformas.length > 1 && (
+                <div className="publicar-plataformas" role="radiogroup" aria-label={t.publicarDonde}>
+                  <span>{t.publicarDonde}</span>
+                  <div>
+                    {plataformas.map((p) => (
+                      <button
+                        key={p.id}
+                        role="radio"
+                        aria-checked={p.id === plataforma?.id}
+                        className={p.id === plataforma?.id ? "activa" : ""}
+                        onClick={() => setElegida(p.id)}
+                        disabled={!!publicando}
+                      >
+                        {p.id === "vercel" ? "Vercel" : "Cloudflare"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <p className={`publicar-direccion ${direccion ? "" : "mal"}`}>
-                {direccion ? `${direccion}.pages.dev` : t.publicarNombreVacio}
+                {direccion ? `${direccion}.${plataforma?.dominio ?? "pages.dev"}` : t.publicarNombreVacio}
               </p>
               {errorDeNombre && <p className="publicar-error">{errorDeNombre}</p>}
               <p className="publicar-nota">{t.publicarNombreNota}</p>
@@ -151,7 +181,7 @@ export function PublicarPanel({
 
           <button
             className="publicar-btn"
-            onClick={() => onPublicar(urlPublicada ? undefined : direccion)}
+            onClick={() => (urlPublicada ? onPublicar() : onPublicar(direccion, plataforma?.id))}
             disabled={!puedePublicar || !!publicando || (!urlPublicada && !direccion)}
           >
             {publicando

@@ -131,6 +131,10 @@ export interface JoinedPayload {
   publicando?: "compilando" | "subiendo" | null;
   /** Dónde está publicada la app, o null si la sala nunca se publicó. */
   urlPublicada?: string | null;
+  /** A dónde se puede publicar, con el dominio de cada una. Vacía sin publicación configurada. */
+  plataformasPublicacion?: PlataformaDePublicacion[];
+  /** Dónde quedó la app, si ya se publicó. */
+  plataformaPublicada?: string | null;
   /** De qué sala es remix esta, o null. */
   origen?: { id: string; nombre: string | null } | null;
   /** Los remixes de esta sala, del más nuevo al más viejo. */
@@ -177,3 +181,9 @@ export function connectSocket(): Socket {
 }
 
 export { SERVER_URL };
+
+/** Una plataforma donde se puede publicar: `vercel` o `cloudflare`, con su dominio. */
+export interface PlataformaDePublicacion {
+  id: string;
+  dominio: string;
+}

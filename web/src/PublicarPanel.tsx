@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { SERVER_URL } from "./socket.js";
+import { SERVER_URL, type PlataformaDePublicacion } from "./socket.js";
 import { useTextos } from "./i18n.js";
 
 /**
@@ -35,7 +35,7 @@ export function PublicarPanel({
   roomId,
   nombreDeSala,
   urlPublicada,
-  dominio,
+  plataformas,
   publicando,
   puedePublicar,
   errorDeNombre,
@@ -46,16 +46,17 @@ export function PublicarPanel({
   nombreDeSala: string | null;
   urlPublicada: string | null;
   /**
-   * Dónde quedan las apps (`vercel.app` o `pages.dev`): lo decide el server
-   * según la plataforma que tenga configurada. Sin dato, el de siempre.
+   * A dónde se puede publicar: las que configuró quien corre este Multti. Con
+   * más de una, quien publica escoge la primera vez; después la app se queda
+   * donde quedó, para que el link que ya se compartió siga sirviendo.
    */
-  dominio?: string | null;
+  plataformas: PlataformaDePublicacion[];
   publicando: "compilando" | "subiendo" | null;
   /** Si la sala tiene algo guardado que valga la pena subir. */
   puedePublicar: boolean;
   /** Por qué el server no aceptó el nombre, para decirlo junto al campo. */
   errorDeNombre: string | null;
-  onPublicar: (nombre?: string) => void;
+  onPublicar: (nombre?: string, plataforma?: string) => void;
 }) {
   const { t } = useTextos();
   const [abierto, setAbierto] = useState(false);
@@ -71,6 +72,9 @@ export function PublicarPanel({
   const sugerido = nombreDeApp(nombreDeSala ?? roomId ?? "");
   const nombre = escrito ?? sugerido;
   const direccion = nombreDeApp(nombre);
+  /** La que se escogió; mientras nadie toque nada, la primera (la preferida). */
+  const [elegida, setElegida] = useState<string | null>(null);
+  const plataforma = plataformas.find((p) => p.id === elegida) ?? plataformas[0] ?? null;
 
   // Cerrar al hacer click fuera o con Escape, como los demás paneles.
   useEffect(() => {
@@ -147,8 +151,27 @@ export function PublicarPanel({
                   aria-invalid={!!errorDeNombre || !direccion}
                 />
               </label>
+              {plataformas.length > 1 && (
+                <div className="publicar-plataformas" role="radiogroup" aria-label={t.publicarDonde}>
+                  <span>{t.publicarDonde}</span>
+                  <div>
+                    {plataformas.map((p) => (
+                      <button
+                        key={p.id}
+                        role="radio"
+                        aria-checked={p.id === plataforma?.id}
+                        className={p.id === plataforma?.id ? "activa" : ""}
+                        onClick={() => setElegida(p.id)}
+                        disabled={!!publicando}
+                      >
+                        {p.id === "vercel" ? "Vercel" : "Cloudflare"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <p className={`publicar-direccion ${direccion ? "" : "mal"}`}>
-                {direccion ? `${direccion}.${dominio ?? "pages.dev"}` : t.publicarNombreVacio}
+                {direccion ? `${direccion}.${plataforma?.dominio ?? "pages.dev"}` : t.publicarNombreVacio}
               </p>
               {errorDeNombre && <p className="publicar-error">{errorDeNombre}</p>}
               <p className="publicar-nota">{t.publicarNombreNota}</p>
@@ -158,7 +181,7 @@ export function PublicarPanel({
 
           <button
             className="publicar-btn"
-            onClick={() => onPublicar(urlPublicada ? undefined : direccion)}
+            onClick={() => (urlPublicada ? onPublicar() : onPublicar(direccion, plataforma?.id))}
             disabled={!puedePublicar || !!publicando || (!urlPublicada && !direccion)}
           >
             {publicando

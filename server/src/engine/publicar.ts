@@ -367,28 +367,66 @@ export function explicarVercel(texto: string): string {
   return `no se pudo publicar — ${motivoDeFallo(texto)}`;
 }
 
+export type Plataforma = "vercel" | "cloudflare";
+
+/** Dónde queda cada app publicada: `nombre.<dominio>`. */
+export const DOMINIOS: Record<Plataforma, string> = { vercel: "vercel.app", cloudflare: "pages.dev" };
+
 /**
  * La credencial del `.env` del server, o null si quien lo corre no la configuró.
  *
+ * Con `plataforma`, la de esa o null. Sin ella, la primera que haya: Vercel y
+ * luego Cloudflare.
+ *
  * Se lee cada vez y no al arrancar para que agregarla no obligue a reiniciar.
  */
-export function credencialDeDeploy(): Credencial | null {
-  // Vercel primero: si quien corre Multti puso su token, es porque quiere las
-  // apps ahí. Sin él todo sigue como antes, en Cloudflare.
+export function credencialDeDeploy(plataforma?: Plataforma): Credencial | null {
   const vercel = process.env.VERCEL_TOKEN?.trim();
-  if (vercel) {
-    const equipo = process.env.VERCEL_TEAM?.trim();
-    return { plataforma: "vercel", token: vercel, ...(equipo ? { equipo } : {}) };
-  }
+  const equipo = process.env.VERCEL_TEAM?.trim();
   const token = process.env.CLOUDFLARE_API_TOKEN;
   const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
-  if (!token || !accountId) return null;
-  return { plataforma: "cloudflare", token, accountId };
+  const credenciales: Credencial[] = [
+    ...(vercel ? [{ plataforma: "vercel" as const, token: vercel, ...(equipo ? { equipo } : {}) }] : []),
+    ...(token && accountId ? [{ plataforma: "cloudflare" as const, token, accountId }] : []),
+  ];
+  return credenciales.find((c) => !plataforma || c.plataforma === plataforma) ?? null;
 }
 
-/** El dominio donde quedan las apps publicadas, para enseñarlo en la Sala. */
-export function dominioDePublicacion(): "vercel.app" | "pages.dev" | null {
-  const cred = credencialDeDeploy();
-  if (!cred) return null;
-  return cred.plataforma === "vercel" ? "vercel.app" : "pages.dev";
+/** Las plataformas que quien corre Multti configuró, en orden de preferencia. */
+export function plataformasDisponibles(): Plataforma[] {
+  return (["vercel", "cloudflare"] as const).filter((p) => credencialDeDeploy(p));
+}
+
+/** En qué plataforma quedó una app ya publicada, por su dirección. */
+export function plataformaDeUrl(url: string): Plataforma {
+  return /\.vercel\.app(\/|$)/i.test(url) ? "vercel" : "cloudflare";
+}
+
+/**
+ * A qué plataforma va esta publicación.
+ *
+ * Se escoge una vez, en la primera, igual que el nombre: republicar tiene que
+ * pisar la misma app para que el link que ya se compartió siga sirviendo. Una
+ * sala que ya publicó va a donde está, se pida lo que se pida. La primera vez,
+ * la que se pidió si está configurada, o la primera disponible.
+ *
+ * No hace falta guardarla aparte: la dirección publicada ya dice dónde quedó.
+ */
+export function plataformaParaPublicar(
+  urlPublicada: string | null | undefined,
+  pedida: unknown,
+  disponibles: Plataforma[],
+): { plataforma: Plataforma } | { error: string } {
+  if (urlPublicada) {
+    const donde = plataformaDeUrl(urlPublicada);
+    return disponibles.includes(donde)
+      ? { plataforma: donde }
+      : { error: `esta app está publicada en ${donde === "vercel" ? "Vercel" : "Cloudflare"}, y este Multti ya no tiene configurada esa plataforma` };
+  }
+  if (pedida === "vercel" || pedida === "cloudflare") {
+    return disponibles.includes(pedida)
+      ? { plataforma: pedida }
+      : { error: "esa plataforma no está configurada en este Multti" };
+  }
+  return disponibles[0] ? { plataforma: disponibles[0] } : { error: "este Multti no tiene configurada la publicación" };
 }

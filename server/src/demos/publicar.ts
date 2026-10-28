@@ -5,7 +5,9 @@ import { createWorkspace } from "../engine/workspace.js";
 import { detectBuild, buscarSalida } from "../engine/preview.js";
 import {
   credencialDeDeploy,
-  dominioDePublicacion,
+  plataformasDisponibles,
+  plataformaParaPublicar,
+  plataformaDeUrl,
   explicarVercel,
   motivoDeFallo,
   publicarSala,
@@ -97,14 +99,15 @@ async function main() {
 
   process.env.CLOUDFLARE_ACCOUNT_ID = "falsa";
   check("con las dos ya sirve", credencialDeDeploy()?.plataforma === "cloudflare");
-  check("y la dirección es pages.dev", dominioDePublicacion() === "pages.dev");
+  check("y solo se ofrece Cloudflare", JSON.stringify(plataformasDisponibles()) === '["cloudflare"]', JSON.stringify(plataformasDisponibles()));
 
   // Con el token de Vercel, gana Vercel aunque Cloudflare siga configurado.
   process.env.VERCEL_TOKEN = "falsa";
   const v = credencialDeDeploy();
   check("con VERCEL_TOKEN se publica en Vercel", v?.plataforma === "vercel", JSON.stringify(v));
   check("sin equipo, la cuenta del token", v?.plataforma === "vercel" && v.equipo === undefined);
-  check("y la dirección es vercel.app", dominioDePublicacion() === "vercel.app");
+  check("se ofrecen las dos, Vercel primero", JSON.stringify(plataformasDisponibles()) === '["vercel","cloudflare"]', JSON.stringify(plataformasDisponibles()));
+  check("y se puede pedir Cloudflare", credencialDeDeploy("cloudflare")?.plataforma === "cloudflare");
   process.env.VERCEL_TEAM = "mi-equipo";
   const ve = credencialDeDeploy();
   check("con VERCEL_TEAM, en ese equipo", ve?.plataforma === "vercel" && ve.equipo === "mi-equipo");
@@ -211,6 +214,24 @@ async function main() {
 
     check("el build se detecta igual", (await detectBuild(servidor.dir))?.args.join(" ") === "run build");
     check("pero no hay carpeta que subir", buscarSalida(servidor.dir) === null);
+  }
+
+  console.log("\n10b. Quien publica escoge la plataforma, una vez");
+  {
+    const dos = ["vercel", "cloudflare"] as const;
+    const elige = (url: string | null, pedida: unknown, disponibles: readonly ("vercel" | "cloudflare")[] = dos) =>
+      JSON.stringify(plataformaParaPublicar(url, pedida, [...disponibles]));
+    check("la primera vez, la que pidió", elige(null, "cloudflare") === '{"plataforma":"cloudflare"}', elige(null, "cloudflare"));
+    check("sin pedir nada, la primera disponible", elige(null, undefined) === '{"plataforma":"vercel"}', elige(null, undefined));
+    check("una que no está configurada se dice", elige(null, "vercel", ["cloudflare"]).includes("no está configurada"));
+    check("algo que no es plataforma no cuenta", elige(null, "netlify") === '{"plataforma":"vercel"}', elige(null, "netlify"));
+    // Republicar no cambia de plataforma: el link que ya se compartió seguiría
+    // mostrando la versión vieja.
+    check("ya en Vercel, sigue en Vercel aunque pida Cloudflare", elige("https://mi-app.vercel.app", "cloudflare") === '{"plataforma":"vercel"}');
+    check("ya en Cloudflare, sigue en Cloudflare", elige("https://mi-app.pages.dev", "vercel") === '{"plataforma":"cloudflare"}');
+    check("si ya no está configurada la suya, se dice", elige("https://mi-app.pages.dev", undefined, ["vercel"]).includes("ya no tiene configurada"));
+    check("sin ninguna configurada, se dice", elige(null, undefined, []).includes("no tiene configurada la publicación"));
+    check("la plataforma sale de la URL", plataformaDeUrl("https://x.vercel.app") === "vercel" && plataformaDeUrl("https://x.pages.dev") === "cloudflare");
   }
 
   console.log("\n11. Vercel: un solo comando, el token fuera de él, y la URL estable");

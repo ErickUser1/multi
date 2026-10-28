@@ -8,24 +8,25 @@ import type { Workspace } from "./workspace.js";
  * El último tramo del recorrido: la sala construye algo, lo ve en el preview, y
  * con esto queda en una URL que se le puede pasar a alguien que no entró nunca.
  *
- * Va a Cloudflare Pages por `wrangler`, que sube una carpeta de archivos y no
- * pregunta más. La credencial es de QUIEN CORRE MULTI, no de quien publica: es
+ * Va a Vercel o a Cloudflare Pages, según la credencial que haya en el `.env`.
+ * Las dos con su CLI (`vercel` y `wrangler`), que suben una carpeta de archivos y
+ * no preguntan más. La credencial es de QUIEN CORRE MULTI, no de quien publica: es
  * la misma decisión que la API key de respaldo, y por la misma razón — pedirle
  * a alguien que abra una cuenta en otro servicio para ver su propia app es la
  * fricción que este producto existe para quitar.
  *
- * Lo que NO hace: sacar de aquí una app con servidor. Pages sirve archivos, así
- * que una API en Go o un Django con base de datos no caben. Eso se dice cuando
- * pasa, en vez de fallar con un error de wrangler que nadie entiende.
+ * Lo que NO hace: sacar de aquí una app con servidor. Se suben archivos, así que
+ * una API en Go o un Django con base de datos no caben. Eso se dice cuando pasa,
+ * en vez de fallar con un error del CLI que nadie entiende.
  */
 
 /** Por dónde va la publicación. Es lo que ve la sala mientras espera. */
 export type EtapaDeploy = "compilando" | "subiendo";
 
-export interface Credencial {
-  token: string;
-  accountId: string;
-}
+export type Credencial =
+  | { plataforma: "cloudflare"; token: string; accountId: string }
+  /** `equipo` es el slug del equipo de Vercel; sin él, la cuenta personal del token. */
+  | { plataforma: "vercel"; token: string; equipo?: string };
 
 export class NoSePudoPublicar extends Error {}
 
@@ -36,6 +37,7 @@ export class NoSePudoPublicar extends Error {}
  * de procesos de adentro del contenedor.
  */
 function variablesDe(cred: Credencial): Record<string, string> {
+  if (cred.plataforma === "vercel") return { VERCEL_TOKEN: cred.token };
   return {
     CLOUDFLARE_API_TOKEN: cred.token,
     CLOUDFLARE_ACCOUNT_ID: cred.accountId,
@@ -53,7 +55,7 @@ export async function publicarSala(
   runner: Runner,
   cred: Credencial,
   /**
-   * El nombre del proyecto en Cloudflare, que es la dirección de la app.
+   * El nombre del proyecto en la plataforma, que es la dirección de la app.
    *
    * Siempre el mismo para la misma sala: así republicar pisa lo anterior y el
    * link que alguien ya compartió sigue sirviendo, en vez de acumular una URL
@@ -103,7 +105,18 @@ export async function publicarSala(
   }
 
   onEtapa?.("subiendo");
+  return cred.plataforma === "vercel"
+    ? subirAVercel(runner, cred, cd, salida, proyecto)
+    : subirACloudflare(runner, cred, cd, salida, proyecto);
+}
 
+async function subirACloudflare(
+  runner: Runner,
+  cred: Credencial,
+  cd: string,
+  salida: string,
+  proyecto: string,
+): Promise<string> {
   /**
    * Crear el proyecto antes de subir, porque `deploy` no lo crea solo: la
    * primera publicación de una sala fallaba con "The Pages project does not
@@ -150,6 +163,48 @@ export async function publicarSala(
 }
 
 /**
+ * El comando que sube a Vercel. Aparte para que la demo lo revise sin red.
+ *
+ * Uno solo y no dos como en Cloudflare: `--create-if-missing` crea el proyecto
+ * si no existe, y `--project` despliega a él sin "ligar" la carpeta (no deja un
+ * `.vercel/` en el proyecto de la sala). `--prod` es lo que pone el deploy en la
+ * dirección estable, `nombre.vercel.app`; sin él se queda en una de preview, que
+ * además Vercel protege con login.
+ *
+ * El token NO va aquí: va como VERCEL_TOKEN en las variables del comando.
+ */
+export function comandoDeVercel(salida: string, proyecto: string, equipo?: string): string {
+  return (
+    `npx --yes vercel@latest deploy ${JSON.stringify(salida)} --prod --yes ` +
+    `--project ${JSON.stringify(proyecto)} --create-if-missing --non-interactive --json` +
+    (equipo ? ` --scope ${JSON.stringify(equipo)}` : "")
+  );
+}
+
+async function subirAVercel(
+  runner: Runner,
+  cred: Extract<Credencial, { plataforma: "vercel" }>,
+  cd: string,
+  salida: string,
+  proyecto: string,
+): Promise<string> {
+  const subido = await runner.exec(cd + comandoDeVercel(salida, proyecto, cred.equipo), {
+    timeoutMs: 600_000,
+    maxOutput: 16_000,
+    env: variablesDe(cred),
+  });
+  const url = sacarUrlVercel(subido.stdout + "\n" + subido.stderr, proyecto);
+  if (subido.code !== 0 || !url) {
+    // Igual que con wrangler: el texto crudo no sale de aquí. Y por si el CLI
+    // repite el token en su error, se borra antes de explicar nada: lo que
+    // devuelve `explicarVercel` llega al chat de la sala.
+    const texto = (subido.stderr + subido.stdout).split(cred.token).join("***");
+    throw new NoSePudoPublicar(explicarVercel(texto));
+  }
+  return url;
+}
+
+/**
  * La URL de la app, que es la ESTABLE del proyecto.
  *
  * Wrangler imprime la de este deploy en concreto, con un prefijo que cambia cada
@@ -179,7 +234,55 @@ export function sacarUrl(salida: string, proyecto: string): string | null {
 }
 
 /**
- * El nombre de una app para su dirección: `nombre.pages.dev`.
+ * La URL estable de Vercel.
+ *
+ * Mismo criterio que `sacarUrl`: la que se comparte es la del proyecto
+ * (`nombre.vercel.app`), que siempre apunta a lo último, y no la de este deploy
+ * en concreto (`nombre-a1b2c3-equipo.vercel.app`), que se queda congelada.
+ *
+ * Con `--json` el CLI imprime el deploy con sus alias. Si no llega JSON (otra
+ * versión del CLI, o un error a medias), se buscan las URLs en el texto. Los
+ * subdominios de vercel.app son de todo Vercel: si el nombre ya lo tiene otra
+ * cuenta, el alias de producción queda como `nombre-algo.vercel.app`.
+ */
+export function sacarUrlVercel(salida: string, proyecto: string): string | null {
+  const candidatas: string[] = [];
+  const json = salida.slice(salida.indexOf("{"), salida.lastIndexOf("}") + 1);
+  if (json.length > 1) {
+    try {
+      const d = JSON.parse(json) as Record<string, unknown>;
+      const dep = (d.deployment ?? d) as Record<string, unknown>;
+      for (const a of [...((dep.alias as unknown[]) ?? []), ...((dep.aliases as unknown[]) ?? [])]) {
+        if (typeof a === "string") candidatas.push(a.startsWith("http") ? a : `https://${a}`);
+      }
+      if (typeof dep.url === "string") candidatas.push(dep.url.startsWith("http") ? dep.url : `https://${dep.url}`);
+    } catch {
+      // No era JSON completo: queda el texto.
+    }
+  }
+  candidatas.push(...(salida.match(/https:\/\/[a-z0-9.-]+\.vercel\.app/gi) ?? []));
+
+  const hosts = candidatas
+    .map((u) => {
+      try {
+        return new URL(u).hostname.toLowerCase();
+      } catch {
+        return null;
+      }
+    })
+    .filter((h): h is string => !!h && h.endsWith(".vercel.app"));
+  if (hosts.length === 0) return null;
+
+  const sub = (h: string) => h.slice(0, -".vercel.app".length);
+  const exacta = hosts.find((h) => sub(h) === proyecto);
+  if (exacta) return `https://${exacta}`;
+  // Del proyecto, la más corta: la de este deploy lleva hash y equipo, la estable no.
+  const delProyecto = hosts.filter((h) => sub(h).startsWith(`${proyecto}-`)).sort((a, b) => a.length - b.length);
+  return `https://${delProyecto[0] ?? hosts[0]}`;
+}
+
+/**
+ * El nombre de una app para su dirección: `nombre.vercel.app` o `nombre.pages.dev`.
  *
  * Lo escribe la persona ("Página tipo Uber!!"), así que se pasa a lo que acepta
  * un subdominio: minúsculas sin acentos, guiones en lugar de lo demás, y el tope
@@ -247,14 +350,45 @@ function explicarWrangler(texto: string): string {
   return `no se pudo publicar — ${motivoDeFallo(texto)}`;
 }
 
+/** Lo mismo para el CLI de Vercel. */
+export function explicarVercel(texto: string): string {
+  if (/no existing credentials|invalid token|not authorized|forbidden|unauthorized|token.*(invalid|expired|not valid)/i.test(texto)) {
+    return "la credencial de publicación no sirve. Quien administra este Multti tiene que revisarla";
+  }
+  if (/team.*not found|scope.*not found|cannot access.*scope|you don't have access/i.test(texto)) {
+    return "el equipo configurado para publicar no existe o el token no lo alcanza";
+  }
+  if (/rate limit|too many|limit.*(reached|exceeded)|exceeded/i.test(texto)) {
+    return "la cuenta de publicación llegó a su límite por ahora. Vuelve a intentar más tarde";
+  }
+  if (/ENOTFOUND|ETIMEDOUT|ECONNRESET|network|fetch failed/i.test(texto)) {
+    return "no se pudo hablar con el servicio de publicación. Vuelve a intentar";
+  }
+  return `no se pudo publicar — ${motivoDeFallo(texto)}`;
+}
+
 /**
  * La credencial del `.env` del server, o null si quien lo corre no la configuró.
  *
  * Se lee cada vez y no al arrancar para que agregarla no obligue a reiniciar.
  */
 export function credencialDeDeploy(): Credencial | null {
+  // Vercel primero: si quien corre Multti puso su token, es porque quiere las
+  // apps ahí. Sin él todo sigue como antes, en Cloudflare.
+  const vercel = process.env.VERCEL_TOKEN?.trim();
+  if (vercel) {
+    const equipo = process.env.VERCEL_TEAM?.trim();
+    return { plataforma: "vercel", token: vercel, ...(equipo ? { equipo } : {}) };
+  }
   const token = process.env.CLOUDFLARE_API_TOKEN;
   const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
   if (!token || !accountId) return null;
-  return { token, accountId };
+  return { plataforma: "cloudflare", token, accountId };
+}
+
+/** El dominio donde quedan las apps publicadas, para enseñarlo en la Sala. */
+export function dominioDePublicacion(): "vercel.app" | "pages.dev" | null {
+  const cred = credencialDeDeploy();
+  if (!cred) return null;
+  return cred.plataforma === "vercel" ? "vercel.app" : "pages.dev";
 }

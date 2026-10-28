@@ -131,6 +131,8 @@ export interface JoinedPayload {
   publicando?: "compilando" | "subiendo" | null;
   /** Dónde está publicada la app, o null si la sala nunca se publicó. */
   urlPublicada?: string | null;
+  /** Dónde quedan las apps publicadas (`vercel.app` o `pages.dev`). Null sin publicación configurada. */
+  dominioPublicacion?: string | null;
   /** De qué sala es remix esta, o null. */
   origen?: { id: string; nombre: string | null } | null;
   /** Los remixes de esta sala, del más nuevo al más viejo. */

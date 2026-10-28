@@ -3,7 +3,18 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createWorkspace } from "../engine/workspace.js";
 import { detectBuild, buscarSalida } from "../engine/preview.js";
-import { credencialDeDeploy, motivoDeFallo, sacarUrl, nombreDeApp } from "../engine/publicar.js";
+import {
+  credencialDeDeploy,
+  dominioDePublicacion,
+  explicarVercel,
+  motivoDeFallo,
+  publicarSala,
+  sacarUrl,
+  sacarUrlVercel,
+  nombreDeApp,
+  NoSePudoPublicar,
+} from "../engine/publicar.js";
+import { localRunner, type Runner } from "../engine/runner.js";
 import { SqliteStorage } from "../storage/sqlite.js";
 
 /**
@@ -75,6 +86,8 @@ async function main() {
 
   console.log("\n7. Sin credencial configurada no se publica en silencio");
   const antes = { ...process.env };
+  delete process.env.VERCEL_TOKEN;
+  delete process.env.VERCEL_TEAM;
   delete process.env.CLOUDFLARE_API_TOKEN;
   delete process.env.CLOUDFLARE_ACCOUNT_ID;
   check("no hay credencial", credencialDeDeploy() === null);
@@ -83,7 +96,18 @@ async function main() {
   check("con una sola tampoco alcanza", credencialDeDeploy() === null);
 
   process.env.CLOUDFLARE_ACCOUNT_ID = "falsa";
-  check("con las dos ya sirve", credencialDeDeploy() !== null);
+  check("con las dos ya sirve", credencialDeDeploy()?.plataforma === "cloudflare");
+  check("y la dirección es pages.dev", dominioDePublicacion() === "pages.dev");
+
+  // Con el token de Vercel, gana Vercel aunque Cloudflare siga configurado.
+  process.env.VERCEL_TOKEN = "falsa";
+  const v = credencialDeDeploy();
+  check("con VERCEL_TOKEN se publica en Vercel", v?.plataforma === "vercel", JSON.stringify(v));
+  check("sin equipo, la cuenta del token", v?.plataforma === "vercel" && v.equipo === undefined);
+  check("y la dirección es vercel.app", dominioDePublicacion() === "vercel.app");
+  process.env.VERCEL_TEAM = "mi-equipo";
+  const ve = credencialDeDeploy();
+  check("con VERCEL_TEAM, en ese equipo", ve?.plataforma === "vercel" && ve.equipo === "mi-equipo");
   process.env = antes;
 
   console.log("\n8. Cuando falla, se dice POR QUÉ");
@@ -187,6 +211,89 @@ async function main() {
 
     check("el build se detecta igual", (await detectBuild(servidor.dir))?.args.join(" ") === "run build");
     check("pero no hay carpeta que subir", buscarSalida(servidor.dir) === null);
+  }
+
+  console.log("\n11. Vercel: un solo comando, el token fuera de él, y la URL estable");
+  {
+    // Un proyecto que sí compila, con un runner que corre el build de verdad y
+    // contesta el deploy a mano (subir de verdad necesitaría el token del dueño).
+    const app = await createWorkspace("demo-publicar-vercel", { clean: true });
+    await conScripts(app.dir, { dev: "vite", build: "mkdir -p dist && echo hola > dist/index.html" });
+    const local = localRunner(app.dir);
+    const llamadas: { command: string; env?: Record<string, string> }[] = [];
+    let respuesta = { stdout: "", stderr: "", code: 0 };
+    const runner: Runner = {
+      isolated: false,
+      exec(command, opts) {
+        if (!command.includes("vercel@latest")) return local.exec(command, opts);
+        llamadas.push({ command, env: opts.env });
+        return Promise.resolve({ ...respuesta, timedOut: false });
+      },
+    };
+    const TOKEN = "tok-secreto-123";
+
+    // Así contesta `--json`: la URL de este deploy y sus alias.
+    respuesta = {
+      stdout: JSON.stringify({
+        url: "https://mi-app-a1b2c3d-mi-equipo.vercel.app",
+        alias: ["mi-app.vercel.app", "mi-app-mi-equipo.vercel.app"],
+        readyState: "READY",
+      }),
+      stderr: "Vercel CLI 65.5.0\nDeploying...",
+      code: 0,
+    };
+    const url = await publicarSala(app, runner, { plataforma: "vercel", token: TOKEN }, "Mi App");
+    const cmd = llamadas[0]?.command ?? "";
+    check("devuelve la estable, no la de este deploy", url === "https://mi-app.vercel.app", url);
+    check("un solo comando a Vercel", llamadas.length === 1, String(llamadas.length));
+    check("a producción y al proyecto con su nombre", cmd.includes("--prod") && cmd.includes('--project "mi-app"'), cmd);
+    check("y lo crea si no existe", cmd.includes("--create-if-missing") && cmd.includes("--json"), cmd);
+    check("sube la carpeta compilada", cmd.includes("dist"), cmd);
+    check("el token NO va en el comando", !cmd.includes(TOKEN), cmd);
+    check("va como VERCEL_TOKEN en sus variables", llamadas[0]?.env?.VERCEL_TOKEN === TOKEN);
+    check("sin equipo no lleva --scope", !cmd.includes("--scope"), cmd);
+
+    await publicarSala(app, runner, { plataforma: "vercel", token: TOKEN, equipo: "mi-equipo" }, "mi-app");
+    check("con equipo lleva --scope", (llamadas[1]?.command ?? "").includes('--scope "mi-equipo"'), llamadas[1]?.command);
+
+    // Un token malo: se dice qué pasa, sin el texto crudo del CLI.
+    respuesta = { stdout: "", stderr: `Error: The specified token is not valid (${TOKEN}). Use \`vercel login\``, code: 1 };
+    let error = "";
+    try {
+      await publicarSala(app, runner, { plataforma: "vercel", token: TOKEN }, "mi-app");
+    } catch (err) {
+      error = err instanceof NoSePudoPublicar ? err.message : `otro error: ${String(err)}`;
+    }
+    check("un token malo se explica", error.includes("credencial de publicación no sirve"), error);
+    check("sin filtrar el token", !error.includes(TOKEN), error);
+
+    // Un error que no se reconoce sale con su motivo, pero tampoco con el token.
+    respuesta = { stdout: "", stderr: `Error: algo raro pasó con ${TOKEN}`, code: 1 };
+    let raro = "";
+    try {
+      await publicarSala(app, runner, { plataforma: "vercel", token: TOKEN }, "mi-app");
+    } catch (err) {
+      raro = err instanceof NoSePudoPublicar ? err.message : `otro error: ${String(err)}`;
+    }
+    check("un error desconocido dice su motivo", raro.includes("algo raro"), raro);
+    check("y tampoco lleva el token", !raro.includes(TOKEN), raro);
+  }
+
+  console.log("\n12. La URL de Vercel en los demás casos");
+  {
+    check(
+      "si el nombre ya lo tiene otra cuenta, la estable con sufijo",
+      sacarUrlVercel(JSON.stringify({ url: "https://mi-app-x9y8z7-yo.vercel.app", alias: ["mi-app-yo.vercel.app"] }), "mi-app") ===
+        "https://mi-app-yo.vercel.app",
+    );
+    check(
+      "sin JSON, se busca en el texto",
+      sacarUrlVercel("Production: https://mi-app-a1b2c3-yo.vercel.app\nAliased: https://mi-app.vercel.app", "mi-app") ===
+        "https://mi-app.vercel.app",
+    );
+    check("sin URL en la salida, no se inventa una", sacarUrlVercel("Error: algo", "mi-app") === null);
+    check("un límite se explica", explicarVercel("Error: Rate limit exceeded for deployments").includes("límite"));
+    check("la red también", explicarVercel("Error: getaddrinfo ENOTFOUND api.vercel.com").includes("no se pudo hablar"));
   }
 
   console.log(`\n${pass} pasaron, ${fail} fallaron\n`);

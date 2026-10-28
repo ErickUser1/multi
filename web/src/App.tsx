@@ -647,6 +647,8 @@ function Sala({
    * de la sala, no un mensaje de hace rato.
    */
   const [urlPublicada, setUrlPublicada] = useState<string | null>(null);
+  /** Dónde quedaría la app al publicar, para enseñar la dirección completa. */
+  const [dominioPublicacion, setDominioPublicacion] = useState<string | null>(null);
   /** De qué sala es remix esta (para "Volver al original"), y los remixes de esta. */
   const [origen, setOrigen] = useState<OrigenDeSala | null>(null);
   const [remixes, setRemixes] = useState<RemixDeSala[]>([]);
@@ -1046,6 +1048,7 @@ function Sala({
       recordarNombre(roomId, p.nombre ?? null);
       setPublicando(p.publicando ?? null);
       setUrlPublicada(p.urlPublicada ?? null);
+      setDominioPublicacion(p.dominioPublicacion ?? null);
       setOrigen(p.origen ?? null);
       setRemixes(p.remixes ?? []);
       if (p.previewUrl) setPreviewReady(true);
@@ -2448,6 +2451,7 @@ function Sala({
               roomId={roomId}
               nombreDeSala={nombre}
               urlPublicada={urlPublicada}
+              dominio={dominioPublicacion}
               publicando={publicando}
               puedePublicar={sePuedeExportar}
               errorDeNombre={errorDeNombre}

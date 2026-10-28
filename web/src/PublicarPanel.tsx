@@ -14,7 +14,7 @@ import { useTextos } from "./i18n.js";
  */
 
 /**
- * El nombre tal como va a quedar en la dirección: `nombre.pages.dev`.
+ * El nombre tal como va a quedar en la dirección: `nombre.vercel.app`.
  *
  * Lo mismo que hace `nombreDeApp` en el server (engine/publicar.ts), para que lo
  * que se ve mientras se escribe sea lo que va a salir. El server lo vuelve a
@@ -35,6 +35,7 @@ export function PublicarPanel({
   roomId,
   nombreDeSala,
   urlPublicada,
+  dominio,
   publicando,
   puedePublicar,
   errorDeNombre,
@@ -44,6 +45,11 @@ export function PublicarPanel({
   /** Con lo que arranca el campo del nombre: el nombre de la sala, o su id. */
   nombreDeSala: string | null;
   urlPublicada: string | null;
+  /**
+   * Dónde quedan las apps (`vercel.app` o `pages.dev`): lo decide el server
+   * según la plataforma que tenga configurada. Sin dato, el de siempre.
+   */
+  dominio?: string | null;
   publicando: "compilando" | "subiendo" | null;
   /** Si la sala tiene algo guardado que valga la pena subir. */
   puedePublicar: boolean;
@@ -56,8 +62,9 @@ export function PublicarPanel({
   const [copiado, setCopiado] = useState(false);
   const cajaRef = useRef<HTMLDivElement>(null);
   /**
-   * El nombre que se escribe, solo antes de la primera publicación: Cloudflare
-   * no deja renombrar un proyecto, así que después el link se queda como está.
+   * El nombre que se escribe, solo antes de la primera publicación: el nombre
+   * es el proyecto en la plataforma, y cambiarlo dejaría roto el link que ya se
+   * compartió, así que después se queda como está.
    * Null mientras nadie lo toca, y ahí se usa el de la sala.
    */
   const [escrito, setEscrito] = useState<string | null>(null);
@@ -141,7 +148,7 @@ export function PublicarPanel({
                 />
               </label>
               <p className={`publicar-direccion ${direccion ? "" : "mal"}`}>
-                {direccion ? `${direccion}.pages.dev` : t.publicarNombreVacio}
+                {direccion ? `${direccion}.${dominio ?? "pages.dev"}` : t.publicarNombreVacio}
               </p>
               {errorDeNombre && <p className="publicar-error">{errorDeNombre}</p>}
               <p className="publicar-nota">{t.publicarNombreNota}</p>

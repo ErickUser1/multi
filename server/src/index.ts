@@ -135,6 +135,7 @@ import {
   publicarSala,
   nombreDeApp,
   credencialDeDeploy,
+  dominioDePublicacion,
   NoSePudoPublicar,
   type Credencial,
   type EtapaDeploy,
@@ -1507,11 +1508,12 @@ fastify.post<{ Params: { id: string }; Body: { nombre?: unknown } | undefined }>
 });
 
 /**
- * Con qué nombre se publica: la dirección `nombre.pages.dev`.
+ * Con qué nombre se publica: la dirección `nombre.vercel.app` o `nombre.pages.dev`.
  *
- * Se elige una vez, antes de la primera publicación. Cloudflare no deja
- * renombrar un proyecto: cambiarlo después dejaría el link que ya se compartió
- * apuntando a una versión vieja, o roto. Así que una sala que ya publicó sigue
+ * Se elige una vez, antes de la primera publicación. El nombre es el proyecto en
+ * la plataforma, y Cloudflare no deja renombrarlo: cambiarlo después dejaría el
+ * link que ya se compartió apuntando a una versión vieja, o roto. Así que una
+ * sala que ya publicó sigue
  * con el suyo y lo que llegue en el pedido se ignora; una que publicó antes de
  * que se pudiera elegir se llama como su id, que era la regla de entonces.
  *
@@ -1774,6 +1776,9 @@ io.on("connection", (socket) => {
       // Dónde está publicada, si lo está: es un dato de la sala, no una noticia
       // de hace rato. Quien entra mañana tiene que poder abrirla igual.
       urlPublicada: room.urlPublicada ?? null,
+      // Dónde quedaría la app (vercel.app o pages.dev), para que el panel de
+      // publicar enseñe la dirección que de verdad va a salir.
+      dominioPublicacion: dominioDePublicacion(),
       // De qué sala es remix, y los remixes de esta: para "Volver al original"
       // y la lista para brincar entre versiones.
       origen: await origenDe(room),

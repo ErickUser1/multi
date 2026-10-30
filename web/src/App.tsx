@@ -18,6 +18,7 @@ import {
   type SelectionInfo,
   type Agent,
   type OrphanTurn,
+  type EnLaComunidad,
 } from "./socket.js";
 import { AgentList, textoDeEstado } from "./AgentList.js";
 import { AvatarDeAgente } from "./personajes.js";
@@ -32,6 +33,7 @@ import { PublicarPanel } from "./PublicarPanel.js";
 import { VersionesSala, type OrigenDeSala, type RemixDeSala } from "./Remix.js";
 import { useTextos, type Textos } from "./i18n.js";
 import { MenuSalas } from "./MenuSalas.js";
+import { Explorar } from "./Explorar.js";
 import { recordarSala, olvidarSala, recordarNombre, guardarSalas, siguienteLlave } from "./historial-salas.js";
 import { CuentaPanel } from "./CuentaPanel.js";
 import { BotonPresentar } from "./Presentacion.js";
@@ -90,6 +92,11 @@ const ANCHO_DE_VISTA: Record<Vista, string | undefined> = {
 };
 
 // El roomId vive en el hash de la URL: #/sala/taco-fiesta-42
+/** Explorar vive en `#/explorar`: no es una sala, es la página de la comunidad. */
+function enExplorar(): boolean {
+  return /^#\/explorar\/?$/.test(window.location.hash);
+}
+
 function readRoomFromHash(): string | null {
   const m = window.location.hash.match(/#\/sala\/([\w-]+)/);
   return m ? m[1] : null;
@@ -181,8 +188,13 @@ export function App() {
    */
   const [entered, setEntered] = useState(() => !!nombreGuardado());
 
+  const [explorando, setExplorando] = useState(enExplorar);
+
   useEffect(() => {
-    const onHash = () => setRoomId(readRoomFromHash());
+    const onHash = () => {
+      setRoomId(readRoomFromHash());
+      setExplorando(enExplorar());
+    };
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
@@ -215,6 +227,7 @@ export function App() {
    *
    * Ahora se cae dentro con el menú a mano, y crear es un botón más.
    */
+  if (explorando) return <Explorar nombre={name || nombreGuardado()} />;
   if (!roomId) return <Sala key={llave} roomId={null} name={name || "anónimo"} cuenta={cuenta} onCuentaCambio={onCuentaCambio} />;
 
   // Hay sala pero falta decir cómo te llamas. Sigue haciendo falta para quien
@@ -650,6 +663,8 @@ function Sala({
   /** De qué sala es remix esta (para "Volver al original"), y los remixes de esta. */
   const [origen, setOrigen] = useState<OrigenDeSala | null>(null);
   const [remixes, setRemixes] = useState<RemixDeSala[]>([]);
+  /** Si está compartida con la comunidad (sale en Explorar). */
+  const [comunidad, setComunidad] = useState<EnLaComunidad | null>(null);
   const [haciendoRemix, setHaciendoRemix] = useState(false);
   /** Por qué no se aceptó el nombre que se escribió para publicar. */
   const [errorDeNombre, setErrorDeNombre] = useState<string | null>(null);
@@ -1048,6 +1063,7 @@ function Sala({
       setUrlPublicada(p.urlPublicada ?? null);
       setOrigen(p.origen ?? null);
       setRemixes(p.remixes ?? []);
+      setComunidad(p.comunidad ?? null);
       if (p.previewUrl) setPreviewReady(true);
       if (p.agents) setAgents(p.agents);
       // Lo que se pintó en vivo antes de este `joined` puede haber caducado: en
@@ -1185,6 +1201,8 @@ function Sala({
     socket.on("deploy:fallo", () => setPublicando(null));
     // Alguien hizo un remix de esta sala: la lista se actualiza sin recargar.
     socket.on("room:remixes", ({ remixes }: { remixes: RemixDeSala[] }) => setRemixes(remixes));
+    // Alguien de la sala la compartió o la quitó de la comunidad.
+    socket.on("comunidad:cambio", ({ comunidad }: { comunidad: EnLaComunidad | null }) => setComunidad(comunidad));
     socket.on("preview:ready", ({ relanzada }: { relanzada?: boolean }) => {
       setNovedadEnPreview(true);
       if (relanzada) setRelanzadas((n) => n + 1);
@@ -1741,6 +1759,35 @@ function Sala({
    * Hacer un remix: una copia del proyecto para experimentar sin tocar el
    * original. El server arma la sala y aquí solo se navega a ella.
    */
+  /**
+   * Compartir con la comunidad: que salga en Explorar. Tarda unos segundos
+   * porque toma la captura para la tarjeta. Devuelve el error para que el panel
+   * lo diga junto al botón.
+   */
+  const compartirConComunidad = async (autor: string): Promise<string | null> => {
+    if (!roomId) return t.comunidadFallo;
+    try {
+      const r = await fetch(`${SERVER_URL}/rooms/${roomId}/comunidad`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ categoria: "juego", autor }),
+      });
+      const d = (await r.json().catch(() => null)) as { comunidad?: EnLaComunidad; error?: string } | null;
+      if (!r.ok || !d?.comunidad) return d?.error ?? t.comunidadFallo;
+      setComunidad(d.comunidad);
+      return null;
+    } catch {
+      return t.comunidadFallo;
+    }
+  };
+
+  const quitarDeComunidad = async () => {
+    if (!roomId) return;
+    const r = await fetch(`${SERVER_URL}/rooms/${roomId}/comunidad`, { method: "DELETE" }).catch(() => null);
+    if (r?.ok) setComunidad(null);
+    else alert(t.comunidadFallo);
+  };
+
   const hacerRemix = async () => {
     if (!roomId || haciendoRemix) return;
     setHaciendoRemix(true);
@@ -2452,6 +2499,10 @@ function Sala({
               puedePublicar={sePuedeExportar}
               errorDeNombre={errorDeNombre}
               onPublicar={publicar}
+              comunidad={comunidad}
+              autorSugerido={yo?.name ?? name}
+              onCompartir={compartirConComunidad}
+              onQuitarDeComunidad={quitarDeComunidad}
             />
             {/* Las variables son del proyecto de la sala, así que sin sala no
                 hay dónde escribirlas. */}
@@ -2719,6 +2770,10 @@ function Sala({
                 <>
                   <p className="preview-titulo">{t.quieresConstruir}</p>
                   <Ejemplos modo="solo" />
+                  {/* O ver lo que hicieron otros, y entrarle con ellos. */}
+                  <a className="explorar-link" href="#/explorar">
+                    {t.explorarLink}
+                  </a>
                   {/* Solo en la portada: es la única pantalla que ve quien llega
                       a multti.app sin enlace a una sala, y a quien revisa la
                       empresa le hace falta encontrar qué es y quién la hace. */}

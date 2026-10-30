@@ -4264,3 +4264,216 @@ img.av.av-personaje {
     padding: 0 14px 10px;
   }
 }
+
+/* ── Comunidad y Explorar ─────────────────────────────────────────────────
+   Explorar es una página aparte, no una sala: la cuadrícula de lo que la gente
+   compartió. Mismo lenguaje que el resto: negro, bordes de --linea, mayúsculas
+   chicas para lo secundario, y el blanco solo para la acción principal
+   ("Entrar a construir"), que es la que hace a Multti multijugador. */
+.explorar-link {
+  display: inline-block;
+  margin-top: 18px;
+  font-size: 13px;
+  color: var(--texto);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.explorar-link:hover {
+  color: var(--dim);
+}
+.menu-explorar {
+  display: block;
+  margin: 0 0 8px;
+  padding: 8px;
+  border: 1px solid var(--linea);
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--texto);
+  text-decoration: none;
+}
+.menu-explorar:hover {
+  border-color: var(--texto);
+}
+
+.explorar {
+  /* La página scrollea sola: body tiene alto fijo para la Sala. El padding de
+     los lados centra el contenido a 1120px sin un contenedor más. */
+  height: 100vh;
+  height: 100dvh;
+  overflow-y: auto;
+  background: var(--fondo);
+  color: var(--texto);
+  padding: 28px max(16px, calc((100% - 1120px) / 2)) 48px;
+}
+.explorar-cab {
+  margin-bottom: 24px;
+}
+.explorar-volver {
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--dim);
+  text-decoration: none;
+}
+.explorar-volver:hover {
+  color: var(--texto);
+}
+.explorar-cab h1 {
+  font-size: 28px;
+  font-weight: 500;
+  margin: 14px 0 6px;
+}
+.explorar-cab p,
+.explorar-vacio {
+  font-size: 14px;
+  color: var(--dim);
+  line-height: 1.5;
+}
+.explorar-lista {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+}
+.explorar-tarjeta {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--linea);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--caja);
+}
+.explorar-foto {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 16 / 10;
+  background: #1a1a1a;
+  border-bottom: 1px solid var(--linea);
+  text-decoration: none;
+  color: var(--dim);
+  font-size: 40px;
+}
+.explorar-foto img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.explorar-info {
+  padding: 12px 14px 4px;
+  min-width: 0;
+}
+.explorar-info h2 {
+  font-size: 15px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.explorar-info p {
+  font-size: 12px;
+  color: var(--dim);
+  margin-top: 4px;
+}
+.explorar-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 14px 14px;
+  margin-top: auto;
+}
+.explorar-acciones a,
+.explorar-acciones button {
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  padding: 8px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--linea);
+  background: transparent;
+  color: var(--texto);
+  text-decoration: none;
+  cursor: pointer;
+  font-family: inherit;
+}
+.explorar-acciones .explorar-entrar {
+  flex: 1 1 100%;
+  text-align: center;
+  background: var(--texto);
+  border-color: var(--texto);
+  color: var(--fondo);
+}
+.explorar-acciones .explorar-jugar {
+  flex: 1;
+  text-align: center;
+}
+.explorar-acciones .explorar-version {
+  color: var(--dim);
+}
+.explorar-acciones button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* La comunidad dentro del panel de publicar: separada de lo de publicar por
+   una línea, porque es otra decisión (quién lo ve, no dónde vive). */
+.comunidad {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--linea);
+}
+.comunidad-estado {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin-bottom: 10px;
+}
+.comunidad-categoria {
+  font-size: 12px;
+  color: var(--dim);
+  margin-bottom: 8px;
+}
+.comunidad-categoria strong {
+  color: var(--texto);
+  font-weight: 500;
+}
+.comunidad-acciones {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  font-size: 12px;
+}
+.comunidad-acciones a {
+  color: var(--texto);
+}
+.comunidad button,
+.comunidad-compartir {
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  padding: 8px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--linea);
+  background: transparent;
+  color: var(--texto);
+  cursor: pointer;
+  font-family: inherit;
+}
+.comunidad-compartir {
+  width: 100%;
+}
+.comunidad .comunidad-confirmar {
+  background: var(--texto);
+  border-color: var(--texto);
+  color: var(--fondo);
+}
+.comunidad button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

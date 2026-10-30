@@ -101,6 +101,8 @@ function main() {
     // siempre. Pasó con la de Supabase el día que se agregó.
     check("la vuelta de Google", aLaSala("/auth/google/callback?code=abc"));
     check("la vuelta de Supabase", aLaSala("/supabase/callback?code=abc&state=xyz"));
+    check("la lista de Explorar", aLaSala("/comunidad?categoria=juego"));
+    check("y sus miniaturas", aLaSala("/comunidad/box-de-la-uaq-12/miniatura?v=1"));
     // /assets/ lo usan los dos (ahí compila la Sala, y ahí sirve Rails). Sin
     // referer del preview es de la Sala; con él, del proyecto (ver caso 5).
     check("los assets compilados de la Sala", aLaSala("/assets/index-abc123.js"));

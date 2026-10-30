@@ -134,6 +134,31 @@ export interface ConexionSupabase {
 }
 
 /** Una sala que alguien con cuenta visitó, para que le siga entre dispositivos. */
+/** Lo que se guarda al compartir una sala con la comunidad. */
+export interface NuevaEnComunidad {
+  roomId: string;
+  categoria: string;
+  titulo: string;
+  autor: string;
+  /** JPEG de la vista previa. Null si no se pudo tomar: la tarjeta va sin foto. */
+  miniatura?: Uint8Array | null;
+  compartido: number;
+}
+
+/** Una sala compartida con la comunidad, como sale en Explorar. */
+export interface EnComunidad {
+  roomId: string;
+  categoria: string;
+  titulo: string;
+  autor: string;
+  compartido: number;
+  /** Bajada por moderación: no sale en Explorar, pero no se le borra nada. */
+  oculta: boolean;
+  conMiniatura: boolean;
+  /** El link para jugarla. */
+  urlPublicada: string | null;
+}
+
 /** Un remix de una sala, para la lista de la Sala. */
 export interface RemixDeSala {
   id: string;
@@ -200,6 +225,17 @@ export interface Storage {
   nombreEnUso(nombre: string, salaId: string): Promise<boolean>;
   /** Los remixes de una sala, del más nuevo al más viejo. */
   remixesDe(id: string): Promise<RemixDeSala[]>;
+  /** La pone en Explorar, o actualiza lo que se ve de ella. Respeta si estaba oculta. */
+  compartirEnComunidad(c: NuevaEnComunidad): Promise<void>;
+  /** La quita de Explorar. */
+  quitarDeComunidad(roomId: string): Promise<void>;
+  /** Si está compartida (oculta o no), y cómo. */
+  enComunidad(roomId: string): Promise<EnComunidad | null>;
+  /** Lo que sale en Explorar: compartido, publicado y no oculto, lo más nuevo primero. */
+  listarComunidad(categoria?: string): Promise<EnComunidad[]>;
+  miniaturaDeComunidad(roomId: string): Promise<Uint8Array | null>;
+  /** Moderación. Devuelve false si la sala no estaba compartida. */
+  ocultarEnComunidad(roomId: string, oculta: boolean): Promise<boolean>;
   /** Le pone nombre a la sala. `null` lo quita y se vuelve a ver el id. */
   renameRoom(id: string, nombre: string | null): Promise<void>;
   /** Si en esta sala hay que mencionar al agente para despertarlo. */

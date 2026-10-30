@@ -131,6 +131,8 @@ export interface JoinedPayload {
   publicando?: "compilando" | "subiendo" | null;
   /** Dónde está publicada la app, o null si la sala nunca se publicó. */
   urlPublicada?: string | null;
+  /** Si está compartida con la comunidad (sale en Explorar), y cómo. */
+  comunidad?: EnLaComunidad | null;
   /** De qué sala es remix esta, o null. */
   origen?: { id: string; nombre: string | null } | null;
   /** Los remixes de esta sala, del más nuevo al más viejo. */
@@ -177,3 +179,12 @@ export function connectSocket(): Socket {
 }
 
 export { SERVER_URL };
+
+/** Cómo está compartida una sala con la comunidad. */
+export interface EnLaComunidad {
+  categoria: string;
+  titulo: string;
+  autor: string;
+  /** La bajó quien modera: sigue compartida, pero no sale en Explorar. */
+  oculta: boolean;
+}

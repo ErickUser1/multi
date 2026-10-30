@@ -157,7 +157,44 @@ export function PublicarPanel({
               {/* Lo mismo que dice Lovable, y por lo mismo: la gente supone que
                   lo que ve en el preview ya está afuera, y no lo está. */}
               <p className="publicar-nota">{t.publicarNotaViva}</p>
+            </>
+          ) : (
+            <>
+              <label className="publicar-nombre">
+                <span>{t.publicarNombre}</span>
+                <input
+                  value={nombre}
+                  onChange={(e) => setEscrito(e.target.value)}
+                  maxLength={80}
+                  placeholder={sugerido}
+                  disabled={!!publicando}
+                  spellCheck={false}
+                  aria-invalid={!!errorDeNombre || !direccion}
+                />
+              </label>
+              <p className={`publicar-direccion ${direccion ? "" : "mal"}`}>
+                {direccion ? `${direccion}.pages.dev` : t.publicarNombreVacio}
+              </p>
+              {errorDeNombre && <p className="publicar-error">{errorDeNombre}</p>}
+              <p className="publicar-nota">{t.publicarNombreNota}</p>
+              <p className="publicar-nota">{t.publicarNota}</p>
+            </>
+          )}
 
+          <button
+            className="publicar-btn"
+            onClick={() => onPublicar(urlPublicada ? undefined : direccion)}
+            disabled={!puedePublicar || !!publicando || (!urlPublicada && !direccion)}
+          >
+            {publicando
+              ? t.etapaDeploy[publicando]
+              : urlPublicada
+                ? t.republicar
+                : t.publicar}
+          </button>
+
+          {urlPublicada && (
+            <>
               {/* La comunidad: que salga en Explorar, para que cualquiera la
                   juegue y entre a construir. Solo si quien publica quiere, y
                   diciendo claro qué significa antes de hacerlo. */}
@@ -206,40 +243,7 @@ export function PublicarPanel({
                 )}
               </div>
             </>
-          ) : (
-            <>
-              <label className="publicar-nombre">
-                <span>{t.publicarNombre}</span>
-                <input
-                  value={nombre}
-                  onChange={(e) => setEscrito(e.target.value)}
-                  maxLength={80}
-                  placeholder={sugerido}
-                  disabled={!!publicando}
-                  spellCheck={false}
-                  aria-invalid={!!errorDeNombre || !direccion}
-                />
-              </label>
-              <p className={`publicar-direccion ${direccion ? "" : "mal"}`}>
-                {direccion ? `${direccion}.pages.dev` : t.publicarNombreVacio}
-              </p>
-              {errorDeNombre && <p className="publicar-error">{errorDeNombre}</p>}
-              <p className="publicar-nota">{t.publicarNombreNota}</p>
-              <p className="publicar-nota">{t.publicarNota}</p>
-            </>
           )}
-
-          <button
-            className="publicar-btn"
-            onClick={() => onPublicar(urlPublicada ? undefined : direccion)}
-            disabled={!puedePublicar || !!publicando || (!urlPublicada && !direccion)}
-          >
-            {publicando
-              ? t.etapaDeploy[publicando]
-              : urlPublicada
-                ? t.republicar
-                : t.publicar}
-          </button>
         </div>
       )}
     </div>

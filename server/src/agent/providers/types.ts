@@ -11,7 +11,18 @@ export type Role = "user" | "assistant";
 /** Bloque de contenido dentro de un mensaje (formato neutral). */
 export type ContentBlock =
   | { type: "text"; text: string }
-  | { type: "tool_use"; id: string; name: string; input: Record<string, unknown> }
+  | {
+      type: "tool_use";
+      id: string;
+      name: string;
+      input: Record<string, unknown>;
+      /**
+       * Lo que el proveedor pide que se le regrese tal cual con esta llamada. Hoy
+       * es la firma de pensamiento de Gemini (`extra_content`): sin ella, la
+       * vuelta siguiente es un 400. Los demás proveedores la ignoran.
+       */
+      extra?: Record<string, unknown>;
+    }
   | { type: "tool_result"; tool_use_id: string; content: string; is_error?: boolean }
   /**
    * Una imagen que alguien pegó en el chat. Solo se manda a proveedores que ven
@@ -140,6 +151,11 @@ export interface StreamCallbacks {
    * completo: sin esto la sala no enseñaba nada en todo ese rato.
    */
   onToolPreparing?: (info: { id: string; name: string; input: Record<string, unknown> }) => void;
+  /**
+   * El turno se pasó al modelo de respaldo (se acabó el saldo del principal).
+   * Para avisarlo en la sala, una vez.
+   */
+  onRespaldo?: (info: { proveedor: string }) => void;
 }
 
 // ── La interfaz del proveedor ──────────────────────────────────────────────

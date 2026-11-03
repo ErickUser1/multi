@@ -128,6 +128,11 @@ export function MenuSalas({ actual }: { actual?: string }) {
       {abierto && (
         <div className="menu-panel">
           <div className="menu-cab">{t.tusSalas}</div>
+          {/* Explorar a la mano desde cualquier sala: es donde se ve lo que
+              compartió la comunidad. */}
+          <a className="menu-explorar" href="#/explorar" onClick={() => setAbierto(false)}>
+            {t.explorarLink}
+          </a>
 
           {/* Que la fila desaparezca no dice si se borró la sala o solo se quitó
               del menú. Este aviso lo confirma, y se va solo: es una noticia de
@@ -176,7 +181,7 @@ export function MenuSalas({ actual }: { actual?: string }) {
  * Una fecha exacta no dice nada útil aquí ("2 de agosto" no te ayuda a
  * reconocer una sala); "hace 10 min" sí.
  */
-function cuando(ms: number, idioma: string): string {
+export function cuando(ms: number, idioma: string): string {
   const minutos = Math.floor((Date.now() - ms) / 60000);
   const rtf = new Intl.RelativeTimeFormat(idioma, { numeric: "auto" });
 

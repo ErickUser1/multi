@@ -135,6 +135,8 @@ export interface JoinedPayload {
   plataformasPublicacion?: PlataformaDePublicacion[];
   /** Dónde quedó la app, si ya se publicó. */
   plataformaPublicada?: string | null;
+  /** Si está compartida con la comunidad (sale en Explorar), y cómo. */
+  comunidad?: EnLaComunidad | null;
   /** De qué sala es remix esta, o null. */
   origen?: { id: string; nombre: string | null } | null;
   /** Los remixes de esta sala, del más nuevo al más viejo. */
@@ -186,4 +188,13 @@ export { SERVER_URL };
 export interface PlataformaDePublicacion {
   id: string;
   dominio: string;
+}
+
+/** Cómo está compartida una sala con la comunidad. */
+export interface EnLaComunidad {
+  categoria: string;
+  titulo: string;
+  autor: string;
+  /** La bajó quien modera: sigue compartida, pero no sale en Explorar. */
+  oculta: boolean;
 }

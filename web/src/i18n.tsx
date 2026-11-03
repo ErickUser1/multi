@@ -293,6 +293,7 @@ const TEXTOS = {
     volverAlOriginal: "Volver al original",
     remixes: (n: number) => (n === 1 ? "1 remix" : `${n} remixes`),
     publicarNombre: "Nombre de tu app",
+    publicarDonde: "Dónde publicarla",
     publicarNombreNota: "Después de publicar ya no se puede cambiar.",
     publicarNombreVacio: "Escribe un nombre con letras o números",
     publicarNota:
@@ -683,6 +684,7 @@ const TEXTOS = {
     volverAlOriginal: "Back to the original",
     remixes: (n: number) => (n === 1 ? "1 remix" : `${n} remixes`),
     publicarNombre: "Your app's name",
+    publicarDonde: "Where to publish",
     publicarNombreNota: "It can't be changed after publishing.",
     publicarNombreVacio: "Type a name with letters or numbers",
     publicarNota:

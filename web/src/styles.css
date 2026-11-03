@@ -2669,6 +2669,46 @@ img.av.av-personaje {
 .publicar-nombre input:focus {
   border-color: var(--lavanda);
 }
+/* Dónde publicar, cuando hay más de una plataforma: dos botones pegados, el
+   escogido resaltado, con el mismo rótulo que el campo del nombre. */
+.publicar-plataformas {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin: 4px 0 8px;
+}
+.publicar-plataformas > div {
+  display: flex;
+  border: 1px solid var(--linea);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.publicar-plataformas button {
+  flex: 1;
+  background: var(--fondo2);
+  border: none;
+  padding: 7px 10px;
+  color: var(--dim);
+  font: inherit;
+  font-size: 12px;
+  letter-spacing: normal;
+  text-transform: none;
+  cursor: pointer;
+}
+.publicar-plataformas button + button {
+  border-left: 1px solid var(--linea);
+}
+.publicar-plataformas button.activa {
+  background: var(--texto);
+  color: var(--fondo);
+}
+.publicar-plataformas button:disabled {
+  cursor: default;
+}
 .publicar-nombre input[aria-invalid="true"] {
   border-color: #d95d63;
 }

@@ -38,6 +38,8 @@ import {
 } from "./rooms.js";
 import { detectLaunch } from "./engine/preview.js";
 import { capturarPreview } from "./engine/captura.js";
+import { crearProveedorVertex, configVertex } from "./agent/providers/vertex.js";
+import { ConRespaldo } from "./agent/providers/con-respaldo.js";
 import { getStorage } from "./storage/index.js";
 import { randomUUID } from "node:crypto";
 import { KeyedMutex } from "./engine/keyed-mutex.js";
@@ -1777,8 +1779,13 @@ function providerFor(socketId: string): ModelProvider | null {
   const cred = propia ?? FALLBACK;
   if (!cred) return null;
   try {
-    const provider = makeProvider(cred.provider, cred.apiKey, cred.model);
-    if (!propia) deRespaldo.add(provider);
+    const base = makeProvider(cred.provider, cred.apiKey, cred.model);
+    if (propia) return base;
+    // La key del `.env` es de quien corre Multti: si se le acaba el saldo, la
+    // sala sigue con Gemini en Vertex (los créditos de Google), si está puesto.
+    const gemini = crearProveedorVertex();
+    const provider = gemini ? new ConRespaldo(base, gemini) : base;
+    deRespaldo.add(provider);
     return provider;
   } catch (err) {
     // Se trata como "sin credencial", pero SE DICE: un catch mudo aquí dejaba al
@@ -2912,6 +2919,8 @@ async function runAgentTurn(
    * proyecto y podia reescribir lo que ya habia hecho.
    */
   let historialVivo: Message[] | null = null;
+  /** Si ya se avisó en este turno que va con el modelo de respaldo. */
+  let avisoDeRespaldo = false;
 
   try {
     await repararVariablesSupabase(room.id, room.workspace.dir);
@@ -2964,6 +2973,14 @@ async function runAgentTurn(
       agentId,
       callbacks: {
         onText: (delta) => io.to(room.id).emit("agent:delta", { agentId, text: delta }),
+        // Se acabó el saldo de Claude y el turno siguió con Gemini. Se dice una
+        // vez por turno, en una línea, para que nadie se extrañe si cambia el
+        // estilo de las respuestas.
+        onRespaldo: () => {
+          if (avisoDeRespaldo) return;
+          avisoDeRespaldo = true;
+          systemMsg(room, `${agent.name} sigue con el modelo de respaldo por ahora`);
+        },
         // Buscar y leer páginas corren del lado de Anthropic: no pasan por
         // onToolStart, pero se ven igual. Casi siempre llegan dentro del código
         // del filtrado, y de ahí se sacan (ver busquedasEn).
@@ -3474,7 +3491,7 @@ try {
   const modoKeys = TEST_MOCK
     ? "agente simulado"
     : FALLBACK
-      ? `respaldo: ${PERFILES[FALLBACK.provider].label} + key propia por persona`
+      ? `respaldo: ${PERFILES[FALLBACK.provider].label}${configVertex() ? ` (y Gemini ${configVertex()!.modelo} si se acaba el saldo)` : ""} + key propia por persona`
       : "cada quien trae su key";
   console.log(
     `Multti server en http://localhost:${PORT}  (${modoKeys}, ${salas} sala(s) guardada(s))`,

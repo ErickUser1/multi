@@ -41,7 +41,14 @@ const DEFAULT_MAX_TOKENS = 8192;
 const MIN_MAX_TOKENS = 512;
 
 export interface OpenAICompatOptions {
-  apiKey: string;
+  /** La key fija. O, en su lugar, `obtenerToken`. */
+  apiKey?: string;
+  /**
+   * Para proveedores que no dan una key fija sino un token que caduca (Vertex
+   * con las credenciales de Google): se pide en cada request y el que lo da se
+   * encarga de cachearlo y renovarlo.
+   */
+  obtenerToken?: () => Promise<string>;
   /** Sin barra final. Ej: https://openrouter.ai/api/v1 */
   baseUrl: string;
   defaultModel: string;
@@ -49,6 +56,14 @@ export interface OpenAICompatOptions {
   name: string;
   /** Cabeceras extra (OpenRouter pide identificar la app). */
   extraHeaders?: Record<string, string>;
+  /** El techo de salida cuando el loop no pide uno. Sin esto, DEFAULT_MAX_TOKENS. */
+  maxTokens?: number;
+  /**
+   * Qué mandar como `extra_content` en una llamada a herramienta que no trae la
+   * suya (porque la hizo otro modelo antes de cambiar al respaldo). Gemini exige
+   * firma en cada llamada del historial y acepta este comodín para las ajenas.
+   */
+  extraPorDefecto?: Record<string, unknown>;
 }
 
 export class OpenAICompatProvider implements ModelProvider {
@@ -56,7 +71,7 @@ export class OpenAICompatProvider implements ModelProvider {
   readonly defaultModel: string;
 
   constructor(private readonly opts: OpenAICompatOptions) {
-    if (!opts.apiKey) throw new ProviderError(`falta la API key de ${opts.name}`, "auth");
+    if (!opts.apiKey && !opts.obtenerToken) throw new ProviderError(`falta la API key de ${opts.name}`, "auth");
     this.name = opts.name;
     this.defaultModel = opts.defaultModel;
   }
@@ -117,13 +132,20 @@ export class OpenAICompatProvider implements ModelProvider {
   ): Promise<Extract<StreamEvent, { type: "end" }>> {
     const body = {
       model: params.model ?? this.defaultModel,
-      messages: toOpenAIMessages(params.system, params.messages),
+      messages: toOpenAIMessages(params.system, params.messages, this.opts.extraPorDefecto),
       ...(params.tools?.length ? { tools: params.tools.map(toOpenAITool) } : {}),
-      max_tokens: params.maxTokens ?? DEFAULT_MAX_TOKENS,
+      max_tokens: params.maxTokens ?? this.opts.maxTokens ?? DEFAULT_MAX_TOKENS,
       stream: true,
       // Sin esto, el último chunk no trae el conteo de tokens.
       stream_options: { include_usage: true },
     };
+
+    let token: string;
+    try {
+      token = this.opts.obtenerToken ? await this.opts.obtenerToken() : this.opts.apiKey!;
+    } catch (err) {
+      throw new ProviderError(`${this.name}: no se pudo obtener el permiso: ${String(err)}`, "auth");
+    }
 
     let res: Response;
     try {
@@ -131,7 +153,7 @@ export class OpenAICompatProvider implements ModelProvider {
         method: "POST",
         headers: {
           "content-type": "application/json",
-          authorization: `Bearer ${this.opts.apiKey}`,
+          authorization: `Bearer ${token}`,
           ...this.opts.extraHeaders,
         },
         body: JSON.stringify(body),
@@ -160,7 +182,7 @@ export class OpenAICompatProvider implements ModelProvider {
 
     let text = "";
     // Los tool_calls llegan partidos: se acumulan por índice hasta el final.
-    const toolCalls = new Map<number, { id: string; name: string; args: string }>();
+    const toolCalls = new Map<number, { id: string; name: string; args: string; extra?: Record<string, unknown> }>();
     let finishReason: string | null = null;
     let usage: { inputTokens: number; outputTokens: number } | undefined;
 
@@ -230,6 +252,10 @@ export class OpenAICompatProvider implements ModelProvider {
               if (tc.id) acc.id = tc.id;
               if (tc.function?.name) acc.name += tc.function.name;
               if (tc.function?.arguments) acc.args += tc.function.arguments;
+              // La firma de Gemini viaja aquí, en algún chunk de la llamada.
+              if (tc.extra_content && typeof tc.extra_content === "object") {
+                acc.extra = { ...acc.extra, ...tc.extra_content };
+              }
               toolCalls.set(i, acc);
             }
           }
@@ -263,6 +289,7 @@ export class OpenAICompatProvider implements ModelProvider {
         id: tc.id || `call_${i}`,
         name: tc.name,
         input: parseArgs(tc.args, tc.name),
+        ...(tc.extra ? { extra: tc.extra } : {}),
       });
     }
 
@@ -295,7 +322,11 @@ export class OpenAICompatProvider implements ModelProvider {
  * aparte con `role: "tool"` por cada resultado. Un mensaje nuestro puede
  * convertirse en varios suyos.
  */
-function toOpenAIMessages(system: string | undefined, messages: Message[]): unknown[] {
+function toOpenAIMessages(
+  system: string | undefined,
+  messages: Message[],
+  extraPorDefecto?: Record<string, unknown>,
+): unknown[] {
   const out: unknown[] = [];
   if (system) out.push({ role: "system", content: system });
 
@@ -331,6 +362,7 @@ function toOpenAIMessages(system: string | undefined, messages: Message[]): unkn
                 id: u.id,
                 type: "function",
                 function: { name: u.name, arguments: JSON.stringify(u.input) },
+                ...(u.extra ?? extraPorDefecto ? { extra_content: u.extra ?? extraPorDefecto } : {}),
               })),
             }
           : {}),

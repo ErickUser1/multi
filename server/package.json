@@ -28,6 +28,7 @@
     "demo:proxy-rutas": "tsx src/demos/proxy-rutas.ts",
     "demo:remix": "tsx src/demos/remix.ts",
     "demo:comunidad": "tsx src/demos/comunidad.ts",
+    "demo:respaldo-gemini": "tsx src/demos/respaldo-gemini.ts",
     "demo:exportar": "tsx src/demos/exportar.ts",
     "uso": "tsx --no-warnings src/demos/uso.ts",
     "comunidad": "tsx --no-warnings src/moderar-comunidad.ts",

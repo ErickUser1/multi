@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { SERVER_URL } from "./socket.js";
+import { SERVER_URL, type EnLaComunidad } from "./socket.js";
 import { useTextos } from "./i18n.js";
 
 /**
@@ -39,6 +39,10 @@ export function PublicarPanel({
   puedePublicar,
   errorDeNombre,
   onPublicar,
+  comunidad,
+  autorSugerido,
+  onCompartir,
+  onQuitarDeComunidad,
 }: {
   roomId: string | null;
   /** Con lo que arranca el campo del nombre: el nombre de la sala, o su id. */
@@ -50,10 +54,38 @@ export function PublicarPanel({
   /** Por qué el server no aceptó el nombre, para decirlo junto al campo. */
   errorDeNombre: string | null;
   onPublicar: (nombre?: string) => void;
+  /** Si ya está en la comunidad, y cómo. */
+  comunidad: EnLaComunidad | null;
+  /** Con qué nombre sale de entrada quien comparte: el suyo en la sala. */
+  autorSugerido: string;
+  /** Devuelve el error, o null si salió. */
+  onCompartir: (autor: string) => Promise<string | null>;
+  onQuitarDeComunidad: () => Promise<void>;
 }) {
   const { t } = useTextos();
   const [abierto, setAbierto] = useState(false);
   const [copiado, setCopiado] = useState(false);
+  /** Si está abierto el paso de confirmar antes de compartir con la comunidad. */
+  const [confirmando, setConfirmando] = useState(false);
+  const [autor, setAutor] = useState<string | null>(null);
+  const [compartiendo, setCompartiendo] = useState(false);
+  const [errorComunidad, setErrorComunidad] = useState<string | null>(null);
+
+  const compartir = async () => {
+    setCompartiendo(true);
+    setErrorComunidad(null);
+    const error = await onCompartir((autor ?? autorSugerido).trim());
+    setCompartiendo(false);
+    if (error) setErrorComunidad(error);
+    else setConfirmando(false);
+  };
+
+  const quitar = async () => {
+    if (!confirm(t.confirmarQuitarComunidad)) return;
+    setCompartiendo(true);
+    await onQuitarDeComunidad();
+    setCompartiendo(false);
+  };
   const cajaRef = useRef<HTMLDivElement>(null);
   /**
    * El nombre que se escribe, solo antes de la primera publicación: Cloudflare
@@ -160,6 +192,58 @@ export function PublicarPanel({
                 ? t.republicar
                 : t.publicar}
           </button>
+
+          {urlPublicada && (
+            <>
+              {/* La comunidad: que salga en Explorar, para que cualquiera la
+                  juegue y entre a construir. Solo si quien publica quiere, y
+                  diciendo claro qué significa antes de hacerlo. */}
+              <div className="comunidad">
+                <div className="comunidad-estado">
+                  <span className={`publicar-punto ${comunidad && !comunidad.oculta ? "vivo" : ""}`} aria-hidden="true" />
+                  {comunidad ? (comunidad.oculta ? t.comunidadOculta : t.comunidadEstadoEn) : t.comunidadEstadoNo}
+                </div>
+                {comunidad ? (
+                  <div className="comunidad-acciones">
+                    <a href="#/explorar">{t.verEnExplorar}</a>
+                    <button onClick={quitar} disabled={compartiendo}>
+                      {t.quitarDeComunidad}
+                    </button>
+                  </div>
+                ) : confirmando ? (
+                  <div className="comunidad-form">
+                    <p className="comunidad-categoria">
+                      {t.comunidadCategoria}: <strong>{t.categoriaJuego}</strong>
+                    </p>
+                    <label className="publicar-nombre">
+                      <span>{t.comunidadAutor}</span>
+                      <input
+                        value={autor ?? autorSugerido}
+                        onChange={(e) => setAutor(e.target.value)}
+                        maxLength={40}
+                        disabled={compartiendo}
+                        spellCheck={false}
+                      />
+                    </label>
+                    <p className="publicar-nota">{t.comunidadAviso}</p>
+                    {errorComunidad && <p className="publicar-error">{errorComunidad}</p>}
+                    <div className="comunidad-acciones">
+                      <button className="comunidad-confirmar" onClick={compartir} disabled={compartiendo}>
+                        {compartiendo ? t.compartiendo : t.compartirConfirmar}
+                      </button>
+                      <button onClick={() => setConfirmando(false)} disabled={compartiendo}>
+                        {t.cancelar}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button className="comunidad-compartir" onClick={() => setConfirmando(true)} disabled={!!publicando}>
+                    {t.compartirConComunidad}
+                  </button>
+                )}
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>

@@ -561,6 +561,113 @@ fastify.post<{ Params: { id: string }; Body: { autor?: unknown } | undefined }>(
   },
 );
 
+/**
+ * La comunidad: lo que la gente comparte para que cualquiera lo juegue o entre
+ * a construir. Es lo que se ve en Explorar.
+ *
+ * Solo entra lo que quien publicó decidió compartir, y solo si ya está
+ * publicado: el botón de "Jugar" necesita un link que funcione. Lo que se guarda
+ * es una tarjeta (título, autor, miniatura); la sala sigue siendo la misma, y
+ * "Entrar a construir" lleva a ella.
+ */
+const CATEGORIAS_DE_COMUNIDAD = ["juego"] as const;
+type CategoriaDeComunidad = (typeof CATEGORIAS_DE_COMUNIDAD)[number];
+
+function categoriaValida(x: unknown): CategoriaDeComunidad | null {
+  return CATEGORIAS_DE_COMUNIDAD.find((c) => c === x) ?? null;
+}
+
+/** Texto corto de quien comparte: se ve en Explorar, así que se limpia y se topa. */
+function textoCorto(x: unknown, tope: number): string {
+  return typeof x === "string" ? x.replace(/\s+/g, " ").trim().slice(0, tope) : "";
+}
+
+/**
+ * La miniatura de la tarjeta: una captura de la vista previa.
+ *
+ * Si no se puede (la sala no tiene navegador, el preview no arranca), se
+ * comparte igual sin foto. Que falte la imagen no es razón para no compartir.
+ */
+async function miniaturaDe(room: Room): Promise<Uint8Array | null> {
+  try {
+    const base = direccionDelPreview(room) ?? (await levantarPreviewParaVerla(room));
+    if (!base) return null;
+    const captura = await capturarPreview(await ensureRunner(room), base, { ruta: "/", ancho: 1280, alto: 800, completa: false });
+    return captura.ok ? Buffer.from(captura.imagen, "base64") : null;
+  } catch (err) {
+    console.error(`[sala ${room.id}] no se pudo tomar la miniatura:`, err);
+    return null;
+  }
+}
+
+/** Cómo se ve en la sala lo que tiene compartido: para el panel de publicar. */
+async function comunidadDe(roomId: string) {
+  const c = await (await getStorage()).enComunidad(roomId);
+  return c ? { categoria: c.categoria, titulo: c.titulo, autor: c.autor, oculta: c.oculta } : null;
+}
+
+fastify.post<{ Params: { id: string }; Body: { categoria?: unknown; titulo?: unknown; autor?: unknown } | undefined }>(
+  "/rooms/:id/comunidad",
+  async (req, reply) => {
+    const room = getRoom(req.params.id) ?? (await wakeRoom(req.params.id));
+    if (!room) return reply.code(404).send({ error: "sala no encontrada" });
+    if (!room.urlPublicada) {
+      return reply.code(409).send({ error: "primero hay que publicarla, para que se pueda jugar" });
+    }
+    const categoria = categoriaValida(req.body?.categoria);
+    if (!categoria) return reply.code(400).send({ error: "esa categoría no existe" });
+    const titulo = textoCorto(req.body?.titulo, 60) || room.nombrePublicado || room.nombre || room.id;
+    const autor = textoCorto(req.body?.autor, 40) || "anónimo";
+
+    const storage = await getStorage();
+    await storage.compartirEnComunidad({
+      roomId: room.id,
+      categoria,
+      titulo,
+      autor,
+      miniatura: await miniaturaDe(room),
+      compartido: Date.now(),
+    });
+    const comunidad = await comunidadDe(room.id);
+    io.to(room.id).emit("comunidad:cambio", { comunidad });
+    systemMsg(room, `${autor} compartió este proyecto con la comunidad: ahora cualquiera puede jugarlo y entrar a construir`);
+    return { comunidad };
+  },
+);
+
+fastify.delete<{ Params: { id: string } }>("/rooms/:id/comunidad", async (req, reply) => {
+  const room = getRoom(req.params.id) ?? (await wakeRoom(req.params.id));
+  if (!room) return reply.code(404).send({ error: "sala no encontrada" });
+  await (await getStorage()).quitarDeComunidad(room.id);
+  io.to(room.id).emit("comunidad:cambio", { comunidad: null });
+  systemMsg(room, "este proyecto ya no está en la comunidad");
+  return { comunidad: null };
+});
+
+/** Lo que sale en Explorar. Bajo /comunidad, que el proxy del preview no toca. */
+fastify.get<{ Querystring: { categoria?: string } }>("/comunidad", async (req) => {
+  const categoria = req.query.categoria ? categoriaValida(req.query.categoria) : null;
+  const lista = await (await getStorage()).listarComunidad(categoria ?? undefined);
+  return {
+    proyectos: lista.map((c) => ({
+      id: c.roomId,
+      categoria: c.categoria,
+      titulo: c.titulo,
+      autor: c.autor,
+      compartido: c.compartido,
+      url: c.urlPublicada,
+      miniatura: c.conMiniatura ? `/comunidad/${c.roomId}/miniatura?v=${c.compartido}` : null,
+    })),
+  };
+});
+
+fastify.get<{ Params: { id: string } }>("/comunidad/:id/miniatura", async (req, reply) => {
+  const img = await (await getStorage()).miniaturaDeComunidad(req.params.id);
+  if (!img) return reply.code(404).send({ error: "sin miniatura" });
+  // Cambia solo al volver a compartir, y la URL lleva ?v= con la fecha.
+  return reply.type("image/jpeg").header("cache-control", "public, max-age=86400").send(Buffer.from(img));
+});
+
 // La línea de tiempo de una sala (alimenta el scrubber).
 fastify.get<{ Params: { id: string } }>("/rooms/:id/history", async (req, reply) => {
   const room = getRoom(req.params.id) ?? (await wakeRoom(req.params.id));
@@ -1778,6 +1885,8 @@ io.on("connection", (socket) => {
       // y la lista para brincar entre versiones.
       origen: await origenDe(room),
       remixes: await (await getStorage()).remixesDe(room.id),
+      // Si está compartida con la comunidad, y cómo: el panel de publicar lo dice.
+      comunidad: await comunidadDe(room.id),
       nombrePublicado: room.nombrePublicado ?? null,
       agents: room.agents.list(),
       actividad: Object.fromEntries(ultimaAccion.get(room.id) ?? []),

@@ -8,6 +8,8 @@ import type {
   ModoDeSala,
   SalaDeUsuario,
   RemixDeSala,
+  NuevaEnComunidad,
+  EnComunidad,
   Storage,
   StoredMessage,
   StoredRoom,
@@ -215,6 +217,26 @@ export class SqliteStorage implements Storage {
       );
       CREATE INDEX IF NOT EXISTS comentarios_sala_idx ON comentarios(room_id, creado);
     `);
+
+    // Lo que se compartió con la comunidad: aparece en Explorar para que
+    // cualquiera lo juegue o entre a construir. Una fila por sala, y solo si
+    // quien la publicó dijo que sí: nadie sale ahí por accidente.
+    //
+    // La miniatura va aquí mismo y no en disco: es una imagen chica, y así un
+    // respaldo de la base se lleva todo junto. `oculta` es para moderar: la baja
+    // de Explorar sin borrarle nada a nadie.
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS comunidad (
+        room_id     TEXT PRIMARY KEY REFERENCES rooms(id) ON DELETE CASCADE,
+        categoria   TEXT NOT NULL,
+        titulo      TEXT NOT NULL,
+        autor       TEXT NOT NULL,
+        miniatura   BLOB,
+        compartido  INTEGER NOT NULL,
+        oculta      INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE INDEX IF NOT EXISTS comunidad_categoria_idx ON comunidad(categoria, compartido);
+    `);
   }
 
   /**
@@ -242,6 +264,61 @@ export class SqliteStorage implements Storage {
          VALUES (?, ?, ?, ?, ?, ?)`,
       )
       .run(room.id, room.workspaceDir, room.createdAt, room.lastActiveAt, room.modo ?? null, room.origenId ?? null);
+  }
+
+  async compartirEnComunidad(c: NuevaEnComunidad): Promise<void> {
+    // Volver a compartir actualiza lo que se ve, pero respeta una moderación:
+    // si estaba oculta, sigue oculta.
+    this.db
+      .prepare(
+        `INSERT INTO comunidad (room_id, categoria, titulo, autor, miniatura, compartido)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(room_id) DO UPDATE SET
+           categoria = excluded.categoria, titulo = excluded.titulo, autor = excluded.autor,
+           miniatura = COALESCE(excluded.miniatura, comunidad.miniatura), compartido = excluded.compartido`,
+      )
+      .run(c.roomId, c.categoria, c.titulo, c.autor, c.miniatura ?? null, c.compartido);
+  }
+
+  async quitarDeComunidad(roomId: string): Promise<void> {
+    this.db.prepare(`DELETE FROM comunidad WHERE room_id = ?`).run(roomId);
+  }
+
+  async enComunidad(roomId: string): Promise<EnComunidad | null> {
+    const r = this.db
+      .prepare(
+        `SELECT c.room_id, c.categoria, c.titulo, c.autor, c.compartido, c.oculta,
+                c.miniatura IS NOT NULL AS con_miniatura, r.url_publicada
+           FROM comunidad c JOIN rooms r ON r.id = c.room_id WHERE c.room_id = ?`,
+      )
+      .get(roomId) as Record<string, unknown> | undefined;
+    return r ? aEnComunidad(r) : null;
+  }
+
+  async listarComunidad(categoria?: string): Promise<EnComunidad[]> {
+    const filas = this.db
+      .prepare(
+        `SELECT c.room_id, c.categoria, c.titulo, c.autor, c.compartido, c.oculta,
+                c.miniatura IS NOT NULL AS con_miniatura, r.url_publicada
+           FROM comunidad c JOIN rooms r ON r.id = c.room_id
+          WHERE c.oculta = 0 AND r.url_publicada IS NOT NULL AND (? IS NULL OR c.categoria = ?)
+          ORDER BY c.compartido DESC
+          LIMIT 200`,
+      )
+      .all(categoria ?? null, categoria ?? null) as Record<string, unknown>[];
+    return filas.map(aEnComunidad);
+  }
+
+  async miniaturaDeComunidad(roomId: string): Promise<Uint8Array | null> {
+    const r = this.db.prepare(`SELECT miniatura FROM comunidad WHERE room_id = ?`).get(roomId) as
+      | { miniatura: Uint8Array | null }
+      | undefined;
+    return r?.miniatura ?? null;
+  }
+
+  async ocultarEnComunidad(roomId: string, oculta: boolean): Promise<boolean> {
+    const r = this.db.prepare(`UPDATE comunidad SET oculta = ? WHERE room_id = ?`).run(oculta ? 1 : 0, roomId);
+    return Number(r.changes) > 0;
   }
 
   async remixesDe(id: string): Promise<RemixDeSala[]> {
@@ -304,6 +381,7 @@ export class SqliteStorage implements Storage {
    * la BD crecería sin que nadie lo notara.
    */
   async deleteRoom(id: string): Promise<void> {
+    this.db.prepare(`DELETE FROM comunidad WHERE room_id = ?`).run(id);
     this.db.prepare(`DELETE FROM agent_histories WHERE room_id = ?`).run(id);
     this.db.prepare(`DELETE FROM messages WHERE room_id = ?`).run(id);
     this.db.prepare(`DELETE FROM rooms WHERE id = ?`).run(id);
@@ -669,5 +747,18 @@ function toRoom(r: Record<string, unknown>): StoredRoom {
     // Solo "solo" cuenta como tal: null y cualquier cosa rara caen a multi, que
     // es el comportamiento que ya tenían todas las salas.
     modo: r.modo === "solo" ? "solo" : "multi",
+  };
+}
+
+function aEnComunidad(r: Record<string, unknown>): EnComunidad {
+  return {
+    roomId: String(r.room_id),
+    categoria: String(r.categoria),
+    titulo: String(r.titulo),
+    autor: String(r.autor),
+    compartido: Number(r.compartido),
+    oculta: Number(r.oculta) === 1,
+    conMiniatura: Number(r.con_miniatura) === 1,
+    urlPublicada: r.url_publicada == null ? null : String(r.url_publicada),
   };
 }

@@ -38,8 +38,8 @@
         letter-spacing: 6px;
         margin: 0;
       }
-      .personajes { display: flex; gap: 8px; margin: 8px 0 16px; }
-      .personajes img { width: 72px; height: 72px; object-fit: contain; }
+      /* El logo: una mano humana y la de un agente a punto de tocarse. */
+      .logo { display: block; width: 100%; max-width: 420px; height: auto; margin: 0 0 16px -8px; }
       .lema { font-size: 20px; margin: 0 0 24px; }
       .cta {
         display: inline-block;
@@ -104,17 +104,13 @@
       }
       @media (max-width: 480px) {
         .marca { font-size: 44px; }
-        .personajes img { width: 56px; height: 56px; }
       }
     </style>
   </head>
   <body>
     <main>
-      <h1 class="marca">MULTI</h1>
-      <div class="personajes">
-        <img src="/acerca/steve.webp" alt="Steve, uno de los agentes de Multti" />
-        <img src="/acerca/dave.webp" alt="Dave, uno de los agentes de Multti" />
-      </div>
+      <img class="logo" src="/logo/multti-manos.svg" alt="" />
+      <h1 class="marca">multti</h1>
       <p class="lema">Construye en equipo, con agentes de IA, en la misma sala.</p>
       <a class="cta" href="/">Abrir Multti</a>
 

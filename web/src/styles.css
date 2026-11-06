@@ -4536,45 +4536,18 @@ img.av.av-personaje {
   max-width: 640px;
   margin: 0 auto;
 }
+.inicio-logo {
+  display: block;
+  width: 100%;
+  max-width: 460px;
+  height: auto;
+  margin: 0 auto;
+}
 .inicio-marca {
-  font-size: 12px;
-  letter-spacing: 6px;
-  color: var(--acento);
-  font-weight: 700;
-}
-/* Editorial: los dos personajes y la chispa en medio, como la pintura. */
-.inicio-creacion {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0;
-  margin: 24px 0 8px;
-}
-.inicio-creacion img {
-  width: 150px;
-  height: 150px;
-  object-fit: contain;
-}
-.inicio-creacion .volteado {
-  transform: scaleX(-1);
-}
-.inicio-chispa {
-  width: 72px;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--acento) 45%, var(--acento) 55%, transparent);
-  position: relative;
-}
-.inicio-chispa::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--acento);
-  box-shadow: 0 0 12px 3px var(--acento);
-  transform: translate(-50%, -50%);
+  font-family: "Bodoni MT", "Didot", Georgia, serif;
+  font-size: 30px;
+  letter-spacing: 3px;
+  margin-top: 4px;
 }
 .inicio-cab h1 {
   font-family: "Bodoni MT", "Didot", Georgia, serif;
@@ -4731,12 +4704,8 @@ img.av.av-personaje {
   .inicio {
     padding-top: 32px;
   }
-  .inicio-creacion img {
-    width: 104px;
-    height: 104px;
-  }
-  .inicio-chispa {
-    width: 40px;
+  .inicio-logo {
+    max-width: 320px;
   }
   .inicio-cab h1 {
     font-size: 30px;

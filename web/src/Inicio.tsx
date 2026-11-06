@@ -126,6 +126,18 @@ export function Inicio(props: {
       </section>
 
       <section className="inicio-seccion">
+        <h2>{t.inicioHablarle}</h2>
+        <div className="inicio-modos">
+          {t.inicioModos.map((m) => (
+            <div key={m.titulo}>
+              <h3>{m.titulo}</h3>
+              <p>{m.texto}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="inicio-seccion">
         <h2>{t.inicioQuePedir}</h2>
         <ul className="inicio-ejemplos">
           {t.inicioEjemplos.map((e) => (

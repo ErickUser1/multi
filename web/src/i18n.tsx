@@ -170,31 +170,49 @@ const TEXTOS = {
     // La pantalla de inicio (Inicio.tsx): lo que se le cuenta a quien llega por
     // primera vez. Sin jerga, igual que los ejemplos: quien llega no sabe qué es
     // un agente ni un deploy, y no le hace falta para empezar.
-    inicioTitulo: "Construyan apps, juegos y presentaciones con IA, en equipo",
+    inicioTitulo: "Construye apps, juegos y presentaciones con IA, en equipo",
     inicioLema:
-      "Entran a la misma sala, le piden a la IA lo que quieren como se lo pedirían a una persona, y todos ven cómo se arma al mismo tiempo.",
+      "Entras a una sala, le pides a la IA lo que quieres como se lo pedirías a una persona, y lo ves armarse en vivo junto con tu equipo.",
     empezar: "Empezar",
     entrarALaSala: "Entrar a la sala",
-    inicioSinCuenta: "No hay que instalar nada ni crear cuenta.",
+    inicioSinCuenta: "No tienes que instalar nada ni crear cuenta.",
     comoFunciona: "Cómo funciona",
     comoFuncionaMenu: "¿Cómo funciona Multti?",
     inicioPasos: [
       {
-        titulo: "Entren a una sala",
-        texto: "Cada sala tiene su link. Pásalo y tu equipo entra al mismo lugar, desde la compu o el celular.",
+        titulo: "Entra a una sala",
+        texto: "Cada sala tiene su link. Pásaselo a tu equipo y entran al mismo lugar, desde la compu o el celular.",
       },
       {
-        titulo: "Pídanle lo que quieren",
+        titulo: "Pídele lo que quieres al agente",
         texto:
-          "En el chat le escriben al agente, que es la IA que programa por ustedes: \"haz un juego de naves\", \"ponle un marcador\". No hace falta saber programar.",
+          "El agente es la IA que programa por ti. Escríbele como a una persona: \"haz un juego de naves\", \"ponle un marcador\". No necesitas saber programar.",
       },
       {
-        titulo: "Véanlo armarse en vivo",
+        titulo: "Míralo armarse en vivo",
         texto:
-          "Al lado del chat aparece lo que se va construyendo, para todos a la vez. Lo prueban, piden cambios, y cuando les guste lo publican con un link.",
+          "Al lado del chat aparece lo que se va construyendo, y todos en la sala lo ven al mismo tiempo. Pruébalo, pide cambios y, cuando te guste, publícalo con un link.",
       },
     ],
-    inicioQuePedir: "Cosas que le pueden pedir",
+    /**
+     * Lo que más confunde: el mismo chat sirve para hablarle al agente y para
+     * platicar con el equipo, y cuál de las dos pasa depende de cuántos hay.
+     * El server cambia la sala a Multijugador en cuanto entra la segunda
+     * persona, y desde ahí un mensaje sin @ es para los compañeros.
+     */
+    inicioHablarle: "Cómo hablarle al agente",
+    inicioModos: [
+      {
+        titulo: "Si estás solo en la sala",
+        texto: "Todo lo que escribes le llega al agente. Escribe lo que quieres y listo.",
+      },
+      {
+        titulo: "Si hay 2 personas o más",
+        texto:
+          "El chat se vuelve como un grupo de Discord: lo que escribes le llega a tus compañeros, no al agente. Para pedirle algo, escribe @ y elige al agente, o selecciónalo arriba de la caja de texto.",
+      },
+    ],
+    inicioQuePedir: "Cosas que le puedes pedir",
     inicioEjemplos: [
       "Haz una presentación de 8 diapositivas sobre la Revolución Mexicana",
       "Un juego de naves con marcador y tres niveles",
@@ -204,24 +222,20 @@ const TEXTOS = {
     inicioTips: "Para que salga mejor",
     inicioListaTips: [
       {
-        titulo: "Sean específicos.",
-        texto: "Entre más le cuenten (colores, qué debe pasar al dar clic, para quién es), más se parece a lo que imaginan.",
+        titulo: "Sé específico.",
+        texto: "Entre más le cuentes (colores, qué pasa al dar clic, para quién es), más se parece a lo que imaginas.",
       },
       {
-        titulo: "Pídanlo por partes si quieren, o todo de una.",
-        texto: "Después de la primera versión pueden pedir cambios: \"el botón más grande\", \"que tenga modo oscuro\".",
+        titulo: "Pídelo todo de una o por partes.",
+        texto: "Después de la primera versión puedes pedir cambios: \"el botón más grande\", \"que tenga modo oscuro\".",
       },
       {
-        titulo: "Si algo no funciona, díganselo.",
+        titulo: "Si algo no funciona, díselo.",
         texto: "\"El botón de empezar no hace nada\" basta para que lo revise y lo arregle.",
       },
       {
-        titulo: "En modo Multijugador, usen @.",
-        texto: "Escriban @ y elijan un agente para hablarle. Sin @, platican entre ustedes sin gastar.",
-      },
-      {
-        titulo: "Pueden mandar imágenes y PDFs.",
-        texto: "Con el botón de adjuntar mandan un dibujo, una captura o sus apuntes, y el agente los ve.",
+        titulo: "Puedes mandarle imágenes y PDFs.",
+        texto: "Con el botón de adjuntar le mandas un dibujo, una captura o tus apuntes, y el agente los ve.",
       },
     ],
     inicioHechoAqui: "Hecho en Multti",
@@ -622,7 +636,7 @@ const TEXTOS = {
     acercaDeMulti: "About Multti",
     inicioTitulo: "Build apps, games and slide decks with AI, as a team",
     inicioLema:
-      "You join the same room, ask the AI for what you want the way you'd ask a person, and everyone watches it come together at the same time.",
+      "You join a room, ask the AI for what you want the way you'd ask a person, and watch it come together live with your team.",
     empezar: "Get started",
     entrarALaSala: "Join the room",
     inicioSinCuenta: "Nothing to install, no account needed.",
@@ -631,17 +645,29 @@ const TEXTOS = {
     inicioPasos: [
       {
         titulo: "Join a room",
-        texto: "Every room has its own link. Share it and your team lands in the same place, from a computer or a phone.",
+        texto: "Every room has its own link. Share it with your team and you all land in the same place, from a computer or a phone.",
       },
       {
-        titulo: "Ask for what you want",
+        titulo: "Ask the agent for what you want",
         texto:
-          "In the chat you write to the agent, the AI that codes for you: \"make a space shooter\", \"add a scoreboard\". No coding needed.",
+          "The agent is the AI that codes for you. Write to it like you'd write to a person: \"make a space shooter\", \"add a scoreboard\". No coding needed.",
       },
       {
         titulo: "Watch it get built live",
         texto:
-          "Next to the chat you see what's being built, everyone at once. Try it, ask for changes, and when you like it, publish it with a link.",
+          "Next to the chat you see what's being built, and everyone in the room sees it at the same time. Try it, ask for changes, and when you like it, publish it with a link.",
+      },
+    ],
+    inicioHablarle: "How to talk to the agent",
+    inicioModos: [
+      {
+        titulo: "If you're alone in the room",
+        texto: "Everything you write goes to the agent. Just type what you want.",
+      },
+      {
+        titulo: "If there are 2 or more people",
+        texto:
+          "The chat turns into a group chat, like Discord: what you write goes to your teammates, not the agent. To ask it something, type @ and pick the agent, or select it above the text box.",
       },
     ],
     inicioQuePedir: "Things you can ask for",
@@ -658,16 +684,12 @@ const TEXTOS = {
         texto: "The more you tell it (colors, what happens on click, who it's for), the closer it gets to what you picture.",
       },
       {
-        titulo: "Ask in steps or all at once.",
+        titulo: "Ask all at once or in steps.",
         texto: "After the first version you can ask for changes: \"bigger button\", \"add dark mode\".",
       },
       {
         titulo: "If something doesn't work, say so.",
         texto: "\"The start button does nothing\" is enough for it to check and fix it.",
-      },
-      {
-        titulo: "In Multiplayer mode, use @.",
-        texto: "Type @ and pick an agent to talk to it. Without @, you chat among yourselves for free.",
       },
       {
         titulo: "You can send images and PDFs.",

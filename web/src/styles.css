@@ -4654,6 +4654,25 @@ img.av.av-personaje {
   color: var(--dim);
   font-size: 14px;
 }
+.inicio-modos {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+.inicio-modos > div {
+  border: 1px solid var(--linea);
+  border-left: 3px solid var(--acento);
+  border-radius: 8px;
+  padding: 18px 20px;
+}
+.inicio-modos h3 {
+  font-size: 16px;
+  margin-bottom: 6px;
+}
+.inicio-modos p {
+  color: var(--dim);
+  font-size: 14px;
+}
 .inicio-ejemplos {
   list-style: none;
   display: grid;
@@ -4726,6 +4745,7 @@ img.av.av-personaje {
     font-size: 15px;
   }
   .inicio-pasos,
+  .inicio-modos,
   .inicio-ejemplos {
     grid-template-columns: 1fr;
   }

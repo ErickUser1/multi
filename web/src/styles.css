@@ -4978,7 +4978,7 @@ img.av.av-personaje {
     display: none;
   }
 }
-@media (max-width: 1100px) and (min-width: 821px) {
+@media (max-width: 1100px) {
   .switch-texto {
     display: none;
   }

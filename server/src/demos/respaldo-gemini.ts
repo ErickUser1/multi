@@ -176,6 +176,41 @@ async function main() {
       );
     }
 
+    console.log("\n3b. Los PDFs le llegan a Gemini");
+    {
+      // Así se perdían: "haz una presentación con este PDF" y el modelo nunca
+      // lo recibía, porque el traductor solo mandaba imágenes.
+      const llamadas: Llamada[] = [];
+      globalThis.fetch = fetchDeGoogle([], llamadas);
+      const conPdf: Message[] = [
+        {
+          role: "user",
+          content: [
+            { type: "documento", mediaType: "application/pdf", data: "JVBERi0x" },
+            { type: "text", text: "haz una presentación con este pdf" },
+          ],
+        },
+      ];
+      const gemini = crearProveedorVertex({ VERTEX_PROJECT: "mi-proyecto", GOOGLE_APPLICATION_CREDENTIALS: adc })!;
+      await gemini.stream({ messages: conPdf });
+      const mandado = JSON.parse(llamadas.find((l) => l.url.includes("aiplatform"))!.body) as { messages: any[] };
+      const partes = mandado.messages.find((m) => m.role === "user")?.content;
+      check(
+        "el PDF va como archivo, con su tipo",
+        Array.isArray(partes) && partes[0]?.image_url?.url === "data:application/pdf;base64,JVBERi0x",
+        JSON.stringify(partes),
+      );
+      check("antes del texto", Array.isArray(partes) && partes[1]?.type === "text");
+
+      // Otros proveedores con este formato no lo garantizan: a ellos no.
+      llamadas.length = 0;
+      const { OpenAICompatProvider } = await import("../agent/providers/openai-compat.js");
+      const otro = new OpenAICompatProvider({ apiKey: "k", baseUrl: "https://otro.example/v1", defaultModel: "m", name: "Otro" });
+      await otro.stream({ messages: conPdf });
+      const aOtro = JSON.parse(llamadas[0]!.body) as { messages: any[] };
+      check("a otro proveedor no se le manda", aOtro.messages.find((m) => m.role === "user")?.content === "haz una presentación con este pdf");
+    }
+
     console.log("\n4. Sin saldo, la sala sigue con Gemini");
     {
       reiniciarRespaldo();

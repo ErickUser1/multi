@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { SERVER_URL } from "./socket.js";
 import { useTextos } from "./i18n.js";
+import { PERSONAJES } from "./personajes.js";
 import type { ProyectoDeComunidad } from "./Explorar.js";
 
 /**
@@ -25,6 +26,9 @@ import type { ProyectoDeComunidad } from "./Explorar.js";
  *
  * Con `#/inicio` se ve cuando sea, desde el menú.
  */
+const STEVE = PERSONAJES[0].imagen;
+const DAVE = PERSONAJES[1].imagen;
+
 export function Inicio(props: {
   /** La sala del link, si se llegó por uno. */
   roomId: string | null;
@@ -70,12 +74,20 @@ export function Inicio(props: {
 
   return (
     <div className="inicio">
+      {/* El logo chico, arriba a la izquierda. */}
+      <span className="inicio-barra">
+        <img src="/logo/multti-manos.svg" alt="" draggable={false} />
+        <span>multti</span>
+      </span>
       <header className="inicio-cab">
-        {/* El logo: una mano humana y la de un agente a punto de tocarse, como
-            en La creación de Adán. Es lo que es Multti: gente y agentes
-            construyendo juntos. Va completo; el ícono chico es un recorte. */}
-        <img className="inicio-logo" src="/logo/multti-manos.svg" alt="" draggable={false} />
-        <p className="inicio-marca">multti</p>
+        {/* Steve y Dave a punto de tocarse, como en La creación de Adán: una
+            persona y un agente construyendo algo juntos. Dave va volteado para
+            que se miren. */}
+        <div className="inicio-creacion" aria-hidden="true">
+          <img src={STEVE} alt="" draggable={false} />
+          <span className="inicio-chispa" />
+          <img src={DAVE} alt="" draggable={false} className="volteado" />
+        </div>
         <h1>{t.inicioTitulo}</h1>
         <p className="inicio-lema">{t.inicioLema}</p>
 

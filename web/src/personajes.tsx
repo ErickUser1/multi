@@ -17,7 +17,7 @@ import dave from "./personajes/dave.webp";
  * actividad pasa de cinco agentes en una sola sesión. El nombre sigue siendo
  * distinto y lo dice al lado, y los de números cercanos nunca coinciden.
  */
-const PERSONAJES = [
+export const PERSONAJES = [
   { nombre: "Steve", imagen: steve },
   { nombre: "Dave", imagen: dave },
   { nombre: "Lenny", imagen: lenny },

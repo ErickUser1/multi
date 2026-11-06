@@ -133,6 +133,10 @@ export function MenuSalas({ actual }: { actual?: string }) {
           <a className="menu-explorar" href="#/explorar" onClick={() => setAbierto(false)}>
             {t.explorarLink}
           </a>
+          {/* La explicación de la primera vez, para volver a verla o enseñarla. */}
+          <a className="menu-explorar" href="#/inicio" onClick={() => setAbierto(false)}>
+            {t.comoFuncionaMenu}
+          </a>
 
           {/* Que la fila desaparezca no dice si se borró la sala o solo se quitó
               del menú. Este aviso lo confirma, y se va solo: es una noticia de

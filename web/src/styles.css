@@ -4517,3 +4517,242 @@ img.av.av-personaje {
   opacity: 0.5;
   cursor: default;
 }
+
+/* ── La pantalla de inicio (Inicio.tsx) ───────────────────────────────────
+ * Como Explorar: la página scrollea sola porque body tiene alto fijo para la
+ * Sala. Mismo negro y mismo acento que todo lo demás; el acento solo en los
+ * números de los pasos y los títulos de sección, que es lo que guía la lectura. */
+.inicio {
+  height: 100vh;
+  height: 100dvh;
+  overflow-y: auto;
+  background: var(--fondo);
+  color: var(--texto);
+  padding: 48px max(16px, calc((100% - 960px) / 2)) 64px;
+  line-height: 1.55;
+}
+.inicio-cab {
+  text-align: center;
+  max-width: 640px;
+  margin: 0 auto;
+}
+.inicio-marca {
+  font-size: 12px;
+  letter-spacing: 6px;
+  color: var(--acento);
+  font-weight: 700;
+}
+/* Editorial: los dos personajes y la chispa en medio, como la pintura. */
+.inicio-creacion {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  margin: 24px 0 8px;
+}
+.inicio-creacion img {
+  width: 150px;
+  height: 150px;
+  object-fit: contain;
+}
+.inicio-creacion .volteado {
+  transform: scaleX(-1);
+}
+.inicio-chispa {
+  width: 72px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--acento) 45%, var(--acento) 55%, transparent);
+  position: relative;
+}
+.inicio-chispa::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--acento);
+  box-shadow: 0 0 12px 3px var(--acento);
+  transform: translate(-50%, -50%);
+}
+.inicio-cab h1 {
+  font-family: "Bodoni MT", "Didot", Georgia, serif;
+  font-size: 44px;
+  font-weight: 400;
+  line-height: 1.12;
+  margin: 16px 0 16px;
+}
+.inicio-lema {
+  color: var(--dim);
+  font-size: 16px;
+}
+.inicio-entrada {
+  max-width: 360px;
+  margin: 28px auto 0;
+}
+.inicio-sala {
+  color: var(--dim);
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+.inicio-sala strong {
+  color: var(--texto);
+  font-family: "Bodoni MT", "Didot", Georgia, serif;
+  font-size: 20px;
+  font-weight: 400;
+  display: block;
+}
+.inicio-cta {
+  width: 100%;
+  margin-top: 12px;
+}
+.inicio-nota {
+  color: var(--dim);
+  font-size: 12px;
+  margin-top: 10px;
+}
+.inicio-seccion {
+  margin-top: 56px;
+}
+.inicio-seccion h2 {
+  font-size: 12px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--acento);
+  margin-bottom: 16px;
+}
+.inicio-pasos {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+.inicio-pasos li {
+  border: 1px solid var(--linea);
+  border-radius: 8px;
+  padding: 20px;
+}
+.inicio-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid var(--acento);
+  color: var(--acento);
+  font-size: 13px;
+  font-weight: 700;
+}
+.inicio-pasos h3 {
+  font-size: 16px;
+  margin: 12px 0 6px;
+}
+.inicio-pasos p,
+.inicio-tips li {
+  color: var(--dim);
+  font-size: 14px;
+}
+.inicio-modos {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+.inicio-modos > div {
+  border: 1px solid var(--linea);
+  border-left: 3px solid var(--acento);
+  border-radius: 8px;
+  padding: 18px 20px;
+}
+.inicio-modos h3 {
+  font-size: 16px;
+  margin-bottom: 6px;
+}
+.inicio-modos p {
+  color: var(--dim);
+  font-size: 14px;
+}
+.inicio-ejemplos {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+.inicio-ejemplos li {
+  background: var(--caja);
+  border: 1px solid var(--linea);
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-size: 14px;
+}
+.inicio-tips {
+  list-style: none;
+  display: grid;
+  gap: 10px;
+}
+.inicio-tips strong {
+  color: var(--texto);
+}
+.inicio-galeria {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+.inicio-galeria img {
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  border: 1px solid var(--linea);
+  border-radius: 6px;
+  display: block;
+}
+.inicio-galeria span {
+  display: block;
+  font-size: 13px;
+  color: var(--dim);
+  margin-top: 6px;
+}
+.inicio-link {
+  display: inline-block;
+  margin-top: 16px;
+  font-size: 13px;
+  color: var(--texto);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.inicio-pie {
+  margin: 56px auto 0;
+  max-width: 360px;
+  text-align: center;
+}
+@media (max-width: 720px) {
+  .inicio {
+    padding-top: 32px;
+  }
+  .inicio-creacion img {
+    width: 104px;
+    height: 104px;
+  }
+  .inicio-chispa {
+    width: 40px;
+  }
+  .inicio-cab h1 {
+    font-size: 30px;
+  }
+  .inicio-lema {
+    font-size: 15px;
+  }
+  .inicio-pasos,
+  .inicio-modos,
+  .inicio-ejemplos {
+    grid-template-columns: 1fr;
+  }
+  .inicio-galeria {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .inicio-seccion {
+    margin-top: 40px;
+  }
+}

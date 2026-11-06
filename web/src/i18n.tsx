@@ -167,6 +167,78 @@ const TEXTOS = {
     ],
     construyeAlgoComo: "Construye algo como",
     acercaDeMulti: "Acerca de Multti",
+    // La pantalla de inicio (Inicio.tsx): lo que se le cuenta a quien llega por
+    // primera vez. Sin jerga, igual que los ejemplos: quien llega no sabe qué es
+    // un agente ni un deploy, y no le hace falta para empezar.
+    inicioTitulo: "Construye apps, juegos y presentaciones con IA, en equipo",
+    inicioLema:
+      "Entras a una sala, le pides a la IA lo que quieres como se lo pedirías a una persona, y lo ves armarse en vivo junto con tu equipo.",
+    empezar: "Empezar",
+    entrarALaSala: "Entrar a la sala",
+    inicioSinCuenta: "No tienes que instalar nada ni crear cuenta.",
+    comoFunciona: "Cómo funciona",
+    comoFuncionaMenu: "¿Cómo funciona Multti?",
+    inicioPasos: [
+      {
+        titulo: "Entra a una sala",
+        texto: "Cada sala tiene su link. Pásaselo a tu equipo y entran al mismo lugar, desde la compu o el celular.",
+      },
+      {
+        titulo: "Pídele lo que quieres al agente",
+        texto:
+          "El agente es la IA que programa por ti. Escríbele como a una persona: \"haz un juego de naves\", \"ponle un marcador\". No necesitas saber programar.",
+      },
+      {
+        titulo: "Míralo armarse en vivo",
+        texto:
+          "Al lado del chat aparece lo que se va construyendo, y todos en la sala lo ven al mismo tiempo. Pruébalo, pide cambios y, cuando te guste, publícalo con un link.",
+      },
+    ],
+    /**
+     * Lo que más confunde: el mismo chat sirve para hablarle al agente y para
+     * platicar con el equipo, y cuál de las dos pasa depende de cuántos hay.
+     * El server cambia la sala a Multijugador en cuanto entra la segunda
+     * persona, y desde ahí un mensaje sin @ es para los compañeros.
+     */
+    inicioHablarle: "Cómo hablarle al agente",
+    inicioModos: [
+      {
+        titulo: "Si estás solo en la sala",
+        texto: "Todo lo que escribes le llega al agente. Escribe lo que quieres y listo.",
+      },
+      {
+        titulo: "Si hay 2 personas o más",
+        texto:
+          "El chat se vuelve como un grupo de Discord: lo que escribes le llega a tus compañeros, no al agente. Para pedirle algo, escribe @ y elige al agente, o selecciónalo arriba de la caja de texto.",
+      },
+    ],
+    inicioQuePedir: "Cosas que le puedes pedir",
+    inicioEjemplos: [
+      "Haz una presentación de 8 diapositivas sobre la Revolución Mexicana",
+      "Un juego de naves con marcador y tres niveles",
+      "Una app para llevar el inventario de la tienda",
+      "Una página para la graduación con la fecha y un mapa",
+    ],
+    inicioTips: "Para que salga mejor",
+    inicioListaTips: [
+      {
+        titulo: "Sé específico.",
+        texto: "Entre más le cuentes (colores, qué pasa al dar clic, para quién es), más se parece a lo que imaginas.",
+      },
+      {
+        titulo: "Pídelo todo de una o por partes.",
+        texto: "Después de la primera versión puedes pedir cambios: \"el botón más grande\", \"que tenga modo oscuro\".",
+      },
+      {
+        titulo: "Si algo no funciona, díselo.",
+        texto: "\"El botón de empezar no hace nada\" basta para que lo revise y lo arregle.",
+      },
+      {
+        titulo: "Puedes mandarle imágenes y PDFs.",
+        texto: "Con el botón de adjuntar le mandas un dibujo, una captura o tus apuntes, y el agente los ve.",
+      },
+    ],
+    inicioHechoAqui: "Hecho en Multti",
     adjuntarImagen: "Adjuntar un archivo",
     enviar: "Enviar",
     agentesInactivos: (n: number) => `${n} agente${n === 1 ? "" : "s"} inactivo${n === 1 ? "" : "s"}`,
@@ -562,6 +634,69 @@ const TEXTOS = {
     ],
     construyeAlgoComo: "Build something like",
     acercaDeMulti: "About Multti",
+    inicioTitulo: "Build apps, games and slide decks with AI, as a team",
+    inicioLema:
+      "You join a room, ask the AI for what you want the way you'd ask a person, and watch it come together live with your team.",
+    empezar: "Get started",
+    entrarALaSala: "Join the room",
+    inicioSinCuenta: "Nothing to install, no account needed.",
+    comoFunciona: "How it works",
+    comoFuncionaMenu: "How does Multti work?",
+    inicioPasos: [
+      {
+        titulo: "Join a room",
+        texto: "Every room has its own link. Share it with your team and you all land in the same place, from a computer or a phone.",
+      },
+      {
+        titulo: "Ask the agent for what you want",
+        texto:
+          "The agent is the AI that codes for you. Write to it like you'd write to a person: \"make a space shooter\", \"add a scoreboard\". No coding needed.",
+      },
+      {
+        titulo: "Watch it get built live",
+        texto:
+          "Next to the chat you see what's being built, and everyone in the room sees it at the same time. Try it, ask for changes, and when you like it, publish it with a link.",
+      },
+    ],
+    inicioHablarle: "How to talk to the agent",
+    inicioModos: [
+      {
+        titulo: "If you're alone in the room",
+        texto: "Everything you write goes to the agent. Just type what you want.",
+      },
+      {
+        titulo: "If there are 2 or more people",
+        texto:
+          "The chat turns into a group chat, like Discord: what you write goes to your teammates, not the agent. To ask it something, type @ and pick the agent, or select it above the text box.",
+      },
+    ],
+    inicioQuePedir: "Things you can ask for",
+    inicioEjemplos: [
+      "Make an 8-slide deck about the French Revolution",
+      "A space shooter with a scoreboard and three levels",
+      "An app to track the store's inventory",
+      "A graduation page with the date and a map",
+    ],
+    inicioTips: "To get better results",
+    inicioListaTips: [
+      {
+        titulo: "Be specific.",
+        texto: "The more you tell it (colors, what happens on click, who it's for), the closer it gets to what you picture.",
+      },
+      {
+        titulo: "Ask all at once or in steps.",
+        texto: "After the first version you can ask for changes: \"bigger button\", \"add dark mode\".",
+      },
+      {
+        titulo: "If something doesn't work, say so.",
+        texto: "\"The start button does nothing\" is enough for it to check and fix it.",
+      },
+      {
+        titulo: "You can send images and PDFs.",
+        texto: "Use the attach button to send a sketch, a screenshot or your notes, and the agent sees them.",
+      },
+    ],
+    inicioHechoAqui: "Made in Multti",
     adjuntarImagen: "Attach a file",
     enviar: "Send",
     agentesInactivos: (n: number) => `${n} idle agent${n === 1 ? "" : "s"}`,

@@ -521,6 +521,10 @@ const TEXTOS = {
     // Menú de salas
     tusSalas: "Tus salas",
     sinOtrasSalas: "Todavía no has entrado a otra sala.",
+    sinSalas: "Todavía no tienes salas. Escribe lo que quieres construir y se crea una.",
+    nuevaSala: "Nueva sala",
+    abrirPanel: "Abrir el panel: tus salas, Explorar y más",
+    cerrarPanel: "Cerrar el panel",
     crearOtraSala: "Crear otra sala",
     quitarDeLaLista: "Quitar de la lista",
     borrarSala: "Borrar la sala",
@@ -968,6 +972,10 @@ const TEXTOS = {
     // Menú de salas
     tusSalas: "Your rooms",
     sinOtrasSalas: "You haven't joined another room yet.",
+    sinSalas: "No rooms yet. Type what you want to build and one gets created.",
+    nuevaSala: "New room",
+    abrirPanel: "Open the panel: your rooms, Explore and more",
+    cerrarPanel: "Close the panel",
     crearOtraSala: "Create another room",
     quitarDeLaLista: "Remove from the list",
     borrarSala: "Delete the room",

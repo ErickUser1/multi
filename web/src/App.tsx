@@ -33,7 +33,8 @@ import { EnvPanel, type EstadoSupabase } from "./EnvPanel.js";
 import { PublicarPanel } from "./PublicarPanel.js";
 import { VersionesSala, type OrigenDeSala, type RemixDeSala } from "./Remix.js";
 import { useTextos, type Textos } from "./i18n.js";
-import { MenuSalas } from "./MenuSalas.js";
+import { PanelLateral } from "./MenuSalas.js";
+import { IconoMenu, IconoOjo, IconoCodigo, IconoDocumento, IconoRemix } from "./iconos.js";
 import { Explorar } from "./Explorar.js";
 import { Inicio } from "./Inicio.js";
 import { recordarSala, salasVisitadas, olvidarSala, recordarNombre, guardarSalas, siguienteLlave } from "./historial-salas.js";
@@ -97,6 +98,15 @@ const ANCHO_DE_VISTA: Record<Vista, string | undefined> = {
 /** Explorar vive en `#/explorar`: no es una sala, es la página de la comunidad. */
 function enExplorar(): boolean {
   return /^#\/explorar\/?$/.test(window.location.hash);
+}
+
+/** El mismo corte que usa el CSS para pasar a una sola columna. */
+function esCelular(): boolean {
+  try {
+    return window.matchMedia("(max-width: 820px)").matches;
+  } catch {
+    return false;
+  }
 }
 
 /** La pantalla de inicio a propósito, desde el menú: `#/inicio`. */
@@ -951,6 +961,33 @@ function Sala({
    * no cabe al lado del preview y pasa a ser una vista más.
    */
   const [tab, setTab] = useState<"chat" | "app">("chat");
+
+  /**
+   * El panel lateral (tus salas, Explorar, el logo). Se recuerda abierto o
+   * cerrado entre visitas, menos en el celular: ahí tapa la sala, así que
+   * siempre arranca cerrado.
+   */
+  const [panelAbierto, setPanelAbierto] = useState(() => {
+    if (esCelular()) return false;
+    try {
+      return localStorage.getItem("multi.panel") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const cambiarPanel = useCallback((abierto: boolean) => {
+    setPanelAbierto(abierto);
+    try {
+      localStorage.setItem("multi.panel", abierto ? "1" : "0");
+    } catch {
+      // Sin storage se abre y cierra igual; solo no se recuerda.
+    }
+  }, []);
+  const cerrarPanel = useCallback(() => cambiarPanel(false), [cambiarPanel]);
+  /** Ir a otro lado desde el panel: en el celular se quita de en medio. */
+  const alNavegarDesdePanel = useCallback(() => {
+    if (esCelular()) setPanelAbierto(false);
+  }, []);
   /**
    * Qué enseña el panel grande: la app corriendo o su código. Es solo de quien
    * mira, como el ancho de vista: cambiarlo no le mueve nada a los demás.
@@ -1978,7 +2015,18 @@ function Sala({
   return (
     // `ver-*` es lo que el CSS usa en móvil para decidir qué se muestra. En
     // escritorio se ignora: ahí el chat y el preview conviven en dos columnas.
-    <div className={`sala ver-${tab}`}>
+    <div className={`sala ver-${tab}${panelAbierto ? " con-panel" : ""}`}>
+      <PanelLateral
+        abierto={panelAbierto}
+        actual={roomId ?? undefined}
+        onCerrar={cerrarPanel}
+        onNavegar={alNavegarDesdePanel}
+        onNuevaSala={() => {
+          alNavegarDesdePanel();
+          crearSala();
+        }}
+        creando={creandoSala}
+      />
       {/* Chat izquierda */}
       <aside className="chat" style={{ width: anchoChat }}>
         {/* Con mensajes ya en pantalla, el chat se ve normal aunque no llegue
@@ -1991,7 +2039,20 @@ function Sala({
           <div className="chat-desconectado">{t.reconectando}</div>
         )}
         <div className="sala-cab">
-          <MenuSalas actual={roomId ?? undefined} />
+          {/* Las tres rayitas abren el panel. Con el panel abierto se van: el
+              panel trae su propio botón para cerrarse, y dos que hacen lo
+              mismo uno junto al otro solo confunden. */}
+          {!panelAbierto && (
+            <button
+              className="icono-btn"
+              onClick={() => cambiarPanel(true)}
+              title={t.abrirPanel}
+              aria-label={t.abrirPanel}
+              aria-expanded={false}
+            >
+              <IconoMenu />
+            </button>
+          )}
           <div className="sala-titulo">
             {!roomId ? (
               // Sin sala elegida no hay nombre que mostrar ni que editar: la
@@ -2429,8 +2490,10 @@ function Sala({
               className={`switch-op${panel === "preview" ? " activa" : ""}`}
               type="button"
               onClick={() => setPanel("preview")}
+              title={tipo === "documento" ? t.vistaDocumento : t.vistaPreview}
             >
-              {tipo === "documento" ? t.vistaDocumento : t.vistaPreview}
+              {tipo === "documento" ? <IconoDocumento tam={15} /> : <IconoOjo tam={15} />}
+              <span className="switch-texto">{tipo === "documento" ? t.vistaDocumento : t.vistaPreview}</span>
             </button>
             {/* El documento de una sala con app va junto a ella: casi siempre
                 es el plan del que salió. Solo aparece si existe. */}
@@ -2439,8 +2502,10 @@ function Sala({
                 className={`switch-op${panel === "documento" ? " activa" : ""}`}
                 type="button"
                 onClick={() => setPanel("documento")}
+                title={t.vistaDocumento}
               >
-                {t.vistaDocumento}
+                <IconoDocumento tam={15} />
+                <span className="switch-texto">{t.vistaDocumento}</span>
               </button>
             )}
             {/* Una sala de documento no tiene proyecto de código que enseñar. */}
@@ -2449,8 +2514,10 @@ function Sala({
               type="button"
               disabled={!roomId || tipo === "documento"}
               onClick={() => setPanel("codigo")}
+              title={t.vistaCodigo}
             >
-              {t.vistaCodigo}
+              <IconoCodigo tam={15} />
+              <span className="switch-texto">{t.vistaCodigo}</span>
             </button>
           </div>
           {/* Los mismos avatares que ya decían quién está, ahora también filtran
@@ -2573,13 +2640,16 @@ function Sala({
             )}
             {/* Una copia para experimentar sin tocar el original. Sin nada
                 guardado no hay qué copiar. */}
+            {/* Un ícono y no un botón con texto: se usa poco, y en la barra cada
+                palabra se paga. Lo que hace lo dice al pasar el mouse. */}
             <button
-              className="invitar"
+              className="icono-btn con-borde"
               onClick={() => void hacerRemix()}
               disabled={!roomId || !sePuedeExportar || haciendoRemix}
-              title={sePuedeExportar ? t.remixTitulo : t.remixVacio}
+              title={haciendoRemix ? t.haciendoRemix : sePuedeExportar ? `${t.remix}: ${t.remixTitulo}` : t.remixVacio}
+              aria-label={t.remix}
             >
-              {haciendoRemix ? t.haciendoRemix : t.remix}
+              <IconoRemix />
             </button>
             {/* Sin sala no hay link que compartir: copiaría la URL pelada. */}
             <button

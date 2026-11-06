@@ -35,7 +35,8 @@ import { VersionesSala, type OrigenDeSala, type RemixDeSala } from "./Remix.js";
 import { useTextos, type Textos } from "./i18n.js";
 import { MenuSalas } from "./MenuSalas.js";
 import { Explorar } from "./Explorar.js";
-import { recordarSala, olvidarSala, recordarNombre, guardarSalas, siguienteLlave } from "./historial-salas.js";
+import { Inicio } from "./Inicio.js";
+import { recordarSala, salasVisitadas, olvidarSala, recordarNombre, guardarSalas, siguienteLlave } from "./historial-salas.js";
 import { CuentaPanel } from "./CuentaPanel.js";
 import { BotonPresentar } from "./Presentacion.js";
 import {
@@ -96,6 +97,22 @@ const ANCHO_DE_VISTA: Record<Vista, string | undefined> = {
 /** Explorar vive en `#/explorar`: no es una sala, es la página de la comunidad. */
 function enExplorar(): boolean {
   return /^#\/explorar\/?$/.test(window.location.hash);
+}
+
+/** La pantalla de inicio a propósito, desde el menú: `#/inicio`. */
+function enInicio(): boolean {
+  return /^#\/inicio\/?$/.test(window.location.hash);
+}
+
+/**
+ * Si este navegador ya conoce Multti: dio su nombre o tiene salas anotadas.
+ *
+ * Es lo que decide si sale la pantalla de inicio sola. Las salas cuentan aparte
+ * del nombre porque quien entró antes de que se guardara el nombre (o lo borró)
+ * no es nuevo, y mandarlo a la explicación sería estorbarle.
+ */
+function yaConoceMultti(): boolean {
+  return !!nombreGuardado() || salasVisitadas().length > 0;
 }
 
 function readRoomFromHash(): string | null {
@@ -190,11 +207,18 @@ export function App() {
   const [entered, setEntered] = useState(() => !!nombreGuardado());
 
   const [explorando, setExplorando] = useState(enExplorar);
+  const [verInicio, setVerInicio] = useState(enInicio);
+  /** Se lee una vez: lo que importa es cómo llegó, no lo que pase dentro. */
+  const [nuevo] = useState(() => !yaConoceMultti());
+  /** La última sala abierta, para volver a ella al cerrar el inicio del menú. */
+  const ultimaSala = useRef<string | null>(roomId);
+  if (roomId) ultimaSala.current = roomId;
 
   useEffect(() => {
     const onHash = () => {
       setRoomId(readRoomFromHash());
       setExplorando(enExplorar());
+      setVerInicio(enInicio());
     };
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
@@ -229,6 +253,39 @@ export function App() {
    * Ahora se cae dentro con el menú a mano, y crear es un botón más.
    */
   if (explorando) return <Explorar nombre={name || nombreGuardado()} />;
+
+  const guardarNombreYEntrar = () => {
+    try {
+      localStorage.setItem("multi.nombre", name || "anónimo");
+    } catch {
+      // Sin storage se entra igual; solo se volverá a preguntar el nombre.
+    }
+    // La sala se anota en el efecto de arriba, en cuanto `entered` es cierto.
+    setEntered(true);
+  };
+
+  // Desde el menú: ya hay nombre, así que solo explica y regresa.
+  if (verInicio) {
+    return (
+      <Inicio
+        roomId={null}
+        name={name}
+        setName={setName}
+        desdeElMenu={entered || !!cuenta.usuario}
+        onEntrar={() => {
+          if (!entered && !cuenta.usuario) guardarNombreYEntrar();
+          window.location.hash = ultimaSala.current ? `#/sala/${ultimaSala.current}` : "#/";
+        }}
+      />
+    );
+  }
+
+  // La primera vez, con o sin link: la pantalla de inicio, que también pregunta
+  // el nombre. Con cuenta no sale: quien hizo cuenta ya conoce Multti.
+  if (nuevo && !entered && !cuenta.usuario) {
+    return <Inicio roomId={roomId} name={name} setName={setName} onEntrar={guardarNombreYEntrar} />;
+  }
+
   if (!roomId) return <Sala key={llave} roomId={null} name={name || "anónimo"} cuenta={cuenta} onCuentaCambio={onCuentaCambio} />;
 
   // Hay sala pero falta decir cómo te llamas. Sigue haciendo falta para quien
@@ -240,16 +297,7 @@ export function App() {
         roomId={roomId}
         name={name}
         setName={setName}
-        onEnter={() => {
-          try {
-            localStorage.setItem("multi.nombre", name || "anónimo");
-          } catch {
-            // Sin storage se entra igual; solo se volverá a preguntar el nombre.
-          }
-          // La sala se anota en el efecto de arriba, en cuanto `entered` es
-          // cierto. Aquí solo se guarda el nombre y se entra.
-          setEntered(true);
-        }}
+        onEnter={guardarNombreYEntrar}
       />
     );
   }

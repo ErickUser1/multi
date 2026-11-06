@@ -1687,6 +1687,13 @@ img.av.av-personaje {
 }
 /* Por clase y no por `p:first-child`: con spinner el titulo no es el primer
    hijo, y ese estado se habria quedado chico mientras los demas crecian. */
+/* El logo en la sala vacía: lo primero que se ve antes de pedir algo. Se va
+   en cuanto hay preview, así que no le estorba a nadie que ya está trabajando. */
+.preview-logo {
+  width: min(360px, 70%);
+  height: auto;
+  margin-bottom: 20px;
+}
 .preview-titulo {
   color: var(--texto);
   font-size: 30px;
@@ -1962,6 +1969,10 @@ img.av.av-personaje {
 }
 .acerca-link:hover {
   color: var(--texto);
+}
+/* Los dos links de la sala vacía iban pegados ("…comunidadAcerca de…"). */
+.explorar-link + .acerca-link {
+  margin-left: 20px;
 }
 .preview-loading code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;

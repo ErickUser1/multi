@@ -64,6 +64,13 @@ export interface OpenAICompatOptions {
    * firma en cada llamada del historial y acepta este comodín para las ajenas.
    */
   extraPorDefecto?: Record<string, unknown>;
+  /**
+   * Si este proveedor recibe PDFs. Gemini en Vertex sí: van como cualquier
+   * archivo, en `image_url` con su tipo en el data URI (probado con un PDF de
+   * una sala real). Los demás que hablan este formato no lo garantizan, así que
+   * a ellos no se les mandan.
+   */
+  aceptaPdf?: boolean;
 }
 
 export class OpenAICompatProvider implements ModelProvider {
@@ -132,7 +139,7 @@ export class OpenAICompatProvider implements ModelProvider {
   ): Promise<Extract<StreamEvent, { type: "end" }>> {
     const body = {
       model: params.model ?? this.defaultModel,
-      messages: toOpenAIMessages(params.system, params.messages, this.opts.extraPorDefecto),
+      messages: toOpenAIMessages(params.system, params.messages, this.opts.extraPorDefecto, this.opts.aceptaPdf),
       ...(params.tools?.length ? { tools: params.tools.map(toOpenAITool) } : {}),
       max_tokens: params.maxTokens ?? this.opts.maxTokens ?? DEFAULT_MAX_TOKENS,
       stream: true,
@@ -326,6 +333,7 @@ function toOpenAIMessages(
   system: string | undefined,
   messages: Message[],
   extraPorDefecto?: Record<string, unknown>,
+  aceptaPdf = false,
 ): unknown[] {
   const out: unknown[] = [];
   if (system) out.push({ role: "system", content: system });
@@ -341,6 +349,16 @@ function toOpenAIMessages(
       ContentBlock,
       { type: "image" }
     >[];
+    // Los PDFs viajan igual que una imagen, con su tipo en el data URI. Sin
+    // esto se perdían: se pedía "haz una presentación con este PDF" y el
+    // modelo nunca lo recibía.
+    const documentos = aceptaPdf
+      ? (m.content.filter((c) => c.type === "documento") as Extract<ContentBlock, { type: "documento" }>[])
+      : [];
+    const archivos = [
+      ...imagenes.map((img) => ({ mediaType: img.mediaType, data: img.data })),
+      ...documentos.map((d) => ({ mediaType: d.mediaType, data: d.data })),
+    ];
 
     // Los resultados van primero: responden a la llamada del mensaje anterior.
     for (const r of resultados) {
@@ -367,16 +385,16 @@ function toOpenAIMessages(
             }
           : {}),
       });
-    } else if (imagenes.length > 0) {
+    } else if (archivos.length > 0) {
       // Con imágenes el contenido deja de ser un string y pasa a ser una lista
       // de partes. Las imágenes van ANTES del texto: los modelos responden mejor
       // así, y lo dicen las dos documentaciones oficiales.
       out.push({
         role: "user",
         content: [
-          ...imagenes.map((img) => ({
+          ...archivos.map((a) => ({
             type: "image_url",
-            image_url: { url: `data:${img.mediaType};base64,${img.data}` },
+            image_url: { url: `data:${a.mediaType};base64,${a.data}` },
           })),
           ...textos.map((t) => ({ type: "text", text: t.text })),
         ],

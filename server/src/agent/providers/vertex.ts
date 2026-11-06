@@ -137,6 +137,7 @@ export function crearProveedorVertex(env: NodeJS.ProcessEnv = process.env): Open
     // Igual que con Claude: con 8k un archivo grande no cabe y el agente gira en falso.
     maxTokens: 32_000,
     extraPorDefecto: FIRMA_AJENA,
+    aceptaPdf: true,
   });
 }
 

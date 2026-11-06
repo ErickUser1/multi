@@ -1687,6 +1687,13 @@ img.av.av-personaje {
 }
 /* Por clase y no por `p:first-child`: con spinner el titulo no es el primer
    hijo, y ese estado se habria quedado chico mientras los demas crecian. */
+/* El logo en la sala vacía: lo primero que se ve antes de pedir algo. Se va
+   en cuanto hay preview, así que no le estorba a nadie que ya está trabajando. */
+.preview-logo {
+  width: min(360px, 70%);
+  height: auto;
+  margin-bottom: 20px;
+}
 .preview-titulo {
   color: var(--texto);
   font-size: 30px;
@@ -1962,6 +1969,10 @@ img.av.av-personaje {
 }
 .acerca-link:hover {
   color: var(--texto);
+}
+/* Los dos links de la sala vacía iban pegados ("…comunidadAcerca de…"). */
+.explorar-link + .acerca-link {
+  margin-left: 20px;
 }
 .preview-loading code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -4523,6 +4534,7 @@ img.av.av-personaje {
  * Sala. Mismo negro y mismo acento que todo lo demás; el acento solo en los
  * números de los pasos y los títulos de sección, que es lo que guía la lectura. */
 .inicio {
+  position: relative;
   height: 100vh;
   height: 100dvh;
   overflow-y: auto;
@@ -4536,11 +4548,25 @@ img.av.av-personaje {
   max-width: 640px;
   margin: 0 auto;
 }
-.inicio-marca {
-  font-size: 12px;
-  letter-spacing: 6px;
-  color: var(--acento);
-  font-weight: 700;
+/* El logo chico arriba a la izquierda, como en cualquier sitio. */
+.inicio-barra {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--texto);
+  text-decoration: none;
+}
+.inicio-barra img {
+  height: 30px;
+  width: auto;
+}
+.inicio-barra span {
+  font-family: "Bodoni MT", "Didot", Georgia, serif;
+  font-size: 20px;
+  letter-spacing: 1px;
 }
 /* Editorial: los dos personajes y la chispa en medio, como la pintura. */
 .inicio-creacion {
@@ -4737,6 +4763,9 @@ img.av.av-personaje {
   }
   .inicio-chispa {
     width: 40px;
+  }
+  .inicio {
+    padding-top: 72px;
   }
   .inicio-cab h1 {
     font-size: 30px;

@@ -74,11 +74,15 @@ export function Inicio(props: {
 
   return (
     <div className="inicio">
+      {/* El logo chico, arriba a la izquierda. */}
+      <span className="inicio-barra">
+        <img src="/logo/multti-manos.svg" alt="" draggable={false} />
+        <span>multti</span>
+      </span>
       <header className="inicio-cab">
-        <p className="inicio-marca">MULTTI</p>
         {/* Steve y Dave a punto de tocarse, como en La creación de Adán: una
             persona y un agente construyendo algo juntos. Dave va volteado para
-            que se miren. Si llega la ilustración de verdad, va aquí. */}
+            que se miren. */}
         <div className="inicio-creacion" aria-hidden="true">
           <img src={STEVE} alt="" draggable={false} />
           <span className="inicio-chispa" />

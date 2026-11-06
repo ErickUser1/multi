@@ -2824,6 +2824,7 @@ function Sala({
                 // mandar el primer mensaje se leía como haber llegado a otro
                 // lado. El modo se da por "solo" porque así nace toda sala.
                 <>
+                  <img className="preview-logo" src="/logo/multti-manos.svg" alt="" draggable={false} />
                   <p className="preview-titulo">{t.quieresConstruir}</p>
                   <Ejemplos modo="solo" />
                   {/* O ver lo que hicieron otros, y entrarle con ellos. */}
@@ -2854,6 +2855,7 @@ function Sala({
                   {/* El mismo texto que sin sala: es el mismo momento y la
                       misma pantalla. "La sala está vacía" describía lo que
                       falta; esto dice qué hacer. */}
+                  <img className="preview-logo" src="/logo/multti-manos.svg" alt="" draggable={false} />
                   <p className="preview-titulo">{t.quieresConstruir}</p>
                   {/* Sin saber el modo no se dice nada: enseñar la arroba a
                       quien no la necesita es peor que esperar medio segundo. */}

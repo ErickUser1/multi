@@ -4989,3 +4989,130 @@ img.av.av-personaje {
 .sala.con-panel .escenario {
   min-width: 440px;
 }
+
+/* ── Plantillas (Plantillas.tsx) ─────────────────────────────────────────── */
+.plantillas-lista {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 16px;
+}
+.plantillas-lista.compactas {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.plantilla-tarjeta {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--linea);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--fondo);
+  text-align: left;
+}
+.plantilla-foto {
+  aspect-ratio: 16 / 10;
+  background: var(--caja);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-bottom: 1px solid var(--linea);
+}
+.plantilla-foto img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.plantilla-foto span {
+  color: var(--dim);
+  font-size: 14px;
+}
+.plantilla-info {
+  padding: 12px 14px 4px;
+  flex: 1;
+}
+.plantilla-tipo {
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--acento);
+}
+.plantilla-info h3 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 4px 0;
+  color: var(--texto);
+}
+.plantilla-info p {
+  font-size: 13px;
+  color: var(--dim);
+  line-height: 1.45;
+}
+.plantilla-usar {
+  margin: 10px 14px 14px;
+  padding: 8px 12px;
+  border: 1px solid var(--linea);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--texto);
+  font-size: 13px;
+  cursor: pointer;
+}
+.plantilla-usar:hover:not(:disabled) {
+  background: var(--texto);
+  color: var(--fondo);
+  border-color: var(--texto);
+}
+.plantilla-usar:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.plantillas-lista.compactas .plantilla-info {
+  padding: 8px 10px 0;
+}
+.plantillas-lista.compactas .plantilla-info h3 {
+  font-size: 13px;
+}
+.plantillas-lista.compactas .plantilla-usar {
+  margin: 8px 10px 10px;
+  padding: 6px 8px;
+  font-size: 12px;
+}
+/* En la sala vacía, debajo de "¿Qué quieres construir?". */
+.plantillas-portada {
+  width: min(640px, 92%);
+  margin-top: 28px;
+}
+.plantillas-portada-titulo {
+  font-size: 11px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin-bottom: 12px;
+}
+@media (max-width: 820px) {
+  .plantillas-lista.compactas {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+/* Con las plantillas, la sala vacía puede quedar más alta que la pantalla (sobre
+   todo en el celular): que se pueda bajar en vez de cortarse. */
+.preview-loading {
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 16px 0;
+}
+.plantillas-portada {
+  margin-left: auto;
+  margin-right: auto;
+}
+@media (max-width: 820px) {
+  .preview-logo {
+    width: min(240px, 60%);
+  }
+  .plantillas-portada {
+    width: 100%;
+    padding: 0 12px;
+  }
+}

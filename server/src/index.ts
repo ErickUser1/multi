@@ -67,7 +67,7 @@ import {
   tokenDeCookie,
   urlDeAutorizacion,
 } from "./cuentas.js";
-import type { StoredUsuario, StoredComentario } from "./storage/types.js";
+import type { StoredUsuario, StoredComentario, Plantilla } from "./storage/types.js";
 import { anclaDeCita, anclaValida, seccionDeBloque } from "./engine/comentarios.js";
 import { ToolError } from "./agent/tools/base.js";
 import {
@@ -680,6 +680,87 @@ fastify.get<{ Params: { id: string } }>("/comunidad/:id/miniatura", async (req, 
   if (!img) return reply.code(404).send({ error: "sin miniatura" });
   // Cambia solo al volver a compartir, y la URL lleva ?v= con la fecha.
   return reply.type("image/jpeg").header("cache-control", "public, max-age=86400").send(Buffer.from(img));
+});
+
+/**
+ * Las plantillas: salas armadas para que la gente vea qué se puede hacer y
+ * empiece desde ahí. Las registra quien corre Multti (`npm run plantillas`).
+ *
+ * La miniatura se toma aquí y no en el comando porque hace falta la vista
+ * previa corriendo, y eso solo lo tiene el server. Se toma la primera vez que
+ * alguien pide la lista, en segundo plano y de una en una: es un navegador y un
+ * dev server por plantilla, y no hace falta que sea al instante.
+ */
+const capturandoPlantilla = new Set<string>();
+let capturaDePlantillas: Promise<void> = Promise.resolve();
+
+function capturarMiniaturasQueFalten(lista: Plantilla[]): void {
+  for (const p of lista) {
+    if (p.conMiniatura || p.tipo === "reporte" || capturandoPlantilla.has(p.roomId)) continue;
+    capturandoPlantilla.add(p.roomId);
+    capturaDePlantillas = capturaDePlantillas.then(async () => {
+      try {
+        const room = getRoom(p.roomId) ?? (await wakeRoom(p.roomId));
+        if (!room) return;
+        const img = await miniaturaDe(room);
+        if (img) {
+          await (await getStorage()).guardarMiniaturaDePlantilla(p.roomId, img);
+          console.log(`[plantillas] miniatura de ${p.roomId} lista`);
+        }
+      } catch (err) {
+        console.error(`[plantillas] no se pudo capturar ${p.roomId}:`, err);
+      } finally {
+        // Si falló se puede volver a intentar en la siguiente visita.
+        capturandoPlantilla.delete(p.roomId);
+      }
+    });
+  }
+}
+
+fastify.get("/plantillas", async () => {
+  const lista = await (await getStorage()).listarPlantillas();
+  capturarMiniaturasQueFalten(lista);
+  return {
+    plantillas: lista.map((p) => ({
+      id: p.roomId,
+      tipo: p.tipo,
+      titulo: p.titulo,
+      descripcion: p.descripcion,
+      miniatura: p.conMiniatura ? `/plantillas/${p.roomId}/miniatura?v=${p.agregada}` : null,
+    })),
+  };
+});
+
+fastify.get<{ Params: { id: string } }>("/plantillas/:id/miniatura", async (req, reply) => {
+  const img = await (await getStorage()).miniaturaDePlantilla(req.params.id);
+  if (!img) return reply.code(404).send({ error: "sin miniatura" });
+  return reply.type("image/jpeg").header("cache-control", "public, max-age=3600").send(Buffer.from(img));
+});
+
+/**
+ * Empezar desde una plantilla: una sala nueva con una copia del proyecto.
+ *
+ * Solo para salas registradas como plantilla. Si no, esto sería un remix sin
+ * liga al original de cualquier sala, y esa liga es lo que le dice al dueño que
+ * alguien copió su trabajo.
+ *
+ * A la plantilla no se le avisa nada: con un grupo entero usándola, su chat se
+ * llenaría de "alguien hizo un remix".
+ */
+fastify.post<{ Params: { id: string } }>("/plantillas/:id/usar", async (req, reply) => {
+  const plantilla = await (await getStorage()).plantilla(req.params.id);
+  if (!plantilla) return reply.code(404).send({ error: "esa plantilla no existe" });
+  const origen = getRoom(plantilla.roomId) ?? (await wakeRoom(plantilla.roomId));
+  if (!origen) return reply.code(404).send({ error: "esa plantilla no existe" });
+  try {
+    const sala = await createRemix(origen, { plantilla: plantilla.titulo });
+    console.log(`[plantillas] ${plantilla.roomId} → sala nueva ${sala.id}`);
+    return { id: sala.id };
+  } catch (err) {
+    if (err instanceof NadaQueRemixear) return reply.code(409).send({ error: err.message });
+    console.error(`[plantillas] no se pudo usar ${plantilla.roomId}:`, err);
+    return reply.code(500).send({ error: "no se pudo crear la sala desde la plantilla" });
+  }
 });
 
 // La línea de tiempo de una sala (alimenta el scrubber).

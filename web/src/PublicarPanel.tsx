@@ -140,7 +140,7 @@ export function PublicarPanel({
       {/* El botón dice el estado, no solo la acción: de un vistazo se sabe si la
           sala está en vivo sin tener que abrir nada. */}
       <button
-        className={`invitar ${urlPublicada ? "publicada" : ""}`}
+        className={`invitar accion-principal ${urlPublicada ? "publicada" : ""}`}
         onClick={() => setAbierto((v) => !v)}
         disabled={!roomId}
         title={t.publicarTitulo}

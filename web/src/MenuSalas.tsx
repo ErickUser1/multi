@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   salasVisitadas,
   guardarSalas,
@@ -6,28 +6,48 @@ import {
   type SalaVisitada,
 } from "./historial-salas.js";
 import { sincronizarSalas } from "./cuenta.js";
-import { createRoom, borrarSala } from "./socket.js";
+import { borrarSala } from "./socket.js";
+import { IconoBrujula, IconoAyuda, IconoInfo, IconoMas, IconoPanel } from "./iconos.js";
 import { useTextos } from "./i18n.js";
 
 /**
- * El menú de salas: dónde has estado.
+ * El panel lateral: tus salas y lo que no es de la sala en la que estás.
  *
- * Va arriba a la izquierda, encima del nombre de la sala, porque es navegación
- * y no una acción de la sala. La lista NO separa "mías" de "compartidas
- * conmigo": esa distinción se borra sola en cuanto invitas a alguien o alguien
- * te invita, y sin login no hay forma de saber quién creó qué. Lo que sí
- * distingue es cuándo entraste, y por eso van ordenadas por eso.
+ * Antes era un menú que caía del botón "Tus salas". Se volvió panel, como el
+ * de Lovable, por dos cosas: la barra de arriba no tenía espacio para todo lo
+ * que ya cargaba, y aquí cabe el logo, que en la barra no.
+ *
+ * Empuja el contenido en vez de taparlo: con el panel abierto se sigue viendo
+ * el chat, y saltar entre salas mientras lees la conversación es justo para lo
+ * que sirve. En el celular sí va encima, porque ahí no hay ancho que empujar.
+ *
+ * La lista NO separa "mías" de "compartidas conmigo": esa distinción se borra
+ * sola en cuanto invitas a alguien o alguien te invita, y sin login no hay
+ * forma de saber quién creó qué. Lo que sí distingue es cuándo entraste, y por
+ * eso van ordenadas por eso.
  */
-export function MenuSalas({ actual }: { actual?: string }) {
+export function PanelLateral({
+  abierto,
+  actual,
+  onCerrar,
+  onNavegar,
+  onNuevaSala,
+  creando,
+}: {
+  abierto: boolean;
+  actual?: string;
+  onCerrar: () => void;
+  /** Al ir a otro lado: en el celular el panel estorba y se cierra. */
+  onNavegar: () => void;
+  onNuevaSala: () => void;
+  creando: boolean;
+}) {
   const { t, idioma } = useTextos();
-  const [abierto, setAbierto] = useState(false);
   const [salas, setSalas] = useState<SalaVisitada[]>([]);
-  const [creando, setCreando] = useState(false);
   /** El id de la sala que se está borrando ahora mismo, o null. */
   const [borrando, setBorrando] = useState<string | null>(null);
   /** La que se acaba de borrar, para avisarlo. Se limpia sola. */
   const [borrada, setBorrada] = useState<string | null>(null);
-  const cajaRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!borrada) return;
@@ -54,8 +74,7 @@ export function MenuSalas({ actual }: { actual?: string }) {
       olvidarSala(id);
       setSalas(salasVisitadas());
       if (id === actual) {
-        // Borraste la sala donde estabas: ahí ya no hay nada que ver, y como el
-        // menú se va contigo, el aviso de abajo no se alcanzaría a leer.
+        // Borraste la sala donde estabas: ahí ya no hay nada que ver.
         alert(t.salaBorradaOk(id));
         window.location.hash = "#/";
       } else {
@@ -88,94 +107,96 @@ export function MenuSalas({ actual }: { actual?: string }) {
     return () => {
       cancelado = true;
     };
-  }, [abierto]);
+  }, [abierto, actual]);
 
-  // Cerrar al hacer click fuera o con Escape, como cualquier menú.
+  // Escape cierra, como cualquier panel. Click fuera NO: el panel empuja el
+  // contenido y convive con él, así que tocar el chat no tiene por qué cerrarlo.
   useEffect(() => {
     if (!abierto) return;
-    const fuera = (e: MouseEvent) => {
-      if (cajaRef.current && !cajaRef.current.contains(e.target as Node)) setAbierto(false);
-    };
     const escape = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setAbierto(false);
+      if (e.key === "Escape") onCerrar();
     };
-    document.addEventListener("mousedown", fuera);
     document.addEventListener("keydown", escape);
-    return () => {
-      document.removeEventListener("mousedown", fuera);
-      document.removeEventListener("keydown", escape);
-    };
-  }, [abierto]);
+    return () => document.removeEventListener("keydown", escape);
+  }, [abierto, onCerrar]);
 
-  const otras = salas.filter((s) => s.id !== actual);
+  if (!abierto) return null;
 
   return (
-    <div className="menu-salas" ref={cajaRef}>
-      <button
-        className="menu-btn"
-        onClick={() => setAbierto((v) => !v)}
-        title={t.tusSalas}
-        aria-label={t.tusSalas}
-        aria-expanded={abierto}
-      >
-        <span className="menu-icono" aria-hidden="true" />
-        {/* El texto al lado, no solo en el `title`: un tooltip solo aparece si
-            dejas el cursor quieto un segundo, y en el teléfono no existe. Tres
-            rayas sueltas no le dicen a nadie que ahí están sus proyectos. */}
-        <span className="menu-btn-texto">{t.tusSalas}</span>
-      </button>
-
-      {abierto && (
-        <div className="menu-panel">
-          <div className="menu-cab">{t.tusSalas}</div>
-          {/* Explorar a la mano desde cualquier sala: es donde se ve lo que
-              compartió la comunidad. */}
-          <a className="menu-explorar" href="#/explorar" onClick={() => setAbierto(false)}>
-            {t.explorarLink}
+    <>
+      {/* Solo en el celular: oscurece lo de atrás y cierra al tocarlo. */}
+      <div className="panel-lateral-fondo" onClick={onCerrar} aria-hidden="true" />
+      <nav className="panel-lateral" aria-label={t.tusSalas}>
+        <div className="panel-lateral-cab">
+          <a className="panel-lateral-logo" href="#/inicio" onClick={onNavegar} title={t.comoFuncionaMenu}>
+            <img src="/logo/multti-manos.svg" alt="" draggable={false} />
+            <span>multti</span>
           </a>
-          {/* La explicación de la primera vez, para volver a verla o enseñarla. */}
-          <a className="menu-explorar" href="#/inicio" onClick={() => setAbierto(false)}>
-            {t.comoFuncionaMenu}
-          </a>
-
-          {/* Que la fila desaparezca no dice si se borró la sala o solo se quitó
-              del menú. Este aviso lo confirma, y se va solo: es una noticia de
-              paso, no un estado en el que la interfaz se quede. */}
-          {borrada && <p className="menu-borrada">{t.salaBorradaOk(borrada)}</p>}
-
-          {otras.length === 0 ? (
-            <p className="menu-vacio">{t.sinOtrasSalas}</p>
-          ) : (
-            <ul className="menu-lista">
-              {otras.map((s) => (
-                <li key={s.id} className="menu-item">
-                  <a className="menu-link" href={`#/sala/${s.id}`} onClick={() => setAbierto(false)}>
-                    {/* El nombre manda, porque es lo que hace reconocible la
-                        sala. El id se queda debajo: sigue siendo lo que va en
-                        el link y lo que se dicta por teléfono. */}
-                    <span className="menu-sala-id">{s.nombre || s.id}</span>
-                    <span className="menu-sala-fecha">
-                      {s.nombre ? `${s.id} · ` : ""}
-                      {cuando(s.visitadaEn, idioma)}
-                    </span>
-                  </a>
-                  <button
-                    className="menu-olvidar"
-                    title={t.borrarSala}
-                    aria-label={`${t.borrarSala}: ${s.id}`}
-                    disabled={borrando === s.id}
-                    onClick={() => borrar(s.id)}
-                  >
-                    {borrando === s.id ? "…" : "×"}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-
+          <button className="icono-btn" onClick={onCerrar} title={t.cerrarPanel} aria-label={t.cerrarPanel}>
+            <IconoPanel />
+          </button>
         </div>
-      )}
-    </div>
+
+        <button className="panel-nueva" onClick={onNuevaSala} disabled={creando}>
+          <IconoMas tam={16} />
+          {creando ? t.creandoSala : t.nuevaSala}
+        </button>
+
+        <a className="panel-link" href="#/explorar" onClick={onNavegar}>
+          <IconoBrujula tam={16} />
+          {t.explorarLink}
+        </a>
+        <a className="panel-link" href="#/inicio" onClick={onNavegar}>
+          <IconoAyuda tam={16} />
+          {t.comoFuncionaMenu}
+        </a>
+
+        <div className="panel-seccion">{t.tusSalas}</div>
+        {/* Que la fila desaparezca no dice si se borró la sala o solo se quitó
+            del menú. Este aviso lo confirma, y se va solo. */}
+        {borrada && <p className="menu-borrada">{t.salaBorradaOk(borrada)}</p>}
+
+        {salas.length === 0 ? (
+          <p className="menu-vacio">{t.sinSalas}</p>
+        ) : (
+          <ul className="menu-lista">
+            {salas.map((s) => (
+              <li key={s.id} className={`menu-item${s.id === actual ? " actual" : ""}`}>
+                <a
+                  className="menu-link"
+                  href={`#/sala/${s.id}`}
+                  onClick={onNavegar}
+                  aria-current={s.id === actual ? "page" : undefined}
+                >
+                  {/* El nombre manda, porque es lo que hace reconocible la
+                      sala. El id se queda debajo: sigue siendo lo que va en
+                      el link y lo que se dicta por teléfono. */}
+                  <span className="menu-sala-id">{s.nombre || s.id}</span>
+                  <span className="menu-sala-fecha">
+                    {s.nombre ? `${s.id} · ` : ""}
+                    {cuando(s.visitadaEn, idioma)}
+                  </span>
+                </a>
+                <button
+                  className="menu-olvidar"
+                  title={t.borrarSala}
+                  aria-label={`${t.borrarSala}: ${s.id}`}
+                  disabled={borrando === s.id}
+                  onClick={() => borrar(s.id)}
+                >
+                  {borrando === s.id ? "…" : "×"}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <a className="panel-link panel-pie" href="/acerca/">
+          <IconoInfo tam={16} />
+          {t.acercaDeMulti}
+        </a>
+      </nav>
+    </>
   );
 }
 

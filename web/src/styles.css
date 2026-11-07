@@ -4785,3 +4785,207 @@ img.av.av-personaje {
     margin-top: 40px;
   }
 }
+
+/* ── El panel lateral (MenuSalas.tsx) y la barra compacta ─────────────────
+ * Al estilo de Lovable: las tres rayitas abren un panel a la izquierda que
+ * empuja la sala, con el logo arriba y tus salas abajo. La barra de arriba se
+ * quedó con íconos y texto normal; las MAYÚSCULAS ESPACIADAS eran lo que más
+ * ancho comía, y "Variables de entorno" sola ocupaba lo de tres botones. */
+.panel-lateral {
+  flex-shrink: 0;
+  width: 264px;
+  height: 100%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px 12px;
+  border-right: 1px solid var(--linea);
+  background: var(--fondo);
+}
+.panel-lateral-fondo {
+  display: none;
+}
+.panel-lateral-cab {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 0 14px 4px;
+}
+.panel-lateral-logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--texto);
+  text-decoration: none;
+}
+.panel-lateral-logo img {
+  height: 26px;
+  width: auto;
+}
+.panel-lateral-logo span {
+  font-family: "Bodoni MT", "Didot", Georgia, serif;
+  font-size: 19px;
+  letter-spacing: 1px;
+}
+.panel-nueva {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 9px 10px;
+  border: 1px solid var(--linea);
+  border-radius: 8px;
+  background: var(--caja);
+  color: var(--texto);
+  font-size: 14px;
+  cursor: pointer;
+}
+.panel-nueva:hover:not(:disabled) {
+  border-color: var(--dim);
+}
+.panel-nueva:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.panel-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  color: var(--texto);
+  font-size: 14px;
+  text-decoration: none;
+}
+.panel-link:hover {
+  background: var(--caja);
+}
+.panel-seccion {
+  margin: 18px 10px 6px;
+  font-size: 11px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.panel-lateral .menu-lista {
+  margin: 0;
+}
+.panel-lateral .menu-item.actual {
+  background: var(--caja);
+  border-radius: 6px;
+}
+.panel-lateral .menu-vacio {
+  padding: 4px 10px;
+}
+.panel-pie {
+  margin-top: auto;
+  padding-top: 16px;
+  color: var(--dim);
+}
+
+/* Un botón que es solo un ícono. Siempre con `title` y `aria-label`. */
+.icono-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--texto);
+  cursor: pointer;
+}
+.icono-btn:hover:not(:disabled) {
+  background: var(--caja);
+}
+.icono-btn.con-borde {
+  border-color: var(--linea);
+}
+.icono-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* La barra de arriba en texto normal. */
+.switch-op {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  letter-spacing: 0;
+  text-transform: none;
+  padding: 6px 12px;
+}
+.invitar {
+  font-size: 13px;
+  letter-spacing: 0;
+  text-transform: none;
+  padding: 6px 14px;
+  border-radius: 8px;
+}
+/* Publicar es la acción a la que se llega: la única con color lleno. */
+.invitar.accion-principal {
+  background: var(--acento);
+  border-color: var(--acento);
+  color: var(--fondo);
+  font-weight: 600;
+}
+.invitar.accion-principal:hover:not(:disabled) {
+  background: var(--acento);
+  border-color: var(--acento);
+  color: var(--fondo);
+  filter: brightness(1.08);
+}
+
+@media (max-width: 820px) {
+  /* En el celular no hay ancho que empujar: el panel va encima. */
+  .panel-lateral {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 200;
+    width: min(300px, 86vw);
+    height: auto;
+  }
+  .panel-lateral-fondo {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 199;
+    background: rgba(0, 0, 0, 0.6);
+  }
+}
+
+/* Con el panel abierto se le quitan 264px a la sala: el chat cede un poco en
+   vez de empujar la barra del preview fuera de la pantalla. */
+.sala.con-panel .chat {
+  flex-shrink: 1;
+  min-width: 320px;
+}
+.switch-op {
+  white-space: nowrap;
+}
+/* Cuando aprieta, el interruptor se queda solo con sus íconos (el nombre
+   sigue en el `title`). Primero con el panel abierto, que es cuando falta. */
+@media (max-width: 1360px) {
+  .sala.con-panel .switch-texto {
+    display: none;
+  }
+}
+@media (max-width: 1100px) {
+  .switch-texto {
+    display: none;
+  }
+}
+/* La barra del preview necesita su ancho mínimo; si no, el chat (que tiene
+   ancho fijo) se queda entero y la barra se sale de la pantalla. Así el que
+   cede es el chat, hasta sus 320px. */
+.sala.con-panel .escenario {
+  min-width: 440px;
+}

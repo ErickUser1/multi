@@ -1,3 +1,4 @@
+import { IconoLlave } from "./iconos.js";
 import { useEffect, useRef, useState } from "react";
 import { SERVER_URL } from "./socket.js";
 import { useTextos } from "./i18n.js";
@@ -199,9 +200,16 @@ export function EnvPanel({
 
   return (
     <div className="env-panel" ref={cajaRef}>
-      <button className="invitar" onClick={() => setAbierto((v) => !v)} title={t.envTitulo}>
-        <span className="env-largo">{t.envBoton}</span>
-        <span className="env-corto">{t.envBotonCorto}</span>
+      {/* Un ícono: casi nadie las toca, y el texto "Variables de entorno" era
+          el botón más ancho de la barra. Lo que es lo dice al pasar el mouse. */}
+      <button
+        className="icono-btn con-borde"
+        onClick={() => setAbierto((v) => !v)}
+        title={t.envTitulo}
+        aria-label={t.envTitulo}
+        aria-expanded={abierto}
+      >
+        <IconoLlave />
       </button>
 
       {abierto && (

@@ -36,6 +36,14 @@ import {
   type SelectedElement,
   dormirSalasOciosas,
 } from "./rooms.js";
+import {
+  alHaberLugar,
+  esperarLugarParaTurno,
+  hacerLugar,
+  hayLugarPara,
+  posicionEnFila,
+  SalaEnEspera,
+} from "./engine/cupo.js";
 import { detectLaunch } from "./engine/preview.js";
 import { capturarPreview } from "./engine/captura.js";
 import { crearProveedorVertex, configVertex } from "./agent/providers/vertex.js";
@@ -2859,8 +2867,53 @@ async function dispatchAgent(
   });
 }
 
-/** Un turno completo de un agente: abre turno durable, corre el loop, commitea. */
+/**
+ * Un turno de agente, pasando primero por el tope de salas activas.
+ *
+ * Si la sala ya ocupa lugar (tiene vista previa u otro agente trabajando), pasa
+ * de largo: el tope nunca frena a una sala que ya está trabajando. Si no, y
+ * Multti está lleno, el turno se forma y se avisa UNA vez en el chat. El chat
+ * sigue abierto mientras tanto.
+ *
+ * Si interrumpen la espera, el error sube a `dispatchAgent`, que devuelve el
+ * pedido a la cola igual que con un turno cortado a medias: nada se pierde.
+ */
 async function runAgentTurn(
+  room: Room,
+  agentId: string,
+  task: string,
+  signal: AbortSignal,
+  provider: ModelProvider,
+  imagenes: Extract<ContentBlock, { type: "image" | "documento" }>[] = [],
+  origenes: OrigenDelPedido[] = [],
+): Promise<void> {
+  const agent = room.agents.get(agentId);
+  if (!agent) return;
+
+  if (!hayLugarPara(room)) {
+    await hacerLugar();
+    if (!hayLugarPara(room)) {
+      const espera = esperarLugarParaTurno(room, signal);
+      systemMsg(
+        room,
+        `Multti está lleno ahorita. ${agent.name} empieza en cuanto se libere un lugar ` +
+          `(van en el lugar ${posicionEnFila(room.id)} de la fila). Mientras, pueden seguir platicando.`,
+      );
+      await espera;
+    }
+  }
+  // Sin `await` entre el sí del tope y esto: el lugar queda tomado aquí.
+  room.turnosEnCurso = (room.turnosEnCurso ?? 0) + 1;
+  room.reservaHasta = undefined;
+  try {
+    await correrTurnoDeAgente(room, agentId, task, signal, provider, imagenes, origenes);
+  } finally {
+    room.turnosEnCurso = Math.max(0, (room.turnosEnCurso ?? 1) - 1);
+  }
+}
+
+/** Un turno completo de un agente: abre turno durable, corre el loop, commitea. */
+async function correrTurnoDeAgente(
   room: Room,
   agentId: string,
   task: string,
@@ -3326,6 +3379,12 @@ async function notifyPreviewWhenReady(
       io.to(room.id).emit("preview:arrancando", { etapa });
     });
   } catch (err) {
+    // Lleno: la sala quedó formada y arranca sola cuando haya lugar (el hook
+    // `alHaberLugar` vuelve a llamar aquí). Se le dice a quien esté mirando.
+    if (err instanceof SalaEnEspera) {
+      io.to(room.id).emit("preview:en-espera", { posicion: err.posicion });
+      return;
+    }
     if (!(err instanceof NoHayAislamiento)) throw err;
     // Se dice una vez, aquí, y no cada vez que alguien entra: quien esté en la
     // sala necesita saber por qué no hay preview, y es lo mismo que le va a
@@ -3384,6 +3443,16 @@ alCaerPreview((room, { seRinde }) => {
       console.error(`[sala ${room.id}] no se pudo relanzar la vista previa:`, err),
     );
   }, 1000);
+});
+
+/**
+ * Le tocó lugar a una sala que esperaba en la fila del tope para su vista
+ * previa: se levanta por el camino de siempre, que avisa a la sala.
+ */
+alHaberLugar((room) => {
+  notifyPreviewWhenReady(room).catch((err) =>
+    console.error(`[sala ${room.id}] no se pudo levantar la vista previa tras la fila:`, err),
+  );
 });
 
 // ── Arranque ────────────────────────────────────────────────────────────────

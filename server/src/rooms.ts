@@ -18,6 +18,7 @@ import type { ModoDeSala } from "./storage/types.js";
 import { AgentRegistry } from "./engine/agents.js";
 import { KeyedMutex } from "./engine/keyed-mutex.js";
 import { RunCoordinator } from "./engine/coordinator.js";
+import { configurarCupo, hayLugarPara, hacerLugar, formarParaPreview, SalaEnEspera } from "./engine/cupo.js";
 import { sweepOrphans, type Turn } from "./engine/turns.js";
 import { esDocumento, type TipoDeSala } from "./engine/documento.js";
 import { getStorage } from "./storage/index.js";
@@ -150,6 +151,18 @@ export interface Room {
    * nunca, que es justo el caso que esto viene a resolver.
    */
   vaciaDesde?: number;
+  /**
+   * Cuántos turnos de agente están corriendo en esta sala. Cuenta para el tope
+   * de salas activas (engine/cupo.ts): un agente instalando pesa aunque la sala
+   * todavía no tenga vista previa.
+   */
+  turnosEnCurso?: number;
+  /**
+   * Hasta cuándo tiene apartado un lugar del tope. Se pone al dejarla pasar de
+   * la fila, para que nadie le gane el lugar mientras arranca; se quita en
+   * cuanto arranca de verdad, y si no llega a arrancar caduca sola.
+   */
+  reservaHasta?: number;
 }
 
 const rooms = new Map<string, Room>();
@@ -392,6 +405,9 @@ async function bootPreview(room: Room): Promise<void> {
     // aquí nadie está esperando: esto corre en segundo plano al despertar la
     // sala. Quien entre lo va a ver al pedirle algo al agente.
     if (err instanceof NoHayAislamiento) return;
+    // Lleno: la sala ya quedó formada y arranca sola cuando haya lugar. Quien
+    // entre lo verá en la vista previa.
+    if (err instanceof SalaEnEspera) return;
     console.error(`[sala ${room.id}] falló el arranque:`, err);
   }
 }
@@ -495,7 +511,23 @@ async function arrancarPreview(
   const launch = await detectLaunch(room.workspace.dir);
   if (!launch) return null; // la sala sigue vacía: normal
 
+  /**
+   * El tope de salas activas (engine/cupo.ts). Hay algo que levantar, pero si
+   * Multti está lleno no se levanta: la sala se forma y arranca sola cuando
+   * haya lugar. Se lanza en vez de esperar aquí porque este arranque va dentro
+   * del candado de la sala, y esperar con él tomado dejaría colgado a quien
+   * entre mientras tanto.
+   *
+   * Entre el `hayLugarPara` que da el sí y el `previewBooting = true` no hay
+   * ningún `await`: así nadie más puede quedarse con el mismo lugar.
+   */
+  if (!hayLugarPara(room)) {
+    await hacerLugar();
+    if (!hayLugarPara(room)) throw new SalaEnEspera(formarParaPreview(room));
+  }
+
   room.previewBooting = true;
+  room.reservaHasta = undefined;
   const t0 = Date.now();
   const marca = (etapa: string) =>
     console.log(`[sala ${room.id}] ${etapa}: ${((Date.now() - t0) / 1000).toFixed(1)}s`);
@@ -1044,3 +1076,9 @@ async function guardarHuella(dir: string, huella: string): Promise<void> {
     // Si no se puede escribir, el único costo es instalar de más la próxima vez.
   }
 }
+
+/**
+ * El tope de salas activas mira estas salas y, para hacer lugar, las duerme con
+ * el mismo `dormirSala` del barrido de siempre.
+ */
+configurarCupo({ salas: allRooms, dormir: dormirSala });

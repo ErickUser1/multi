@@ -613,6 +613,12 @@ function Sala({
   /** Por dónde va el arranque del preview. null = no está arrancando. */
   const [arrancando, setArrancando] = useState<"contenedor" | "dependencias" | "servidor" | null>(null);
   /**
+   * El lugar de la sala en la fila cuando Multti está lleno (el tope de salas
+   * activas del server), o null si no está esperando. Se quita en cuanto llega
+   * cualquier noticia de que la vista previa arranca o terminó.
+   */
+  const [enFila, setEnFila] = useState<number | null>(null);
+  /**
    * El iframe está cargando el HTML del proyecto.
    *
    * Es una espera distinta de la de `arrancando`: ahí el dev server todavía no
@@ -1298,6 +1304,7 @@ function Sala({
       habiaProyecto.current = false;
       setPreviewReady(true);
       setArrancando(null);
+      setEnFila(null);
       // Ya hay algo que mirar: a partir de aquí lo que avisa es la barra.
       setArmando(false);
       setFalloElArranque(false);
@@ -1309,9 +1316,16 @@ function Sala({
       // Volvió a escribir: lo está arreglando, así que el aviso de fallo sobra.
       setFalloElArranque(false);
     });
-    socket.on("preview:arrancando", ({ etapa }: { etapa: "contenedor" | "dependencias" | "servidor" }) =>
-      setArrancando(etapa),
-    );
+    socket.on("preview:arrancando", ({ etapa }: { etapa: "contenedor" | "dependencias" | "servidor" }) => {
+      setEnFila(null);
+      setArrancando(etapa);
+    });
+    // Multti está lleno: la sala quedó formada y su vista previa arranca sola
+    // cuando haya lugar. Mientras, el chat sigue funcionando.
+    socket.on("preview:en-espera", ({ posicion }: { posicion: number }) => {
+      setArrancando(null);
+      setEnFila(Math.max(1, posicion));
+    });
     // El arranque terminó sin preview: la sala sigue vacía o algo falló. Se quita
     // el spinner y vuelve el mensaje de "pídele a un agente que arranque el
     // proyecto", que es lo accionable.
@@ -1325,6 +1339,7 @@ function Sala({
     // sala vacía, simplemente no había nada que levantar.
     socket.on("preview:sin-arranque", () => {
       setArrancando(null);
+      setEnFila(null);
       setArmando((estaba) => {
         if (estaba || habiaProyecto.current) setFalloElArranque(true);
         return false;
@@ -2862,7 +2877,19 @@ function Sala({
                   levantarse en cuanto hay un package.json, así que con el otro
                   orden el "armando" duraba un parpadeo y lo tapaba el spinner
                   de las etapas, que es justo la parte que ya se veía bien. */}
-              {falloElArranque ? (
+              {enFila ? (
+                // Lleno: lo primero, porque explica por qué no arranca nada y
+                // que no hay que hacer nada para que arranque.
+                <>
+                  <div className="preview-puntos" aria-hidden="true">
+                    <span />
+                    <span />
+                    <span />
+                  </div>
+                  <p className="preview-titulo">{t.llenoTitulo}</p>
+                  <p className="preview-loading-sub">{t.llenoNota(enFila)}</p>
+                </>
+              ) : falloElArranque ? (
                 // Se rompió al levantar. Decirlo y no volver a "¿qué quieres
                 // construir?": quien ve eso cree que su mensaje se perdió.
                 <>

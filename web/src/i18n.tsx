@@ -132,6 +132,10 @@ const TEXTOS = {
     armandoNota:
       "Cuando esté lista aparece aquí. Mientras tanto pueden seguir pidiendo cosas en el chat.",
     cargandoSala: "Cargando la sala…",
+    // El tope de salas activas del server: la sala espera su turno.
+    llenoTitulo: "Multti está lleno ahorita",
+    llenoNota: (n: number) =>
+      `Tu sala es la ${n} en la fila y arranca sola en cuanto haya lugar. Mientras, pueden seguir platicando en el chat.`,
     reconectando: "Sin conexión. Reconectando…",
     /* Lo que la sala vacía y la caja de escribir dicen cambia con el modo.
      *
@@ -626,6 +630,9 @@ const TEXTOS = {
     armandoNota:
       "It shows up here when it is ready. Meanwhile you can keep asking for things in the chat.",
     cargandoSala: "Loading the room…",
+    llenoTitulo: "Multti is full right now",
+    llenoNota: (n: number) =>
+      `Your room is number ${n} in line and will start on its own as soon as there's room. Meanwhile you can keep chatting.`,
     reconectando: "No connection. Reconnecting…",
     hablaConLaSala: (m: "solo" | "multi"): string =>
       m === "solo" ? "type what you want to build" : "message your teammates, or pick an agent above",

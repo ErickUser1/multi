@@ -34,6 +34,7 @@
     "demo:remix": "npm run demo:remix -w server",
     "demo:comunidad": "npm run demo:comunidad -w server",
     "demo:respaldo-gemini": "npm run demo:respaldo-gemini -w server",
+    "demo:tope-salas": "npm run demo:tope-salas -w server",
     "demo:providers": "npm run demo:providers -w server",
     "dev:test": "npm run dev:test -w server",
     "demo:presupuesto": "npm run demo:presupuesto -w server",

@@ -3,6 +3,7 @@ import { SERVER_URL } from "./socket.js";
 import { useTextos } from "./i18n.js";
 import { PERSONAJES } from "./personajes.js";
 import type { ProyectoDeComunidad } from "./Explorar.js";
+import { TarjetasDePlantillas, usePlantillas } from "./Plantillas.js";
 
 /**
  * La pantalla de inicio: qué es Multti, para quien entra por primera vez.
@@ -41,6 +42,7 @@ export function Inicio(props: {
 }) {
   const { t } = useTextos();
   const [proyectos, setProyectos] = useState<ProyectoDeComunidad[]>([]);
+  const plantillas = usePlantillas();
   const campoNombre = useRef<HTMLInputElement>(null);
   const textoBoton = props.desdeElMenu ? t.volverAMultti : props.roomId ? t.entrarALaSala : t.empezar;
 
@@ -140,6 +142,16 @@ export function Inicio(props: {
           ))}
         </div>
       </section>
+
+      {/* Lo que se puede hacer, ya hecho. A quien llegó por el link de una
+          sala se le enseñan sin botón: mandarlo a otra sala lo separaría de
+          su equipo. */}
+      {plantillas && plantillas.length > 0 && (
+        <section className="inicio-seccion">
+          <h2>{t.loQuePuedesHacer}</h2>
+          <TarjetasDePlantillas plantillas={plantillas.slice(0, 6)} conBoton={!props.roomId} />
+        </section>
+      )}
 
       <section className="inicio-seccion">
         <h2>{t.inicioQuePedir}</h2>

@@ -66,6 +66,7 @@ jobs:
       - run: npm run demo:comunidad
       - run: npm run demo:respaldo-gemini
       - run: npm run demo:tope-salas
+      - run: npm run demo:plantillas
       - run: npm run demo:documento
       - run: npm run demo:doc-sync
       - run: npm run demo:comentarios

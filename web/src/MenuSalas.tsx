@@ -7,7 +7,7 @@ import {
 } from "./historial-salas.js";
 import { sincronizarSalas } from "./cuenta.js";
 import { borrarSala } from "./socket.js";
-import { IconoBrujula, IconoAyuda, IconoInfo, IconoMas, IconoPanel } from "./iconos.js";
+import { IconoBrujula, IconoAyuda, IconoInfo, IconoMas, IconoPanel, IconoPlantillas } from "./iconos.js";
 import { useTextos } from "./i18n.js";
 
 /**
@@ -142,6 +142,10 @@ export function PanelLateral({
           {creando ? t.creandoSala : t.nuevaSala}
         </button>
 
+        <a className="panel-link" href="#/plantillas" onClick={onNavegar}>
+          <IconoPlantillas tam={16} />
+          {t.plantillasLink}
+        </a>
         <a className="panel-link" href="#/explorar" onClick={onNavegar}>
           <IconoBrujula tam={16} />
           {t.explorarLink}

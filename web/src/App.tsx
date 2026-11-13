@@ -5,6 +5,7 @@ const DocumentoView = lazy(() => import("./documento/DocumentoView").then((m) =>
 const CodigoView = lazy(() => import("./CodigoView").then((m) => ({ default: m.CodigoView })));
 import type { Socket } from "socket.io-client";
 import {
+  clienteId,
   connectSocket,
   createRoom,
   SERVER_URL,
@@ -1135,7 +1136,7 @@ function Sala({
     });
 
     socket.on("connect", () => {
-      socket.emit("join", { roomId, name });
+      socket.emit("join", { roomId, name, clienteId: clienteId() });
       // La key ya configurada viaja sola: no se pide de nuevo en cada sala.
       const guardada = loadStoredCredencial();
       if (guardada) socket.emit("auth:key", guardada);

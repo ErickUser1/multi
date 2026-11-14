@@ -2938,11 +2938,11 @@ function Sala({
                   <a className="explorar-link" href="#/explorar">
                     {t.explorarLink}
                   </a>
-                  {/* Solo en la portada: es la única pantalla que ve quien llega
-                      a multti.app sin enlace a una sala, y a quien revisa la
-                      empresa le hace falta encontrar qué es y quién la hace. */}
-                  <a className="acerca-link" href="/acerca/">
-                    {t.acercaDeMulti}
+                  {/* Las plantillas, para no empezar de cero. Aquí iba "Acerca de
+                      Multti", que sigue al pie del panel lateral y de la
+                      pantalla de inicio. */}
+                  <a className="acerca-link" href="#/plantillas">
+                    {t.plantillasLink}
                   </a>
                 </>
               ) : esperaLarga ? (

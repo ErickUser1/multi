@@ -41,6 +41,16 @@ export interface Member {
   usuarioId?: string;
   /** Su foto de perfil. Sin ella se pinta la inicial sobre el color, como toda la vida. */
   foto?: string | null;
+  /**
+   * El navegador del que entró, sin cuenta de por medio: un id al azar que la
+   * Sala guarda la primera vez y manda en cada `join`.
+   *
+   * Existe para contar PERSONAS y no sockets. Una pestaña que reconecta trae un
+   * socket nuevo mientras el viejo sigue en la sala hasta que se le acaban los
+   * pings (casi un minuto), y dos pestañas son dos sockets: ninguno de los dos
+   * casos es otra persona. No identifica a nadie ni da permisos; solo agrupa.
+   */
+  clienteId?: string;
 }
 
 /** Un elemento del preview seleccionado (capturado por el inspector). */
@@ -1023,10 +1033,12 @@ export function addMember(
   socketId: string,
   name: string,
   usuario?: { id: string; foto: string | null },
+  clienteId?: string,
 ): Member {
   const member: Member = {
     socketId,
     name,
+    clienteId,
     // Con cuenta el color se ata al id, que no cambia nunca. Sin cuenta, al
     // nombre, que al menos es el mismo mientras te sigas llamando igual.
     color: colorDe(usuario?.id ?? name),
@@ -1046,6 +1058,25 @@ export function removeMember(room: Room, socketId: string): void {
 
 export function membersList(room: Room): Member[] {
   return [...room.members.values()];
+}
+
+/**
+ * Cuántas PERSONAS hay en la sala, que no es cuántos sockets.
+ *
+ * La misma persona puede tener dos sockets a la vez: dos pestañas, o una
+ * reconexión mientras el socket viejo todavía no se da por muerto. Contarlos
+ * como dos volvía multijugador una sala con una sola persona adentro, con su
+ * aviso de "escribe @agente" a quien no tenía con quién platicar.
+ *
+ * Con cuenta manda la cuenta; sin ella, el id del navegador. Sin ninguno de los
+ * dos (un cliente viejo), cada socket cuenta como uno, que es lo de antes.
+ */
+export function personasEnSala(room: Room): number {
+  const quienes = new Set<string>();
+  for (const m of room.members.values()) {
+    quienes.add(m.usuarioId ? `u:${m.usuarioId}` : m.clienteId ? `c:${m.clienteId}` : `s:${m.socketId}`);
+  }
+  return quienes.size;
 }
 
 /**

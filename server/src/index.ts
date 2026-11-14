@@ -17,6 +17,7 @@ import {
   addMember,
   removeMember,
   membersList,
+  personasEnSala,
   stopAllPreviews,
   parseIntent,
   intentDeLaSala,
@@ -1921,7 +1922,7 @@ function vePorSocket(socketId: string): boolean {
 io.on("connection", (socket) => {
   let joinedRoom: Room | null = null;
 
-  socket.on("join", async ({ roomId, name }: { roomId: string; name: string }) => {
+  socket.on("join", async ({ roomId, name, clienteId }: { roomId: string; name: string; clienteId?: unknown }) => {
     // Si no está en memoria, puede existir en la BD (el server reinició).
     const room = getRoom(roomId) ?? (await wakeRoom(roomId));
     if (!room) {
@@ -1946,6 +1947,7 @@ io.on("connection", (socket) => {
       socket.id,
       usuario?.nombre || name || "anónimo",
       usuario ? { id: usuario.id, foto: usuario.foto ?? null } : undefined,
+      typeof clienteId === "string" && /^[\w-]{8,64}$/.test(clienteId) ? clienteId : undefined,
     );
 
     // Estado inicial para el que entra, con el chat que ya existía.
@@ -2026,7 +2028,7 @@ io.on("connection", (socket) => {
      * cambia dos veces bajo los pies de la gente, y el botón está para quien lo
      * quiera bajar.
      */
-    if (room.modo === "solo" && room.members.size > 1) {
+    if (room.modo === "solo" && personasEnSala(room) > 1) {
       await cambiarModo(room, "multi");
       io.to(roomId).emit("room:modo", { modo: room.modo });
       systemMsg(
@@ -2570,7 +2572,7 @@ async function pedirAlAgente(
     modo: room.modo,
     texto: text,
     primerAgente: room.agents.list()[0]?.name,
-    personas: room.members.size,
+    personas: personasEnSala(room),
   });
 
   // Plática entre humanos: nadie despierta. Solo llega aquí con dos o más

@@ -182,6 +182,33 @@ export function connectSocket(): Socket {
   return io(SERVER_URL, { transports: ["websocket"], withCredentials: true });
 }
 
+/**
+ * El id de este navegador, para que el server cuente personas y no sockets.
+ *
+ * Una reconexión trae un socket nuevo mientras el viejo sigue en la sala hasta
+ * que el server lo da por muerto, y dos pestañas son dos sockets. Sin esto, una
+ * persona sola volvía multijugador su propia sala. Es un id al azar: no
+ * identifica a nadie, solo dice "este socket y aquel son el mismo navegador".
+ * Sin localStorage vale lo que dure la página, que ya cubre las reconexiones.
+ */
+let clienteIdDeLaPagina: string | null = null;
+const azar = () => `c-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+export function clienteId(): string {
+  const CLAVE = "multi.cliente";
+  try {
+    const guardado = localStorage.getItem(CLAVE);
+    if (guardado) return guardado;
+    // `randomUUID` solo existe en contexto seguro, y una sala compartida por la
+    // IP de la red local (`npm run compartir`) es http plano.
+    const nuevo = crypto.randomUUID?.() ?? azar();
+    localStorage.setItem(CLAVE, nuevo);
+    return nuevo;
+  } catch {
+    clienteIdDeLaPagina ??= azar();
+    return clienteIdDeLaPagina;
+  }
+}
+
 export { SERVER_URL };
 
 /** Una plataforma donde se puede publicar: `vercel` o `cloudflare`, con su dominio. */

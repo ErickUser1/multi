@@ -50,6 +50,7 @@
     "demo:cripto": "tsx src/demos/cripto.ts",
     "demo:modo-de-sala": "tsx src/demos/modo-de-sala.ts",
     "demo:modo-persistido": "tsx src/demos/modo-persistido.ts",
+    "demo:una-persona": "tsx src/demos/una-persona.ts",
     "demo:sala-al-escribir": "tsx src/demos/sala-al-escribir.ts",
     "demo:carga": "tsx src/demos/carga.ts",
     "demo:dormir": "tsx src/demos/dormir.ts",

@@ -31,7 +31,12 @@ let pedido: Promise<Plantilla[]> | null = null;
 function pedirPlantillas(): Promise<Plantilla[]> {
   pedido ??= fetch(`${SERVER_URL}/plantillas`)
     .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
-    .then((d: { plantillas: Plantilla[] }) => d.plantillas)
+    .then((d: { plantillas: Plantilla[] }) => {
+      // Una lista vacía no se guarda: puede que todavía no hubiera plantillas,
+      // y la siguiente pantalla tiene que volver a preguntar.
+      if (d.plantillas.length === 0) pedido = null;
+      return d.plantillas;
+    })
     .catch(() => {
       pedido = null; // que la siguiente pantalla lo vuelva a intentar
       return [];

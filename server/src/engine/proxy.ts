@@ -47,6 +47,10 @@ const RUTAS_DE_LA_SALA = [
   "/auth",
   // Explorar: la lista de lo compartido con la comunidad y sus miniaturas.
   "/comunidad",
+  // Las plantillas y sus miniaturas. Se escapó al agregarlas: quien ya había
+  // abierto una sala traía la cookie, la lista se iba a esa vista previa, y la
+  // página de Plantillas salía vacía aunque el server sí las tenía.
+  "/plantillas",
   // La vuelta de Supabase. Sin esto, quien ya hubiera visto un preview en esa
   // pestaña traía su cookie, el proxy se quedaba con la petición, y en vez de
   // volver a su sala acababa mirando "despertando el preview" para siempre.
@@ -66,6 +70,14 @@ const RUTAS_DE_LA_SALA = [
  * src> o un <link href>, que es como se piden los assets compilados.
  */
 const RUTA_COMPARTIDA = "/assets/";
+
+/**
+ * Lo estático de la Sala que vive en web/public con nombres que un proyecto
+ * también podría usar: el logo y la página de Acerca. Mismo desempate que
+ * `/assets/`: de la Sala, salvo que lo pida el preview. Así un `<img
+ * src="/logo/…">` del proyecto sigue llegando a su servidor.
+ */
+const ESTATICOS_COMPARTIDOS = ["/logo/", "/acerca"];
 
 /** Nombre de la cookie que recuerda a qué sala pertenece esta pestaña del preview. */
 const ROOM_COOKIE = "multi_room";
@@ -141,6 +153,7 @@ export function parsePreviewUrl(
 
   // `/assets/` lo usan los dos: solo va al preview si la petición viene de ahí.
   if (soloRuta.startsWith(RUTA_COMPARTIDA) && !fromReferer) return null;
+  if (ESTATICOS_COMPARTIDOS.some((p) => soloRuta.startsWith(p)) && !fromReferer) return null;
 
   // Caso 2: algo pedido desde la RAÍZ del origen. Puede ser un módulo que Vite
   // inyectó (/src/main.jsx, /@vite/client) o un archivo del `public/` del

@@ -103,6 +103,12 @@ function main() {
     check("la vuelta de Supabase", aLaSala("/supabase/callback?code=abc&state=xyz"));
     check("la lista de Explorar", aLaSala("/comunidad?categoria=juego"));
     check("y sus miniaturas", aLaSala("/comunidad/box-de-la-uaq-12/miniatura?v=1"));
+    // Se escapó la primera vez: con cookie de preview la página de Plantillas
+    // salía vacía, porque la lista se iba a la vista previa de otra sala.
+    check("la lista de plantillas", aLaSala("/plantillas"));
+    check("y sus miniaturas", aLaSala("/plantillas/vibe-jam-53/miniatura?v=1"));
+    check("el logo de la Sala", aLaSala("/logo/multti-manos.svg"));
+    check("la página de Acerca", aLaSala("/acerca/"));
     // /assets/ lo usan los dos (ahí compila la Sala, y ahí sirve Rails). Sin
     // referer del preview es de la Sala; con él, del proyecto (ver caso 5).
     check("los assets compilados de la Sala", aLaSala("/assets/index-abc123.js"));
@@ -121,6 +127,7 @@ function main() {
     check("SvelteKit", alPreview("/_app/immutable/entry/start.js"));
     check("Astro", alPreview("/_astro/index.abc.css"));
     check("Rails", alPreview("/assets/application-abc.js", REFERER));
+    check("un /logo/ del proyecto, pedido desde el preview", alPreview("/logo/mi-logo.png", REFERER));
     check("un livereload cualquiera", alPreview("/livereload.js"));
   }
 

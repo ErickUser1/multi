@@ -38,7 +38,7 @@ import { PanelLateral } from "./MenuSalas.js";
 import { IconoMenu, IconoOjo, IconoCodigo, IconoDocumento, IconoRemix } from "./iconos.js";
 import { Explorar } from "./Explorar.js";
 import { Inicio } from "./Inicio.js";
-import { CarruselDePlantillas, PaginaPlantillas, usePlantillas } from "./Plantillas.js";
+import { PaginaPlantillas } from "./Plantillas.js";
 import { recordarSala, salasVisitadas, olvidarSala, recordarNombre, guardarSalas, siguienteLlave } from "./historial-salas.js";
 import { CuentaPanel } from "./CuentaPanel.js";
 import { BotonPresentar } from "./Presentacion.js";
@@ -424,22 +424,6 @@ function AgarraderaHerramientas(props: {
         ))}
       </svg>
     </button>
-  );
-}
-
-/**
- * "O empieza con una plantilla", en la sala vacía. No sale si todavía no hay
- * plantillas registradas: una sección vacía se lee como algo roto.
- */
-function PlantillasEnPortada() {
-  const { t } = useTextos();
-  const plantillas = usePlantillas();
-  if (!plantillas || plantillas.length === 0) return null;
-  return (
-    <div className="plantillas-portada">
-      <p className="plantillas-portada-titulo">{t.oEmpiezaConPlantilla}</p>
-      <CarruselDePlantillas plantillas={plantillas} />
-    </div>
   );
 }
 
@@ -2950,10 +2934,6 @@ function Sala({
                   <img className="preview-logo" src="/logo/multti-manos.svg" alt="" draggable={false} />
                   <p className="preview-titulo">{t.quieresConstruir}</p>
                   <Ejemplos modo="solo" />
-                  {/* O no empezar de cero. Solo aquí, en la portada: dentro de
-                      una sala que alguien compartió, mandar a otra sala
-                      separaría al equipo. */}
-                  <PlantillasEnPortada />
                   {/* O ver lo que hicieron otros, y entrarle con ellos. */}
                   <a className="explorar-link" href="#/explorar">
                     {t.explorarLink}

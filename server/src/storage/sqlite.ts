@@ -12,6 +12,8 @@ import type {
   EnComunidad,
   Plantilla,
   TipoDePlantilla,
+  PermisosDeSala,
+  AccesoDeLink,
   Storage,
   StoredMessage,
   StoredRoom,
@@ -184,6 +186,25 @@ export class SqliteStorage implements Storage {
     } catch {
       // ya la tiene
     }
+
+    // Los roles. Todas nullables a propósito: las salas que ya existían quedan
+    // sin dueño, y una sala sin dueño sigue abierta, como siempre.
+    for (const col of ["dueno_llave TEXT", "dueno_usuario TEXT", "acceso TEXT", "token_editar TEXT", "roles_activos INTEGER"]) {
+      try {
+        this.db.exec(`ALTER TABLE rooms ADD COLUMN ${col}`);
+      } catch {
+        // ya la tiene
+      }
+    }
+    // Lo que el dueño le da a cada persona, por encima de lo que da el link.
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS roles_sala (
+        room_id TEXT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+        quien   TEXT NOT NULL,
+        rol     TEXT NOT NULL,
+        PRIMARY KEY (room_id, quien)
+      );
+    `);
 
     // Quién escribió el mensaje, si tenía cuenta. Sirve para pintar su foto.
     //
@@ -418,6 +439,62 @@ export class SqliteStorage implements Storage {
 
   async renameRoom(id: string, nombre: string | null): Promise<void> {
     this.db.prepare(`UPDATE rooms SET nombre = ? WHERE id = ?`).run(nombre, id);
+  }
+
+  async permisosDeSala(id: string): Promise<PermisosDeSala> {
+    const r = this.db
+      .prepare(`SELECT dueno_llave, dueno_usuario, acceso, token_editar, roles_activos FROM rooms WHERE id = ?`)
+      .get(id) as Record<string, unknown> | undefined;
+    const roles: Record<string, "editor" | "lector"> = {};
+    for (const f of this.db.prepare(`SELECT quien, rol FROM roles_sala WHERE room_id = ?`).all(id) as {
+      quien: string;
+      rol: string;
+    }[]) {
+      if (f.rol === "editor" || f.rol === "lector") roles[f.quien] = f.rol;
+    }
+    return {
+      duenoLlave: r?.dueno_llave == null ? null : String(r.dueno_llave),
+      duenoUsuario: r?.dueno_usuario == null ? null : String(r.dueno_usuario),
+      activos: Number(r?.roles_activos ?? 0) === 1,
+      acceso: r?.acceso === "ver" ? "ver" : "editar",
+      tokenEditar: r?.token_editar == null ? null : String(r.token_editar),
+      roles,
+    };
+  }
+
+  async fijarDueno(id: string, d: { llave: string; usuario: string | null; tokenEditar: string }): Promise<void> {
+    this.db
+      .prepare(`UPDATE rooms SET dueno_llave = ?, dueno_usuario = ?, token_editar = ?, acceso = 'editar' WHERE id = ?`)
+      .run(d.llave, d.usuario, d.tokenEditar, id);
+  }
+
+  async ligarCuentaDeDueno(id: string, usuario: string): Promise<void> {
+    this.db.prepare(`UPDATE rooms SET dueno_usuario = ? WHERE id = ? AND dueno_usuario IS NULL`).run(usuario, id);
+  }
+
+  async cambiarAcceso(id: string, acceso: AccesoDeLink): Promise<void> {
+    this.db.prepare(`UPDATE rooms SET acceso = ? WHERE id = ?`).run(acceso, id);
+  }
+
+  async activarRoles(id: string, activos: boolean): Promise<void> {
+    this.db.prepare(`UPDATE rooms SET roles_activos = ? WHERE id = ?`).run(activos ? 1 : 0, id);
+  }
+
+  async cambiarTokenEditar(id: string, token: string): Promise<void> {
+    this.db.prepare(`UPDATE rooms SET token_editar = ? WHERE id = ?`).run(token, id);
+  }
+
+  async fijarRol(id: string, quien: string, rol: "editor" | "lector" | null): Promise<void> {
+    if (rol === null) {
+      this.db.prepare(`DELETE FROM roles_sala WHERE room_id = ? AND quien = ?`).run(id, quien);
+      return;
+    }
+    this.db
+      .prepare(
+        `INSERT INTO roles_sala (room_id, quien, rol) VALUES (?, ?, ?)
+         ON CONFLICT(room_id, quien) DO UPDATE SET rol = excluded.rol`,
+      )
+      .run(id, quien, rol);
   }
 
   async setModo(id: string, modo: ModoDeSala): Promise<void> {

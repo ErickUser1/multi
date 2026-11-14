@@ -36,6 +36,7 @@
     "demo:respaldo-gemini": "npm run demo:respaldo-gemini -w server",
     "demo:tope-salas": "npm run demo:tope-salas -w server",
     "demo:plantillas": "npm run demo:plantillas -w server",
+    "demo:roles": "npm run demo:roles -w server",
     "demo:providers": "npm run demo:providers -w server",
     "dev:test": "npm run dev:test -w server",
     "demo:presupuesto": "npm run demo:presupuesto -w server",

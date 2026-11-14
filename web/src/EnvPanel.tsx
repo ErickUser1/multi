@@ -1,6 +1,6 @@
 import { IconoLlave } from "./iconos.js";
 import { useEffect, useRef, useState } from "react";
-import { SERVER_URL } from "./socket.js";
+import { fetchDeSala } from "./socket.js";
 import { useTextos } from "./i18n.js";
 
 /**
@@ -90,7 +90,7 @@ export function EnvPanel({
     // Cada apertura empieza tapada, aunque la vez pasada se hubiera revelado.
     setVisibles(new Set());
     sucio.current = false;
-    fetch(`${SERVER_URL}/rooms/${roomId}/env`)
+    fetchDeSala(roomId, "/env")
       .then((r) => (r.ok ? r.json() : null))
       .then((d: { variables: Variable[] } | null) => d && setVars(d.variables))
       .catch(() => {
@@ -106,7 +106,7 @@ export function EnvPanel({
   // ya conserva lo de Supabase del lado del server.
   useEffect(() => {
     if (!abierto || versionVariables === 0 || sucio.current) return;
-    fetch(`${SERVER_URL}/rooms/${roomId}/env`)
+    fetchDeSala(roomId, "/env")
       .then((r) => (r.ok ? r.json() : null))
       .then((d: { variables: Variable[] } | null) => {
         if (d && !sucio.current) setVars(d.variables);
@@ -176,7 +176,7 @@ export function EnvPanel({
       // Las filas en blanco no se mandan: son las que quedan al darle a "agregar"
       // y arrepentirse, y no tiene sentido escribirlas en el archivo.
       const limpias = vars.filter((v) => v.nombre.trim());
-      const r = await fetch(`${SERVER_URL}/rooms/${roomId}/env`, {
+      const r = await fetchDeSala(roomId, "/env", {
         method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ variables: limpias }),

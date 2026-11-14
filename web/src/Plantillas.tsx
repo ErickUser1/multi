@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { SERVER_URL } from "./socket.js";
+import { SERVER_URL, guardarSalaNueva } from "./socket.js";
 import { useTextos } from "./i18n.js";
 
 /**
@@ -60,9 +60,10 @@ export function usePlantillas(): Plantilla[] | null {
 /** Crea la sala desde la plantilla y entra a ella. Devuelve si se pudo. */
 export async function usarPlantilla(id: string): Promise<boolean> {
   try {
-    const r = await fetch(`${SERVER_URL}/plantillas/${id}/usar`, { method: "POST" });
-    const d = (await r.json().catch(() => null)) as { id?: string } | null;
+    const r = await fetch(`${SERVER_URL}/plantillas/${id}/usar`, { method: "POST", credentials: "include" });
+    const d = (await r.json().catch(() => null)) as { id?: string; llave?: string } | null;
     if (!r.ok || !d?.id) return false;
+    guardarSalaNueva({ id: d.id, llave: d.llave });
     window.location.hash = `#/sala/${d.id}`;
     return true;
   } catch {

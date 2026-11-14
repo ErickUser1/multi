@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { SERVER_URL } from "./socket.js";
+import { SERVER_URL, guardarSalaNueva } from "./socket.js";
 import { useTextos } from "./i18n.js";
 import { cuando } from "./MenuSalas.js";
 
@@ -52,14 +52,16 @@ export function Explorar({ nombre }: { nombre: string }) {
     try {
       const r = await fetch(`${SERVER_URL}/rooms/${id}/remix`, {
         method: "POST",
+        credentials: "include",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ autor: nombre }),
       });
-      const d = (await r.json().catch(() => null)) as { id?: string; error?: string } | null;
+      const d = (await r.json().catch(() => null)) as { id?: string; llave?: string; error?: string } | null;
       if (!r.ok || !d?.id) {
         alert(d?.error ?? t.remixFallo);
         return;
       }
+      guardarSalaNueva({ id: d.id, llave: d.llave });
       window.location.hash = `#/sala/${d.id}`;
     } catch {
       alert(t.remixFallo);

@@ -25,6 +25,24 @@ export interface Member {
   canInvoke?: boolean;
   /** Su foto de perfil, si entró con cuenta. Sin ella se pinta la inicial. */
   foto?: string | null;
+  /** Lo que puede hacer en la sala. */
+  rol?: Rol;
+  /** Agrupa las pestañas de la misma persona, sin decir quién es. */
+  persona?: string;
+}
+
+export type Rol = "dueno" | "editor" | "lector";
+export type AccesoDeLink = "editar" | "ver";
+
+/** Mi rol en la sala y, si soy el dueño, lo que necesito para compartirla. */
+export interface EstadoDeRol {
+  rol: Rol;
+  /** Las salas de antes de los roles no tienen dueño: ahí todos editan. */
+  tieneDueno: boolean;
+  rolesActivos: boolean;
+  acceso: AccesoDeLink;
+  /** Solo le llega al dueño: el código del link para editar. */
+  tokenEditar: string | null;
 }
 
 /** Una imagen que alguien pegó en el chat, ya guardada en el server. */
@@ -99,7 +117,7 @@ export type ModoDeSala = "solo" | "multi";
 /** Qué es la sala. Lo decide el agente con el primer pedido. */
 export type TipoDeSala = "app" | "documento";
 
-export interface JoinedPayload {
+export interface JoinedPayload extends Partial<EstadoDeRol> {
   roomId: string;
   /** Cómo le dicen a esta sala, o null si nadie la ha nombrado (se ve el id). */
   nombre?: string | null;
@@ -155,10 +173,69 @@ export interface JoinedPayload {
 
 // ── API HTTP ────────────────────────────────────────────────────────────────
 
+// ── Quién soy en cada sala ─────────────────────────────────────────────────
+//
+// La llave de dueño llega UNA vez, al crear la sala, y se guarda aquí. El
+// código del link para editar llega en la URL (`#/sala/<id>?editar=<código>`)
+// y también se guarda, para que recargar no te quite lo que el link te dio.
+
+const leer = (clave: string): string | null => {
+  try {
+    return localStorage.getItem(clave);
+  } catch {
+    return null;
+  }
+};
+const escribir = (clave: string, valor: string) => {
+  try {
+    localStorage.setItem(clave, valor);
+  } catch {
+    // sin localStorage dura lo que dure la página
+  }
+};
+
+export const llaveDe = (sala: string) => leer(`multi.llave.${sala}`);
+export const tokenEditarDe = (sala: string) => leer(`multi.editar.${sala}`);
+
+/** Lo que regresa el server al crear una sala: si trae llave, soy el dueño. */
+export function guardarSalaNueva(d: { id: string; llave?: string }): void {
+  if (d.llave) escribir(`multi.llave.${d.id}`, d.llave);
+}
+
+/** El link para editar trae su código: se guarda y se limpia de la URL. */
+export function tomarTokenDeLaUrl(): void {
+  const m = window.location.hash.match(/^#\/sala\/([\w-]+)\?(.*)$/);
+  if (!m) return;
+  const token = new URLSearchParams(m[2]).get("editar");
+  if (token) escribir(`multi.editar.${m[1]}`, token);
+  // Sin el código en la barra: así lo que se copie de ahí es el link normal.
+  history.replaceState(null, "", `${window.location.pathname}${window.location.search}#/sala/${m[1]}`);
+}
+
+/** Los headers con los que el server sabe quién soy en esta sala. */
+export function headersDeSala(sala: string): Record<string, string> {
+  const h: Record<string, string> = { "x-multi-cliente": clienteId() };
+  const llave = llaveDe(sala);
+  const token = tokenEditarDe(sala);
+  if (llave) h["x-multi-llave"] = llave;
+  if (token) h["x-multi-editar"] = token;
+  return h;
+}
+
+/** `fetch` a una ruta de la sala, diciendo quién soy. */
+export function fetchDeSala(sala: string, ruta: string, init: RequestInit = {}): Promise<Response> {
+  return fetch(`${SERVER_URL}/rooms/${sala}${ruta}`, {
+    ...init,
+    credentials: "include",
+    headers: { ...headersDeSala(sala), ...(init.headers as Record<string, string> | undefined) },
+  });
+}
+
 export async function createRoom(): Promise<string> {
-  const res = await fetch(`${SERVER_URL}/rooms`, { method: "POST" });
+  const res = await fetch(`${SERVER_URL}/rooms`, { method: "POST", credentials: "include" });
   if (!res.ok) throw new Error("no se pudo crear la sala");
-  const data = (await res.json()) as { id: string };
+  const data = (await res.json()) as { id: string; llave?: string };
+  guardarSalaNueva(data);
   return data.id;
 }
 
@@ -169,7 +246,8 @@ export async function createRoom(): Promise<string> {
  * que haber preguntado antes.
  */
 export async function borrarSala(id: string): Promise<void> {
-  const res = await fetch(`${SERVER_URL}/rooms/${id}`, { method: "DELETE" });
+  const res = await fetchDeSala(id, "", { method: "DELETE" });
+  if (res.status === 403) throw new Error("solo el dueño puede borrar esta sala");
   if (!res.ok) throw new Error("no se pudo borrar la sala");
 }
 

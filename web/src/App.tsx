@@ -38,7 +38,7 @@ import { PanelLateral } from "./MenuSalas.js";
 import { IconoMenu, IconoOjo, IconoCodigo, IconoDocumento, IconoRemix } from "./iconos.js";
 import { Explorar } from "./Explorar.js";
 import { Inicio } from "./Inicio.js";
-import { PaginaPlantillas, TarjetasDePlantillas, usePlantillas } from "./Plantillas.js";
+import { CarruselDePlantillas, PaginaPlantillas, usePlantillas } from "./Plantillas.js";
 import { recordarSala, salasVisitadas, olvidarSala, recordarNombre, guardarSalas, siguienteLlave } from "./historial-salas.js";
 import { CuentaPanel } from "./CuentaPanel.js";
 import { BotonPresentar } from "./Presentacion.js";
@@ -438,12 +438,7 @@ function PlantillasEnPortada() {
   return (
     <div className="plantillas-portada">
       <p className="plantillas-portada-titulo">{t.oEmpiezaConPlantilla}</p>
-      <TarjetasDePlantillas plantillas={plantillas.slice(0, 6)} compactas />
-      {plantillas.length > 6 && (
-        <a className="explorar-link" href="#/plantillas">
-          {t.verTodasLasPlantillas}
-        </a>
-      )}
+      <CarruselDePlantillas plantillas={plantillas} />
     </div>
   );
 }

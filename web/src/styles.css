@@ -5116,3 +5116,139 @@ img.av.av-personaje {
     padding: 0 12px;
   }
 }
+/* Con plantillas, la sala vacía necesita más ancho que el texto solo: con los
+   480px de siempre las tarjetas (640px) se desbordaban a la derecha y todo se
+   veía recargado de ese lado. */
+.preview-loading:has(.plantillas-portada) {
+  max-width: min(680px, 94%);
+  width: 100%;
+}
+.preview-loading:has(.plantillas-portada) .plantillas-portada {
+  width: 100%;
+}
+
+/* ── Carrusel de plantillas en la sala vacía ─────────────────────────────── */
+.carrusel {
+  width: 100%;
+}
+.carrusel-tarjeta {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  border: 1px solid var(--linea);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--fondo);
+  text-align: left;
+  animation: carrusel-entra 0.35s ease;
+}
+@keyframes carrusel-entra {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .carrusel-tarjeta {
+    animation: none;
+  }
+}
+.carrusel-foto {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  background: var(--caja);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-right: 1px solid var(--linea);
+}
+.carrusel-foto img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.carrusel-foto span {
+  color: var(--dim);
+}
+.carrusel-flecha {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid var(--linea);
+  background: rgba(0, 0, 0, 0.6);
+  color: var(--texto);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.carrusel:hover .carrusel-flecha,
+.carrusel-flecha:focus-visible {
+  opacity: 1;
+}
+.carrusel-flecha.izq {
+  left: 8px;
+}
+.carrusel-flecha.der {
+  right: 8px;
+}
+.carrusel-info {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 12px;
+}
+.carrusel-info h3 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 4px 0 6px;
+  color: var(--texto);
+}
+.carrusel-info p {
+  font-size: 13px;
+  color: var(--dim);
+  line-height: 1.45;
+}
+.carrusel-info .plantilla-usar {
+  margin: 0;
+}
+.carrusel-puntos {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+.carrusel-puntos button {
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  border-radius: 50%;
+  border: 0;
+  background: var(--linea);
+  cursor: pointer;
+}
+.carrusel-puntos button.activo {
+  background: var(--acento);
+}
+@media (max-width: 820px) {
+  .carrusel-tarjeta {
+    grid-template-columns: 1fr;
+  }
+  .carrusel-foto {
+    border-right: 0;
+    border-bottom: 1px solid var(--linea);
+  }
+  /* En el celular no hay hover: las flechas se ven siempre. */
+  .carrusel-flecha {
+    opacity: 1;
+  }
+}

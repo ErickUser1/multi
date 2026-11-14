@@ -349,6 +349,8 @@ const TEXTOS = {
     plantillaFallo: "No se pudo crear la sala desde la plantilla. Vuelve a intentar en un momento.",
     oEmpiezaConPlantilla: "O empieza con una plantilla",
     verTodasLasPlantillas: "Ver todas las plantillas",
+    plantillaAnterior: "Plantilla anterior",
+    plantillaSiguiente: "Siguiente plantilla",
     loQuePuedesHacer: "Lo que puedes hacer en Multti",
     tipoDePlantilla: {
       presentacion: "Presentación",
@@ -828,6 +830,8 @@ const TEXTOS = {
     plantillaFallo: "Couldn't create a room from the template. Try again in a moment.",
     oEmpiezaConPlantilla: "Or start from a template",
     verTodasLasPlantillas: "See all templates",
+    plantillaAnterior: "Previous template",
+    plantillaSiguiente: "Next template",
     loQuePuedesHacer: "What you can make in Multti",
     tipoDePlantilla: {
       presentacion: "Slide deck",

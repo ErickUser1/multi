@@ -5116,3 +5116,13 @@ img.av.av-personaje {
     padding: 0 12px;
   }
 }
+/* Con plantillas, la sala vacía necesita más ancho que el texto solo: con los
+   480px de siempre las tarjetas (640px) se desbordaban a la derecha y todo se
+   veía recargado de ese lado. */
+.preview-loading:has(.plantillas-portada) {
+  max-width: min(680px, 94%);
+  width: 100%;
+}
+.preview-loading:has(.plantillas-portada) .plantillas-portada {
+  width: 100%;
+}

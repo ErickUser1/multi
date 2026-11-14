@@ -38,6 +38,7 @@ import { PanelLateral } from "./MenuSalas.js";
 import { IconoMenu, IconoOjo, IconoCodigo, IconoDocumento, IconoRemix } from "./iconos.js";
 import { Explorar } from "./Explorar.js";
 import { Inicio } from "./Inicio.js";
+import { PaginaPlantillas, TarjetasDePlantillas, usePlantillas } from "./Plantillas.js";
 import { recordarSala, salasVisitadas, olvidarSala, recordarNombre, guardarSalas, siguienteLlave } from "./historial-salas.js";
 import { CuentaPanel } from "./CuentaPanel.js";
 import { BotonPresentar } from "./Presentacion.js";
@@ -108,6 +109,11 @@ function esCelular(): boolean {
   } catch {
     return false;
   }
+}
+
+/** Todas las plantillas: `#/plantillas`. */
+function enPlantillas(): boolean {
+  return /^#\/plantillas\/?$/.test(window.location.hash);
 }
 
 /** La pantalla de inicio a propósito, desde el menú: `#/inicio`. */
@@ -219,6 +225,7 @@ export function App() {
 
   const [explorando, setExplorando] = useState(enExplorar);
   const [verInicio, setVerInicio] = useState(enInicio);
+  const [verPlantillas, setVerPlantillas] = useState(enPlantillas);
   /** Se lee una vez: lo que importa es cómo llegó, no lo que pase dentro. */
   const [nuevo] = useState(() => !yaConoceMultti());
   /** La última sala abierta, para volver a ella al cerrar el inicio del menú. */
@@ -230,6 +237,7 @@ export function App() {
       setRoomId(readRoomFromHash());
       setExplorando(enExplorar());
       setVerInicio(enInicio());
+      setVerPlantillas(enPlantillas());
     };
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
@@ -264,6 +272,7 @@ export function App() {
    * Ahora se cae dentro con el menú a mano, y crear es un botón más.
    */
   if (explorando) return <Explorar nombre={name || nombreGuardado()} />;
+  if (verPlantillas) return <PaginaPlantillas />;
 
   const guardarNombreYEntrar = () => {
     try {
@@ -415,6 +424,27 @@ function AgarraderaHerramientas(props: {
         ))}
       </svg>
     </button>
+  );
+}
+
+/**
+ * "O empieza con una plantilla", en la sala vacía. No sale si todavía no hay
+ * plantillas registradas: una sección vacía se lee como algo roto.
+ */
+function PlantillasEnPortada() {
+  const { t } = useTextos();
+  const plantillas = usePlantillas();
+  if (!plantillas || plantillas.length === 0) return null;
+  return (
+    <div className="plantillas-portada">
+      <p className="plantillas-portada-titulo">{t.oEmpiezaConPlantilla}</p>
+      <TarjetasDePlantillas plantillas={plantillas.slice(0, 6)} compactas />
+      {plantillas.length > 6 && (
+        <a className="explorar-link" href="#/plantillas">
+          {t.verTodasLasPlantillas}
+        </a>
+      )}
+    </div>
   );
 }
 
@@ -2925,6 +2955,10 @@ function Sala({
                   <img className="preview-logo" src="/logo/multti-manos.svg" alt="" draggable={false} />
                   <p className="preview-titulo">{t.quieresConstruir}</p>
                   <Ejemplos modo="solo" />
+                  {/* O no empezar de cero. Solo aquí, en la portada: dentro de
+                      una sala que alguien compartió, mandar a otra sala
+                      separaría al equipo. */}
+                  <PlantillasEnPortada />
                   {/* O ver lo que hicieron otros, y entrarle con ellos. */}
                   <a className="explorar-link" href="#/explorar">
                     {t.explorarLink}

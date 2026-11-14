@@ -10,12 +10,15 @@ import type {
   RemixDeSala,
   NuevaEnComunidad,
   EnComunidad,
+  Plantilla,
+  TipoDePlantilla,
   Storage,
   StoredMessage,
   StoredRoom,
   StoredUsuario,
   StoredComentario,
 } from "./types.js";
+import { TIPOS_DE_PLANTILLA } from "./types.js";
 
 /**
  * Persistencia con SQLite (node:sqlite, nativo en Node 22 — cero dependencias).
@@ -237,6 +240,20 @@ export class SqliteStorage implements Storage {
       );
       CREATE INDEX IF NOT EXISTS comunidad_categoria_idx ON comunidad(categoria, compartido);
     `);
+
+    // Las plantillas: salas armadas para que otros empiecen desde ellas. Aparte
+    // de la comunidad porque son otra cosa: las escoge quien corre Multti, no
+    // las comparte cualquiera, y no necesitan estar publicadas.
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS plantillas (
+        room_id     TEXT PRIMARY KEY REFERENCES rooms(id) ON DELETE CASCADE,
+        tipo        TEXT NOT NULL,
+        titulo      TEXT NOT NULL,
+        descripcion TEXT NOT NULL,
+        miniatura   BLOB,
+        agregada    INTEGER NOT NULL
+      );
+    `);
   }
 
   /**
@@ -319,6 +336,55 @@ export class SqliteStorage implements Storage {
   async ocultarEnComunidad(roomId: string, oculta: boolean): Promise<boolean> {
     const r = this.db.prepare(`UPDATE comunidad SET oculta = ? WHERE room_id = ?`).run(oculta ? 1 : 0, roomId);
     return Number(r.changes) > 0;
+  }
+
+  async agregarPlantilla(p: Omit<Plantilla, "conMiniatura"> & { miniatura?: Uint8Array | null }): Promise<void> {
+    this.db
+      .prepare(
+        `INSERT INTO plantillas (room_id, tipo, titulo, descripcion, miniatura, agregada)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(room_id) DO UPDATE SET
+           tipo = excluded.tipo, titulo = excluded.titulo, descripcion = excluded.descripcion,
+           miniatura = COALESCE(excluded.miniatura, plantillas.miniatura)`,
+      )
+      .run(p.roomId, p.tipo, p.titulo, p.descripcion, p.miniatura ?? null, p.agregada);
+  }
+
+  async quitarPlantilla(roomId: string): Promise<boolean> {
+    const r = this.db.prepare(`DELETE FROM plantillas WHERE room_id = ?`).run(roomId);
+    return Number(r.changes) > 0;
+  }
+
+  async listarPlantillas(): Promise<Plantilla[]> {
+    const filas = this.db
+      .prepare(
+        `SELECT room_id, tipo, titulo, descripcion, agregada, miniatura IS NOT NULL AS con_miniatura
+           FROM plantillas ORDER BY agregada ASC`,
+      )
+      .all() as Record<string, unknown>[];
+    const orden: readonly string[] = TIPOS_DE_PLANTILLA;
+    return filas.map(aPlantilla).sort((a, b) => orden.indexOf(a.tipo) - orden.indexOf(b.tipo));
+  }
+
+  async plantilla(roomId: string): Promise<Plantilla | null> {
+    const r = this.db
+      .prepare(
+        `SELECT room_id, tipo, titulo, descripcion, agregada, miniatura IS NOT NULL AS con_miniatura
+           FROM plantillas WHERE room_id = ?`,
+      )
+      .get(roomId) as Record<string, unknown> | undefined;
+    return r ? aPlantilla(r) : null;
+  }
+
+  async miniaturaDePlantilla(roomId: string): Promise<Uint8Array | null> {
+    const r = this.db.prepare(`SELECT miniatura FROM plantillas WHERE room_id = ?`).get(roomId) as
+      | { miniatura: Uint8Array | null }
+      | undefined;
+    return r?.miniatura ?? null;
+  }
+
+  async guardarMiniaturaDePlantilla(roomId: string, miniatura: Uint8Array): Promise<void> {
+    this.db.prepare(`UPDATE plantillas SET miniatura = ? WHERE room_id = ?`).run(miniatura, roomId);
   }
 
   async remixesDe(id: string): Promise<RemixDeSala[]> {
@@ -747,6 +813,17 @@ function toRoom(r: Record<string, unknown>): StoredRoom {
     // Solo "solo" cuenta como tal: null y cualquier cosa rara caen a multi, que
     // es el comportamiento que ya tenían todas las salas.
     modo: r.modo === "solo" ? "solo" : "multi",
+  };
+}
+
+function aPlantilla(r: Record<string, unknown>): Plantilla {
+  return {
+    roomId: String(r.room_id),
+    tipo: String(r.tipo) as TipoDePlantilla,
+    titulo: String(r.titulo),
+    descripcion: String(r.descripcion),
+    agregada: Number(r.agregada),
+    conMiniatura: Number(r.con_miniatura) === 1,
   };
 }
 

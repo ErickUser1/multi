@@ -159,6 +159,27 @@ export interface EnComunidad {
   urlPublicada: string | null;
 }
 
+/**
+ * Los tipos de plantilla, en el orden en que se enseñan. El tipo decide el
+ * ícono y el orden; el título y la descripción los escribe quien la registra.
+ */
+export const TIPOS_DE_PLANTILLA = ["presentacion", "app", "dashboard", "reporte", "juego", "web"] as const;
+export type TipoDePlantilla = (typeof TIPOS_DE_PLANTILLA)[number];
+
+/**
+ * Una sala armada para que otros empiecen desde ella. Solo quien corre Multti
+ * las registra (con `npm run plantillas`); "Usar plantilla" crea una sala nueva
+ * con una copia del proyecto.
+ */
+export interface Plantilla {
+  roomId: string;
+  tipo: TipoDePlantilla;
+  titulo: string;
+  descripcion: string;
+  agregada: number;
+  conMiniatura: boolean;
+}
+
 /** Un remix de una sala, para la lista de la Sala. */
 export interface RemixDeSala {
   id: string;
@@ -236,6 +257,15 @@ export interface Storage {
   miniaturaDeComunidad(roomId: string): Promise<Uint8Array | null>;
   /** Moderación. Devuelve false si la sala no estaba compartida. */
   ocultarEnComunidad(roomId: string, oculta: boolean): Promise<boolean>;
+  /** La registra como plantilla, o le cambia lo que se ve. Respeta la miniatura si no viene una nueva. */
+  agregarPlantilla(p: Omit<Plantilla, "conMiniatura"> & { miniatura?: Uint8Array | null }): Promise<void>;
+  /** Devuelve false si no era plantilla. */
+  quitarPlantilla(roomId: string): Promise<boolean>;
+  /** Por tipo (en el orden de TIPOS_DE_PLANTILLA) y luego la más vieja primero. */
+  listarPlantillas(): Promise<Plantilla[]>;
+  plantilla(roomId: string): Promise<Plantilla | null>;
+  miniaturaDePlantilla(roomId: string): Promise<Uint8Array | null>;
+  guardarMiniaturaDePlantilla(roomId: string, miniatura: Uint8Array): Promise<void>;
   /** Le pone nombre a la sala. `null` lo quita y se vuelve a ver el id. */
   renameRoom(id: string, nombre: string | null): Promise<void>;
   /** Si en esta sala hay que mencionar al agente para despertarlo. */

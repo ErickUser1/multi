@@ -937,8 +937,13 @@ export class NadaQueRemixear extends Error {}
  * filtro aparte que se pueda equivocar: cualquiera con el link puede hacer un
  * remix, y copiar los secretos sería regalarlos. Tampoco viajan el chat, la
  * conexión de Supabase ni lo publicado: el remix empieza limpio.
+ *
+ * Con `plantilla` es empezar desde una plantilla, y cambian dos cosas: la sala
+ * nueva NO queda ligada al original (no sale "Volver al original", que llevaría
+ * a cualquiera a editar la plantilla de todos) y se llama como la plantilla. Lo
+ * que se copia es lo mismo.
  */
-export async function createRemix(origen: Room): Promise<Room> {
+export async function createRemix(origen: Room, opts: { plantilla?: string } = {}): Promise<Room> {
   if (!(await hayCommits(origen.workspace.dir))) {
     throw new NadaQueRemixear("esta sala todavía no tiene nada guardado que copiar");
   }
@@ -949,16 +954,27 @@ export async function createRemix(origen: Room): Promise<Room> {
   const workspace = await createWorkspace(id, { clean: true });
   await extractTo(origen.workspace.dir, "HEAD", workspace.dir);
   const deQuien = origen.nombre ?? origen.id;
-  await commitAll(workspace.dir, { message: `Remix de ${deQuien}`, author: "Multti" });
+  const plantilla = opts.plantilla?.trim().slice(0, MAX_NOMBRE_SALA);
+  await commitAll(workspace.dir, {
+    message: plantilla ? `Desde la plantilla ${plantilla}` : `Remix de ${deQuien}`,
+    author: "Multti",
+  });
 
-  // Numerados para que se distingan en la lista: "(remix)", "(remix 2)"…
-  const cuantos = (await storage.remixesDe(origen.id)).length;
-  const sufijo = cuantos === 0 ? " (remix)" : ` (remix ${cuantos + 1})`;
+  let nombre: string;
+  if (plantilla) {
+    nombre = plantilla;
+  } else {
+    // Numerados para que se distingan en la lista: "(remix)", "(remix 2)"…
+    const cuantos = (await storage.remixesDe(origen.id)).length;
+    const sufijo = cuantos === 0 ? " (remix)" : ` (remix ${cuantos + 1})`;
+    nombre = `${deQuien.slice(0, MAX_NOMBRE_SALA - sufijo.length)}${sufijo}`;
+  }
+  const origenId = plantilla ? undefined : origen.id;
 
   const room: Room = {
     id,
-    nombre: `${deQuien.slice(0, MAX_NOMBRE_SALA - sufijo.length)}${sufijo}`,
-    origenId: origen.id,
+    nombre,
+    origenId,
     modo: "solo",
     workspace,
     preview: null,
@@ -978,7 +994,7 @@ export async function createRemix(origen: Room): Promise<Room> {
     createdAt: now,
     lastActiveAt: now,
     modo: room.modo,
-    origenId: origen.id,
+    origenId,
   });
   await storage.renameRoom(id, room.nombre ?? null);
 

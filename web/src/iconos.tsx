@@ -108,3 +108,13 @@ export const IconoInfo = (p: Props) => (
     <path d="M12 11v6M12 7.5h.01" />
   </Svg>
 );
+
+/** Plantillas: cuatro bloques, como una cuadrícula de opciones. */
+export const IconoPlantillas = (p: Props) => (
+  <Svg {...p}>
+    <rect x="3" y="3" width="7.5" height="7.5" rx="1.5" />
+    <rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5" />
+    <rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5" />
+    <rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.5" />
+  </Svg>
+);

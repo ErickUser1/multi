@@ -121,7 +121,28 @@ async function main() {
     check("queda la primera cuenta", p.duenoUsuario === "u-erick");
     check("y la segunda no se la roba", rolEnSala(p, { usuarioId: "u-intruso" }) === "editor");
 
-    console.log("\n8. Lo que llega del navegador se limpia");
+    console.log("\n8. Invitar por correo (con cuenta de Google)");
+    const { normalizarCorreo, invitadosDe } = await import("../engine/roles.js");
+    check("el correo se normaliza", normalizarCorreo("  Ana.Lopez@Gmail.com ") === "ana.lopez@gmail.com");
+    check("lo que no es correo se rechaza", normalizarCorreo("ana") === null && normalizarCorreo("a b@c.com") === null);
+    await storage.fijarRol(sala.id, "e:profe@escuela.mx", "editor");
+    await storage.fijarRol(sala.id, "e:grupo@escuela.mx", "lector");
+    p = await storage.permisosDeSala(sala.id);
+    const profe = identidadDe({ usuarioId: "u-profe", correo: "Profe@Escuela.mx" });
+    check("la profe invitada de editora edita (el link está en solo ver)", rolEnSala(p, profe) === "editor");
+    check("desde cualquier navegador", rolEnSala(p, { ...profe, clienteId: "c-otra-compu" }) === "editor");
+    check("el invitado de lector es lector aunque traiga el link de editar", rolEnSala(p, { correo: "grupo@escuela.mx", tokenEditar: otro }) === "lector");
+    check("alguien sin cuenta no se cuela con ese correo", rolEnSala(p, { clienteId: "e:profe@escuela.mx" }) === "lector");
+    check("la lista de invitados sale ordenada", JSON.stringify(invitadosDe(p)) === JSON.stringify([{ correo: "grupo@escuela.mx", rol: "lector" }, { correo: "profe@escuela.mx", rol: "editor" }]));
+    await storage.activarRoles(sala.id, false);
+    p = await storage.permisosDeSala(sala.id);
+    check("con los roles apagados el invitado de lector edita", rolEnSala(p, { correo: "grupo@escuela.mx" }) === "editor");
+    await storage.activarRoles(sala.id, true);
+    await storage.fijarRol(sala.id, "e:profe@escuela.mx", null);
+    p = await storage.permisosDeSala(sala.id);
+    check("quitar la invitación la regresa a lo que da el link", rolEnSala(p, profe) === "lector");
+
+    console.log("\n9. Lo que llega del navegador se limpia");
     const id = identidadDe({ llave: 42, tokenEditar: "x".repeat(500), clienteId: "", usuarioId: "u-1" });
     check("solo strings razonables", id.llave === null && id.tokenEditar === null && id.clienteId === null && id.usuarioId === "u-1");
   } finally {

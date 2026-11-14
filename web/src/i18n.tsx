@@ -339,6 +339,11 @@ const TEXTOS = {
     rolLector: "Lector",
     duenoSinCuenta: "Eres dueño desde este navegador. Entra con tu cuenta para serlo también desde otra compu.",
     soloLectura: "Solo lectura",
+    invitarTitulo: "Invitar por correo",
+    invitarNota: "Para quien tenga cuenta de Google: entra con ella y le toca este rol, en cualquier compu.",
+    invitarPlaceholder: "correo@ejemplo.com",
+    invitar: "Invitar",
+    quitarInvitado: "Quitar",
     soloLecturaChat: "Solo puedes ver esta sala. Pídele al dueño que te deje editar.",
     // Los textos del .zip se quedan aunque su botón ya no se monte: la ruta del
     // server sigue en pie, así que volver a ofrecerlo es poner el botón y nada
@@ -842,6 +847,11 @@ const TEXTOS = {
     rolLector: "Viewer",
     duenoSinCuenta: "You own this room from this browser. Sign in to own it from any computer too.",
     soloLectura: "View only",
+    invitarTitulo: "Invite by email",
+    invitarNota: "For people with a Google account: they sign in and get this role, on any computer.",
+    invitarPlaceholder: "email@example.com",
+    invitar: "Invite",
+    quitarInvitado: "Remove",
     soloLecturaChat: "You can only view this room. Ask the owner to let you edit.",
     descargarZip: "Download .zip",
     publicar: "Publish",

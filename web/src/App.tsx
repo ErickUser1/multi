@@ -1188,6 +1188,7 @@ function Sala({
               rolesActivos: !!p.rolesActivos,
               acceso: p.acceso ?? "editar",
               tokenEditar: p.tokenEditar ?? null,
+              invitados: p.invitados ?? [],
             }
           : null,
       );

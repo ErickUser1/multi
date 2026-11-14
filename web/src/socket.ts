@@ -43,6 +43,8 @@ export interface EstadoDeRol {
   acceso: AccesoDeLink;
   /** Solo le llega al dueño: el código del link para editar. */
   tokenEditar: string | null;
+  /** Solo le llega al dueño: a quién invitó por correo, y con qué rol. */
+  invitados?: { correo: string; rol: "editor" | "lector" }[];
 }
 
 /** Una imagen que alguien pegó en el chat, ya guardada en el server. */

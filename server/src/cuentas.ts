@@ -173,7 +173,9 @@ export function datosDelToken(idToken: string): DatosDeGoogle | null {
     return {
       sub,
       nombre: typeof json.name === "string" ? json.name : "sin nombre",
-      correo: typeof json.email === "string" ? json.email : "",
+      // Un correo que Google no ha verificado no se guarda: con él se reciben
+      // las invitaciones a las salas, y cualquiera podría escribir el ajeno.
+      correo: typeof json.email === "string" && json.email_verified !== false ? json.email : "",
       foto: typeof json.picture === "string" ? json.picture : null,
     };
   } catch {

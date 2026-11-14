@@ -79,6 +79,8 @@ import {
   rolEnSala,
   puedeEditar,
   claveDePersona,
+  normalizarCorreo,
+  invitadosDe,
   type Identidad,
 } from "./engine/roles.js";
 import { anclaDeCita, anclaValida, seccionDeBloque } from "./engine/comentarios.js";
@@ -345,6 +347,7 @@ function identidadDeReq(req: { headers: Record<string, unknown> }, usuario: Stor
   const cliente = typeof h["x-multi-cliente"] === "string" && ID_DE_CLIENTE.test(h["x-multi-cliente"]) ? h["x-multi-cliente"] : null;
   return identidadDe({
     usuarioId: usuario?.id,
+    correo: usuario?.correo,
     clienteId: cliente,
     llave: h["x-multi-llave"],
     tokenEditar: h["x-multi-editar"],
@@ -2038,6 +2041,8 @@ function estadoDeRol(member: Member, p: PermisosDeSala) {
     rolesActivos: !!p.duenoLlave && p.activos,
     acceso: p.acceso,
     tokenEditar: rol === "dueno" ? p.tokenEditar : null,
+    // Igual: a quién invitó por correo es asunto del dueño.
+    invitados: rol === "dueno" ? invitadosDe(p) : [],
   };
 }
 
@@ -2112,7 +2117,7 @@ io.on("connection", (socket) => {
     // Su rol. La llave y el código del link se quedan en el server, en el
     // miembro, para recalcularlo si el dueño cambia algo mientras está dentro.
     const storage = await getStorage();
-    member.identidad = identidadDe({ usuarioId: usuario?.id, clienteId: cliente, llave, tokenEditar });
+    member.identidad = identidadDe({ usuarioId: usuario?.id, correo: usuario?.correo, clienteId: cliente, llave, tokenEditar });
     const permisos = await storage.permisosDeSala(roomId);
     member.rol = rolEnSala(permisos, member.identidad);
     // El dueño entró con su llave y tiene cuenta: desde ahora también es dueño
@@ -2497,10 +2502,33 @@ io.on("connection", (socket) => {
     if (!room || typeof socketId !== "string") return;
     const otro = room.members.get(socketId);
     if (!otro || otro.rol === "dueno") return;
-    const clave = claveDePersona(otro);
+    // Con cuenta, por su correo: así es la misma invitación que se ve en la
+    // lista de invitados, y no dos reglas que se pisan.
+    const clave = otro.identidad?.correo ? `e:${otro.identidad.correo}` : claveDePersona(otro);
     if (!clave) return;
     const nuevo = rol === "editor" || rol === "lector" ? rol : null;
     await (await getStorage()).fijarRol(room.id, clave, nuevo);
+    await recalcularRoles(room);
+  });
+
+  /**
+   * Invitar por correo: quien entre con esa cuenta de Google recibe el rol, en
+   * cualquier compu y aunque todavía no haya llegado. `rol: null` lo quita.
+   */
+  socket.on("sala:invitar", async ({ correo, rol }: { correo?: unknown; rol?: unknown }) => {
+    const room = esElDueno();
+    const limpio = typeof correo === "string" ? normalizarCorreo(correo) : null;
+    if (!room || !limpio) {
+      if (room) socket.emit("sala:invitar-error", { message: "ese correo no se ve bien" });
+      return;
+    }
+    const storage = await getStorage();
+    const nuevo = rol === "editor" || rol === "lector" ? rol : null;
+    if (nuevo && invitadosDe(await storage.permisosDeSala(room.id)).length >= 200) {
+      socket.emit("sala:invitar-error", { message: "ya hay demasiadas invitaciones en esta sala" });
+      return;
+    }
+    await storage.fijarRol(room.id, `e:${limpio}`, nuevo);
     await recalcularRoles(room);
   });
 

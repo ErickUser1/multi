@@ -32,6 +32,9 @@ export function CompartirPanel({
   const { t } = useTextos();
   const [abierto, setAbierto] = useState(false);
   const [copiado, setCopiado] = useState<string | null>(null);
+  const [correo, setCorreo] = useState("");
+  const [rolInvitado, setRolInvitado] = useState<"editor" | "lector">("editor");
+  const [errorInvitar, setErrorInvitar] = useState<string | null>(null);
   const cajaRef = useRef<HTMLDivElement>(null);
   const esDueno = estado?.rol === "dueno";
 
@@ -48,6 +51,15 @@ export function CompartirPanel({
       document.removeEventListener("keydown", esc);
     };
   }, [abierto]);
+
+  useEffect(() => {
+    if (!socket) return;
+    const alFallar = ({ message }: { message: string }) => setErrorInvitar(message);
+    socket.on("sala:invitar-error", alFallar);
+    return () => {
+      socket.off("sala:invitar-error", alFallar);
+    };
+  }, [socket]);
 
   useEffect(() => {
     if (!copiado) return;
@@ -162,6 +174,65 @@ export function CompartirPanel({
                   </p>
                 </>
               )}
+
+              <span className="compartir-etiqueta">{t.invitarTitulo}</span>
+              <form
+                className="compartir-invitar"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const c = correo.trim();
+                  if (!c) return;
+                  setErrorInvitar(null);
+                  socket?.emit("sala:invitar", { correo: c, rol: rolInvitado });
+                  setCorreo("");
+                }}
+              >
+                <input
+                  type="email"
+                  value={correo}
+                  onChange={(e) => setCorreo(e.target.value)}
+                  placeholder={t.invitarPlaceholder}
+                  aria-label={t.invitarTitulo}
+                />
+                <select
+                  value={rolInvitado}
+                  onChange={(e) => setRolInvitado(e.target.value as "editor" | "lector")}
+                  aria-label={t.rolesTitulo}
+                >
+                  <option value="editor">{t.rolEditor}</option>
+                  <option value="lector">{t.rolLector}</option>
+                </select>
+                <button type="submit" disabled={!correo.trim()}>
+                  {t.invitar}
+                </button>
+              </form>
+              {errorInvitar && <p className="publicar-error">{errorInvitar}</p>}
+              {(estado?.invitados?.length ?? 0) > 0 && (
+                <ul className="compartir-personas">
+                  {estado!.invitados!.map((i) => (
+                    <li key={i.correo}>
+                      <span className="compartir-nombre" title={i.correo}>
+                        {i.correo}
+                      </span>
+                      <select
+                        value={i.rol}
+                        aria-label={`${t.rolesTitulo}: ${i.correo}`}
+                        onChange={(e) => socket?.emit("sala:invitar", { correo: i.correo, rol: e.target.value })}
+                      >
+                        <option value="editor">{t.rolEditor}</option>
+                        <option value="lector">{t.rolLector}</option>
+                      </select>
+                      <button
+                        className="compartir-mini"
+                        onClick={() => socket?.emit("sala:invitar", { correo: i.correo, rol: null })}
+                      >
+                        {t.quitarInvitado}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className="publicar-nota">{t.invitarNota}</p>
 
               <span className="compartir-etiqueta">{t.personasEnSala}</span>
               {personas.length === 0 ? (

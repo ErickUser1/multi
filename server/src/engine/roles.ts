@@ -39,6 +39,8 @@ function igualSeguro(a: string, b: string): boolean {
 
 export interface Identidad {
   usuarioId?: string | null;
+  /** El correo de su cuenta de Google, si entró con una. Es lo que reciben las invitaciones. */
+  correo?: string | null;
   clienteId?: string | null;
   llave?: string | null;
   tokenEditar?: string | null;
@@ -49,12 +51,14 @@ const texto = (v: unknown): string | null => (typeof v === "string" && v.length 
 /** Limpia lo que llega del navegador: solo strings razonables. */
 export function identidadDe(crudo: {
   usuarioId?: unknown;
+  correo?: unknown;
   clienteId?: unknown;
   llave?: unknown;
   tokenEditar?: unknown;
 }): Identidad {
   return {
     usuarioId: texto(crudo.usuarioId),
+    correo: typeof crudo.correo === "string" ? normalizarCorreo(crudo.correo) : null,
     clienteId: texto(crudo.clienteId),
     llave: texto(crudo.llave),
     tokenEditar: texto(crudo.tokenEditar),
@@ -73,7 +77,8 @@ export function esDueno(p: PermisosDeSala, quien: Identidad): boolean {
  * 1. Sala sin dueño (las de antes): todos editan, como siempre.
  * 2. La llave o la cuenta del dueño: dueño.
  *    Con los roles apagados, aquí acaba: todos los demás editan.
- * 3. Lo que el dueño le dio a esa cuenta o a ese navegador.
+ * 3. Lo que el dueño le dio: por correo (invitación), a esa cuenta o a ese
+ *    navegador (desde la lista de quien está en la sala).
  * 4. El link para editar: editor.
  * 5. Si no, lo que da el link normal.
  */
@@ -81,6 +86,7 @@ export function rolEnSala(p: PermisosDeSala, quien: Identidad): Rol {
   if (!p.duenoLlave) return "editor";
   if (esDueno(p, quien)) return "dueno";
   if (!p.activos) return "editor";
+  if (quien.correo && p.roles[`e:${quien.correo}`]) return p.roles[`e:${quien.correo}`];
   if (quien.usuarioId && p.roles[`u:${quien.usuarioId}`]) return p.roles[`u:${quien.usuarioId}`];
   if (quien.clienteId && p.roles[`c:${quien.clienteId}`]) return p.roles[`c:${quien.clienteId}`];
   if (quien.tokenEditar && p.tokenEditar && igualSeguro(quien.tokenEditar, p.tokenEditar)) return "editor";
@@ -96,4 +102,21 @@ export function claveDePersona(quien: { usuarioId?: string | null; clienteId?: s
   if (quien.usuarioId) return `u:${quien.usuarioId}`;
   if (quien.clienteId) return `c:${quien.clienteId}`;
   return null;
+}
+
+/**
+ * Un correo, como se compara: sin espacios y en minúsculas. Null si no parece
+ * correo. No se intenta más: el que vale es el que Google dice que es suyo.
+ */
+export function normalizarCorreo(crudo: string): string | null {
+  const c = crudo.trim().toLowerCase();
+  return c.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c) ? c : null;
+}
+
+/** Las invitaciones por correo de una sala, para el panel del dueño. */
+export function invitadosDe(p: PermisosDeSala): { correo: string; rol: "editor" | "lector" }[] {
+  return Object.entries(p.roles)
+    .filter(([k]) => k.startsWith("e:"))
+    .map(([k, rol]) => ({ correo: k.slice(2), rol }))
+    .sort((a, b) => a.correo.localeCompare(b.correo));
 }

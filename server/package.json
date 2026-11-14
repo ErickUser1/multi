@@ -35,6 +35,7 @@
     "uso": "tsx --no-warnings src/demos/uso.ts",
     "comunidad": "tsx --no-warnings src/moderar-comunidad.ts",
     "plantillas": "tsx --no-warnings src/plantillas.ts",
+    "crear-plantillas": "tsx --no-warnings src/crear-plantillas.ts",
     "demo:variables": "tsx src/demos/variables.ts",
     "demo:politicas": "tsx src/demos/politicas.ts",
     "demo:actividad": "tsx src/demos/actividad.ts",

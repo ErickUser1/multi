@@ -44,6 +44,7 @@
     "uso": "npm run uso -w server --",
     "comunidad": "npm run comunidad -w server --",
     "plantillas": "npm run plantillas -w server --",
+    "crear-plantillas": "npm run crear-plantillas -w server --",
     "demo:variables": "npm run demo:variables -w server",
     "demo:politicas": "npm run demo:politicas -w server",
     "demo:actividad": "npm run demo:actividad -w server",

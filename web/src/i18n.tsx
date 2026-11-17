@@ -470,6 +470,10 @@ const TEXTOS = {
       "Esta es la contraseña de tu base. Cópiala ahora: Supabase no la vuelve a mostrar y Multti no la va a enseñar otra vez.",
     seleccionarElemento: "Seleccionar elemento",
     selecciono: "seleccionó",
+    seleccionoVarios: (quien: string, n: number) => `${quien} seleccionó ${n} elementos`,
+    quitarSeleccion: "Quitar este elemento",
+    quitarTodas: "Quitar todos",
+    topeSeleccion: "Máximo 8 elementos por mensaje",
     contraer: "contraer",
 
     // Presentar
@@ -971,6 +975,10 @@ const TEXTOS = {
       "This is your database password. Copy it now: Supabase never shows it again, and neither will Multti.",
     seleccionarElemento: "Select element",
     selecciono: "selected",
+    seleccionoVarios: (quien: string, n: number) => `${quien} selected ${n} elements`,
+    quitarSeleccion: "Remove this element",
+    quitarTodas: "Clear all",
+    topeSeleccion: "Up to 8 elements per message",
     contraer: "collapse",
 
     // Presentar

@@ -68,6 +68,7 @@ jobs:
       - run: npm run demo:tope-salas
       - run: npm run demo:plantillas
       - run: npm run demo:roles
+      - run: npm run demo:seleccion-multiple
       - run: npm run demo:documento
       - run: npm run demo:doc-sync
       - run: npm run demo:comentarios

@@ -180,7 +180,7 @@ export interface Room {
   /** Historial de chat POR AGENTE (cada agente tiene su propia conversación). */
   histories: Map<string, Message[]>;
   /** Selección actual de cada miembro (socketId → elemento). Para mostrarlas a todos. */
-  selections: Map<string, SelectedElement>;
+  selections: Map<string, SelectedElement[]>;
   /** Los agentes de esta sala, como jugadores visibles. */
   agents: AgentRegistry;
   /** Un drain activo por AGENTE (no por sala) → paralelo real. */
@@ -732,6 +732,90 @@ export async function ensureRunner(room: Room): Promise<Runner> {
  * despierta si lo llaman. Sin esto no puedes hablar con tu compa sin que el
  * agente se ponga a trabajar — y esa plática es el corazón del producto.
  */
+/** Cuántos elementos se pueden anclar a un mensaje. */
+export const MAX_ANCLAS = 8;
+
+/**
+ * Los elementos anclados a un mensaje, limpios.
+ *
+ * Acepta `anchors` (la lista, lo de ahora) y `anchor` (uno solo: lo que manda
+ * una pestaña de antes, o un mensaje viejo que se quedó en su cola). Lo que no
+ * tenga forma de elemento se descarta, los repetidos (mismo selector) cuentan
+ * una vez, y se topa en MAX_ANCLAS.
+ */
+export function anclasDe(payload: { anchors?: unknown; anchor?: unknown }): SelectedElement[] {
+  const crudos = Array.isArray(payload.anchors) ? payload.anchors : payload.anchor ? [payload.anchor] : [];
+  const vistos = new Set<string>();
+  const out: SelectedElement[] = [];
+  for (const c of crudos) {
+    if (out.length >= MAX_ANCLAS) break;
+    const e = c as Record<string, unknown> | null;
+    if (!e || typeof e !== "object") continue;
+    const selector = typeof e.selector === "string" ? e.selector.slice(0, 500) : "";
+    const tag = typeof e.tag === "string" ? e.tag.slice(0, 40) : "";
+    if (!selector || !tag || vistos.has(selector)) continue;
+    vistos.add(selector);
+    out.push({
+      selector,
+      tag,
+      text: typeof e.text === "string" ? e.text.slice(0, 120) : "",
+      path: typeof e.path === "string" ? e.path.slice(0, 500) : selector,
+    });
+  }
+  return out;
+}
+
+/**
+ * Lo que el agente lee antes del mensaje. Con un elemento es exactamente lo de
+ * siempre; con varios, numerados, con el mismo número que se ve en la sala.
+ */
+export function textoDeAnclas(anclas: SelectedElement[]): string {
+  const uno = (el: SelectedElement) =>
+    `<${el.tag}>${el.text ? ` con el texto "${el.text}"` : ""}, ubicado en "${el.path}"`;
+  if (anclas.length === 1) {
+    return `[El usuario seleccionó este elemento del preview: ${uno(anclas[0])}. Encuentra el código correspondiente y aplica el cambio que pide abajo a ESE elemento.]`;
+  }
+  const lista = anclas.map((el, i) => `${i + 1}) ${uno(el)}`).join("; ");
+  return `[El usuario seleccionó ${anclas.length} elementos del preview: ${lista}. Encuentra el código de cada uno y aplica el cambio que pide abajo a ESOS elementos.]`;
+}
+
+/** Lo que se guarda del mensaje y se ve como "sobre: …" en el chat. */
+export function anclaDelMensaje(anclas: SelectedElement[]): string | undefined {
+  if (anclas.length === 0) return undefined;
+  if (anclas.length === 1) return anclas[0].path;
+  const todo = `${anclas.length} elementos: ${anclas.map((a) => a.path).join(" · ")}`;
+  return todo.length > 300 ? `${todo.slice(0, 299)}…` : todo;
+}
+
+/**
+ * Un nombre de sala a partir de lo primero que se pidió.
+ *
+ * Recorta el arranque típico ("hazme una", "crea un") porque en una lista de
+ * salas todas empezarían igual y la parte que distingue quedaría fuera del
+ * ancho visible. Lo que queda son las primeras palabras de la petición, que es
+ * lo que la persona reconoce.
+ */
+export function tituloDesde(task: string): string {
+  // Lo que la sala le antepone al pedido (los elementos seleccionados, los
+  // adjuntos, el comentario) va en párrafos entre corchetes. El título sale de
+  // lo que escribió la persona, no de eso: si no, la sala se llamaba
+  // "[El usuario seleccionó 3 elementos del".
+  const parrafos = task.split(/\n\s*\n/);
+  while (parrafos.length > 1 && parrafos[0].trim().startsWith("[")) parrafos.shift();
+  const limpio = parrafos
+    .join("\n\n")
+    .replace(/@[a-z0-9-]+/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(
+      /^(?:(?:hazme|haz|crea|crear|créame|creame|quiero|necesito|puedes|podrias|podrías|me gustaria|me gustaría|ayudame|ayúdame|dame|genera|arma)\s+)+(?:que\s+)?(?:crees|hagas|generes|armes)?\s*(?:el\s+c[oó]digo\s+para\s+)?(?:una?|el|la|unos|unas)?\s*/i,
+      "",
+    );
+  const corto = limpio.split(/[.,;\n?]/)[0]?.trim() ?? "";
+  const palabras = corto.split(" ").slice(0, 6).join(" ");
+  return palabras.charAt(0).toUpperCase() + palabras.slice(1);
+}
+
 export type ChatIntent =
   | { kind: "talk" }
   | { kind: "spawn"; task: string }

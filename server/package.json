@@ -32,6 +32,7 @@
     "demo:tope-salas": "tsx src/demos/tope-salas.ts",
     "demo:plantillas": "tsx src/demos/plantillas.ts",
     "demo:roles": "tsx src/demos/roles.ts",
+    "demo:seleccion-multiple": "tsx src/demos/seleccion-multiple.ts",
     "demo:exportar": "tsx src/demos/exportar.ts",
     "uso": "tsx --no-warnings src/demos/uso.ts",
     "comunidad": "tsx --no-warnings src/moderar-comunidad.ts",

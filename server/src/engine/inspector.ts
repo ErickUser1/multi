@@ -2,9 +2,13 @@
  * Script inspector — corre DENTRO del iframe del preview (inyectado por el proxy).
  *
  * Responsabilidades:
- *  - modo inspect: hover resalta, click selecciona (y no dispara el botón real)
+ *  - modo inspect: hover resalta, click selecciona (y no dispara el botón real).
+ *    Se pueden marcar varios: cada click agrega uno y otro click en el mismo lo
+ *    quita. Cada uno lleva su número, el mismo que se ve en los chips de la sala.
  *  - genera un selector CSS único + ruta legible del elemento
- *  - manda la selección al padre (la sala) por postMessage
+ *  - manda la lista COMPLETA al padre (la sala) por postMessage en cada cambio:
+ *    con la lista entera, y no con altas y bajas, el padre y el iframe no se
+ *    pueden desfasar
  *  - re-valida la selección tras cambios del DOM (MutationObserver): si el
  *    elemento desapareció por HMR, avisa que se limpie; si sigue, actualiza bbox
  *
@@ -17,7 +21,8 @@ export const INSPECTOR_SCRIPT = String.raw`
   window.__multiInspector = true;
 
   var inspectMode = false;
-  var selected = null;       // { selector, tag, text, path }
+  var MAX = 8;
+  var selected = [];         // [{ selector, tag, text, path }]
   var hoverEl = null;
 
   // ── overlays (outline de hover y de selección) ──────────────────────────
@@ -30,7 +35,37 @@ export const INSPECTOR_SCRIPT = String.raw`
     return d;
   }
   var hoverBox = mkOverlay('rgba(185,168,227,.9)', 2147483646);
-  var selBox = mkOverlay('#ffc37a', 2147483645);
+
+  // Un recuadro por elemento seleccionado, con su número en una etiqueta.
+  // Se reusan: se crean la primera vez que hacen falta y luego solo se esconden.
+  var selBoxes = [];
+  function selBox(i) {
+    if (!selBoxes[i]) {
+      var b = mkOverlay('#ffc37a', 2147483645);
+      var n = document.createElement('span');
+      n.style.cssText =
+        'position:absolute;top:-10px;left:-10px;min-width:18px;height:18px;padding:0 4px;' +
+        'border-radius:9px;background:#ffc37a;color:#111;font:700 11px/18px system-ui,sans-serif;' +
+        'text-align:center;box-sizing:border-box;';
+      b.appendChild(n);
+      selBoxes[i] = b;
+    }
+    // Solo si cambió: escribirlo igual también es una mutación, y el
+    // MutationObserver de abajo volvería a pintar en un ciclo sin fin.
+    var num = String(i + 1);
+    if (selBoxes[i].firstChild.textContent !== num) selBoxes[i].firstChild.textContent = num;
+    return selBoxes[i];
+  }
+  function pintarSeleccion() {
+    for (var i = 0; i < Math.max(selBoxes.length, selected.length); i++) {
+      if (i < selected.length) placeBox(selBox(i), document.querySelector(selected[i].selector));
+      else selBoxes[i].style.display = 'none';
+    }
+  }
+  function indiceDe(selector) {
+    for (var i = 0; i < selected.length; i++) if (selected[i].selector === selector) return i;
+    return -1;
+  }
 
   function placeBox(box, el) {
     if (!el) { box.style.display = 'none'; return; }
@@ -108,10 +143,13 @@ export const INSPECTOR_SCRIPT = String.raw`
     if (!inspectMode) return;
     e.preventDefault();
     e.stopPropagation();
-    var el = e.target;
-    selected = describe(el);
-    placeBox(selBox, el);
-    send('element:selected', selected);
+    var d = describe(e.target);
+    var i = indiceDe(d.selector);
+    if (i !== -1) selected.splice(i, 1);       // ya estaba: se quita
+    else if (selected.length < MAX) selected.push(d);
+    else { send('selection:max', { max: MAX }); return; }
+    pintarSeleccion();
+    send('selection:changed', selected);
   }, true);
 
   // ── comandos del padre (activar inspect, limpiar selección) ──────────────
@@ -123,23 +161,27 @@ export const INSPECTOR_SCRIPT = String.raw`
       document.body.style.cursor = inspectMode ? 'crosshair' : '';
       if (!inspectMode) hoverBox.style.display = 'none';
     } else if (m.type === 'selection:clear') {
-      selected = null;
-      selBox.style.display = 'none';
+      selected = [];
+      pintarSeleccion();
+    } else if (m.type === 'selection:remove') {
+      var i = indiceDe(m.selector);
+      if (i === -1) return;
+      selected.splice(i, 1);
+      pintarSeleccion();
+      send('selection:changed', selected);
     }
   });
 
   // ── re-validación tras cambios del DOM (edge case HMR) ───────────────────
   function revalidate() {
-    if (!selected) return;
-    var el = document.querySelector(selected.selector);
-    if (el) {
-      placeBox(selBox, el); // sigue vivo → reposiciona el outline
-    } else {
-      // desapareció (HMR borró el elemento) → limpiar y avisar
-      selected = null;
-      selBox.style.display = 'none';
-      send('element:gone', {});
-    }
+    if (!selected.length) return;
+    // Los que desaparecieron (HMR borró el elemento) se quitan y se avisa con
+    // lo que quedó; los que siguen solo se reacomodan.
+    var vivos = selected.filter(function (s) { return !!document.querySelector(s.selector); });
+    var cambio = vivos.length !== selected.length;
+    selected = vivos;
+    pintarSeleccion();
+    if (cambio) send('selection:changed', selected);
   }
 
   // ── el overlay de error de Vite ─────────────────────────────────────────
@@ -175,11 +217,11 @@ export const INSPECTOR_SCRIPT = String.raw`
 
   // reposicionar overlays al hacer scroll/resize (las coords son fixed)
   window.addEventListener('scroll', function () {
-    if (selected) revalidate();
+    if (selected.length) revalidate();
     if (inspectMode && hoverEl) placeBox(hoverBox, hoverEl);
   }, true);
   window.addEventListener('resize', function () {
-    if (selected) revalidate();
+    if (selected.length) revalidate();
   });
 })();
 `;

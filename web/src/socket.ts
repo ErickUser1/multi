@@ -110,7 +110,8 @@ export interface SelectionInfo {
   socketId: string;
   name: string;
   color: string;
-  element: SelectedElement | null;
+  /** Lo que tiene seleccionado. Vacía: ya no tiene nada. */
+  elements: SelectedElement[];
 }
 
 /** Cuánta gente asume una sala. */

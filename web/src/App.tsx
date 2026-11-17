@@ -1085,8 +1085,11 @@ function Sala({
 
   // Modo inspect activo (para seleccionar elementos del preview).
   const [inspect, setInspect] = useState(false);
-  // MI selección local (la que se ancla al mandar mensaje) — cuidado 2.
-  const [mySelection, setMySelection] = useState<SelectedElement | null>(null);
+  // MIS selecciones locales (las que se anclan al mandar mensaje) — cuidado 2.
+  // Varias: cada click en el preview agrega una, y el número es su lugar aquí.
+  const [misSelecciones, setMisSelecciones] = useState<SelectedElement[]>([]);
+  /** El preview avisó que ya no caben más: se dice junto a los chips un rato. */
+  const [topeSeleccion, setTopeSeleccion] = useState(false);
   // Cursores de OTROS (socketId → info).
   const [cursors, setCursors] = useState<Record<string, CursorInfo>>({});
   // Selecciones de OTROS (socketId → info), para dibujar sus outlines.
@@ -1469,7 +1472,10 @@ function Sala({
     socket.on("select", (s: SelectionInfo) => {
       setSelections((prev) => {
         const n = { ...prev };
-        if (s.element) n[s.socketId] = s;
+        // Un server de antes manda `element` (uno): se lee como lista.
+        const viejo = (s as SelectionInfo & { element?: SelectedElement | null }).element;
+        const elements = s.elements ?? (viejo ? [viejo] : []);
+        if (elements.length) n[s.socketId] = { ...s, elements };
         else delete n[s.socketId];
         return n;
       });
@@ -1527,10 +1533,20 @@ function Sala({
       if (e.origin !== proxyOrigin) return; // cuidado 1
       const m = e.data;
       if (!m || m.source !== "multi-inspector") return;
-      if (m.type === "element:selected") {
+      if (m.type === "selection:changed") {
+        // Siempre la lista completa: es la del iframe, y así nunca se desfasan.
+        const lista = Array.isArray(m.data) ? (m.data as SelectedElement[]) : [];
+        setMisSelecciones(lista);
+        setTopeSeleccion(false);
+        socketRef.current?.emit("select", lista);
+      } else if (m.type === "selection:max") {
+        setTopeSeleccion(true);
+      } else if (m.type === "element:selected") {
+        // Un preview con el script de antes (pestaña abierta antes del deploy):
+        // un elemento a la vez, como era.
         const el = m.data as SelectedElement;
-        setMySelection(el);
-        socketRef.current?.emit("select", el);
+        setMisSelecciones([el]);
+        socketRef.current?.emit("select", [el]);
       } else if (m.type === "cursor") {
         // Viene en coordenadas del iframe: se pasan a las del escenario, que es
         // contra lo que se dibujan los cursores de los demás. El iframe puede
@@ -1545,9 +1561,9 @@ function Sala({
       } else if (m.type === "presentacion") {
         setDiapositivas(Number((m.data as { diapositivas?: number })?.diapositivas) || 0);
       } else if (m.type === "element:gone") {
-        // El elemento que tenía seleccionado desapareció (HMR) — cuidado edge case.
-        setMySelection(null);
-        socketRef.current?.emit("select", null);
+        // Lo mismo, del script de antes: su elemento desapareció (HMR).
+        setMisSelecciones([]);
+        socketRef.current?.emit("select", []);
       }
     };
     window.addEventListener("message", onMessage);
@@ -1750,7 +1766,7 @@ function Sala({
     // Anclar MI selección local al mensaje (cuidado 2/3/4).
     const payload = {
       text,
-      anchor: mySelection,
+      anchors: misSelecciones.length ? misSelecciones : undefined,
       // Solo los que ya subieron. `send` no llega aquí si falta alguno, pero
       // filtrar es más barato que confiar en que dos estados van a la par.
       adjuntos: pendientes.length
@@ -1779,8 +1795,9 @@ function Sala({
     setDraft("");
     setPendientes([]);
     menciones.cerrar();
-    if (mySelection) {
-      setMySelection(null);
+    if (misSelecciones.length) {
+      setMisSelecciones([]);
+      setTopeSeleccion(false);
       postToInspector({ type: "selection:clear" }); // cuidado 4
       setInspect(false);
     }
@@ -2291,12 +2308,45 @@ function Sala({
             void agregarImagenes(imagenesDe(e.dataTransfer));
           }}
         >
-          {mySelection && (
-            <div className="anchor-chip">
-              anclado a &lt;{mySelection.tag}&gt;{mySelection.text ? ` "${mySelection.text.slice(0, 24)}"` : ""}
-              <span className="anchor-x" onClick={() => { setMySelection(null); postToInspector({ type: "selection:clear" }); }}>
-                ×
-              </span>
+          {misSelecciones.length > 0 && (
+            <div className="anclas">
+              {misSelecciones.map((el, i) => (
+                <div key={el.selector} className="anchor-chip">
+                  <span className="anchor-num">{i + 1}</span>
+                  &lt;{el.tag}&gt;{el.text ? ` "${el.text.slice(0, 24)}"` : ""}
+                  <button
+                    type="button"
+                    className="anchor-x"
+                    aria-label={t.quitarSeleccion}
+                    onClick={() => {
+                      // Aquí y en el iframe: si el preview trae el script de
+                      // antes, no contesta, y el chip se quitaría solo en uno.
+                      const resto = misSelecciones.filter((x) => x.selector !== el.selector);
+                      setMisSelecciones(resto);
+                      setTopeSeleccion(false);
+                      socketRef.current?.emit("select", resto);
+                      postToInspector({ type: "selection:remove", selector: el.selector });
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+              {misSelecciones.length > 1 && (
+                <button
+                  type="button"
+                  className="anclas-quitar"
+                  onClick={() => {
+                    setMisSelecciones([]);
+                    setTopeSeleccion(false);
+                    postToInspector({ type: "selection:clear" });
+                    socketRef.current?.emit("select", []);
+                  }}
+                >
+                  {t.quitarTodas}
+                </button>
+              )}
+              {topeSeleccion && <span className="anclas-tope">{t.topeSeleccion}</span>}
             </div>
           )}
           {pendientes.length > 0 && (
@@ -2918,7 +2968,13 @@ function Sala({
               <div className="others-selections">
                 {Object.values(selections).map((s) => (
                   <div key={s.socketId} className="sel-badge" style={{ borderColor: s.color, color: s.color }}>
-                    {s.name} {t.selecciono} &lt;{s.element?.tag}&gt;
+                    {s.elements.length === 1 ? (
+                      <>
+                        {s.name} {t.selecciono} &lt;{s.elements[0].tag}&gt;
+                      </>
+                    ) : (
+                      t.seleccionoVarios(s.name, s.elements.length)
+                    )}
                   </div>
                 ))}
               </div>

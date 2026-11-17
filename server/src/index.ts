@@ -2474,7 +2474,11 @@ io.on("connection", (socket) => {
   socket.on("sala:roles", async ({ activos }: { activos?: unknown }) => {
     const room = esElDueno();
     if (!room || typeof activos !== "boolean") return;
-    await (await getStorage()).activarRoles(room.id, activos);
+    const storage = await getStorage();
+    await storage.activarRoles(room.id, activos);
+    // Prendidos, el link de la sala es para ver y el de editar lleva su código.
+    // Apagados da igual: todos editan.
+    if (activos) await storage.cambiarAcceso(room.id, "ver");
     await recalcularRoles(room);
     systemMsg(
       room,

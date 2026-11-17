@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Socket } from "socket.io-client";
-import type { AccesoDeLink, EstadoDeRol, Member, Rol } from "./socket.js";
+import type { EstadoDeRol, Member, Rol } from "./socket.js";
 import { useTextos } from "./i18n.js";
 
 /**
@@ -61,6 +61,13 @@ export function CompartirPanel({
     };
   }, [socket]);
 
+  // Con los roles prendidos el link de la sala es el de ver. Una sala que los
+  // prendió antes de que hubiera dos links pudo quedar con "editar": se acomoda
+  // sola en cuanto su dueño la abre, para que el link diga lo que hace.
+  useEffect(() => {
+    if (esDueno && estado?.rolesActivos && estado.acceso === "editar") socket?.emit("sala:acceso", { acceso: "ver" });
+  }, [esDueno, estado?.rolesActivos, estado?.acceso, socket]);
+
   useEffect(() => {
     if (!copiado) return;
     const id = setTimeout(() => setCopiado(null), 2000);
@@ -88,7 +95,7 @@ export function CompartirPanel({
   }
 
   const activos = !!estado?.rolesActivos;
-  const acceso: AccesoDeLink = estado?.acceso ?? "editar";
+  const linkEditar = estado?.tokenEditar ? `${base}?editar=${encodeURIComponent(estado.tokenEditar)}` : null;
 
   // Una fila por persona y no por pestaña; sin el dueño, que no se cambia.
   const personas: Member[] = [];
@@ -145,20 +152,36 @@ export function CompartirPanel({
 
           {activos && (
             <>
-              <span className="compartir-etiqueta">{t.elLinkDa}</span>
-              <div className="switch-vista compartir-acceso" role="radiogroup" aria-label={t.elLinkDa}>
-                {(["editar", "ver"] as const).map((a) => (
-                  <button
-                    key={a}
-                    type="button"
-                    className={`switch-op${acceso === a ? " activa" : ""}`}
-                    aria-pressed={acceso === a}
-                    onClick={() => socket?.emit("sala:acceso", { acceso: a })}
-                  >
-                    {a === "editar" ? t.accesoEditar : t.accesoVer}
-                  </button>
-                ))}
+              {/* Dos links, uno por rol: el de la sala da solo ver, y el que
+                  lleva su código da editar. Así se comparte uno u otro según a
+                  quién, sin tener que explicar un ajuste del link. */}
+              <span className="compartir-etiqueta">{t.linkParaVer}</span>
+              <div className="publicar-url">
+                <span className="compartir-link">{base}</span>
+                <button className="publicar-copiar" onClick={() => copiar("ver", base)}>
+                  {copiado === "ver" ? t.copiado : t.copiar}
+                </button>
               </div>
+              {linkEditar && (
+                <>
+                  <span className="compartir-etiqueta">{t.linkParaEditar}</span>
+                  <div className="publicar-url">
+                    <span className="compartir-link">{linkEditar}</span>
+                    <button className="publicar-copiar" onClick={() => copiar("editar", linkEditar)}>
+                      {copiado === "editar" ? t.copiado : t.copiar}
+                    </button>
+                  </div>
+                  <p className="publicar-nota">
+                    {t.linkParaEditarNota}{" "}
+                    <button
+                      className="compartir-mini"
+                      onClick={() => confirm(t.confirmarNuevoCodigo) && socket?.emit("sala:nuevo-token")}
+                    >
+                      {t.nuevoCodigo}
+                    </button>
+                  </p>
+                </>
+              )}
 
               <span className="compartir-etiqueta">{t.invitarTitulo}</span>
               <form

@@ -23,6 +23,10 @@ export const INSPECTOR_SCRIPT = String.raw`
   var inspectMode = false;
   var MAX = 8;
   var selected = [];         // [{ selector, tag, text, path }]
+  // Los elementos mismos, en el mismo orden. Pintar y revisar va con ellos y
+  // no buscando por selector: un selector se puede quedar sin encontrar nada, y
+  // mientras el elemento siga en la página no hace falta buscarlo.
+  var els = [];
   var hoverEl = null;
 
   // ── overlays (outline de hover y de selección) ──────────────────────────
@@ -56,14 +60,36 @@ export const INSPECTOR_SCRIPT = String.raw`
     if (selBoxes[i].firstChild.textContent !== num) selBoxes[i].firstChild.textContent = num;
     return selBoxes[i];
   }
+  /**
+   * querySelector que no truena. Un selector que no sirve (las clases de
+   * Tailwind como md:flex o w-1/2, si algo se escapó mal) lanzaba un error, y
+   * con él se caía el click entero: no salía ni la selección. Así da null.
+   */
+  function buscar(selector) {
+    try {
+      return selector ? document.querySelector(selector) : null;
+    } catch (e) {
+      return null;
+    }
+  }
+  /** El elemento i, vivo: el que se guardó o, si React lo cambió, el que hoy coincide. */
+  function vivo(i) {
+    var el = els[i];
+    if (el && el.isConnected) return el;
+    el = buscar(selected[i].selector);
+    els[i] = el;
+    return el;
+  }
   function pintarSeleccion() {
     for (var i = 0; i < Math.max(selBoxes.length, selected.length); i++) {
-      if (i < selected.length) placeBox(selBox(i), document.querySelector(selected[i].selector));
+      if (i < selected.length) placeBox(selBox(i), vivo(i));
       else selBoxes[i].style.display = 'none';
     }
   }
-  function indiceDe(selector) {
-    for (var i = 0; i < selected.length; i++) if (selected[i].selector === selector) return i;
+  function indiceDe(el, selector) {
+    for (var i = 0; i < selected.length; i++) {
+      if (els[i] === el || selected[i].selector === selector) return i;
+    }
     return -1;
   }
 
@@ -78,16 +104,22 @@ export const INSPECTOR_SCRIPT = String.raw`
   }
 
   // ── selector CSS único + ruta legible ───────────────────────────────────
-  function cssPath(el) {
+  // Dos versiones del mismo camino: la que se lee (path, la que ve el agente y
+  // busca con grep, con las clases como están en el código) y la que sirve de
+  // selector (con ids y clases escapados: md:flex → md\:flex).
+  var esc = (window.CSS && CSS.escape) ? CSS.escape : function (x) {
+    return String(x).replace(/[^a-zA-Z0-9_-]/g, function (c) { return '\\' + c; });
+  };
+  function cssPath(el, escapar) {
     if (!(el instanceof Element)) return '';
     var parts = [];
     var node = el;
     var depth = 0;
     while (node && node.nodeType === 1 && depth < 5) {
       var sel = node.nodeName.toLowerCase();
-      if (node.id) { sel += '#' + node.id; parts.unshift(sel); break; }
-      var cls = (node.className && typeof node.className === 'string')
-        ? node.className.trim().split(/\s+/).slice(0, 2).join('.')
+      if (node.id) { sel += '#' + (escapar ? esc(node.id) : node.id); parts.unshift(sel); break; }
+      var cls = (node.className && typeof node.className === 'string' && node.className.trim())
+        ? node.className.trim().split(/\s+/).slice(0, 2).map(function (c) { return escapar ? esc(c) : c; }).join('.')
         : '';
       if (cls) sel += '.' + cls;
       // nth-of-type para desambiguar hermanos del mismo tipo
@@ -109,8 +141,7 @@ export const INSPECTOR_SCRIPT = String.raw`
 
   function describe(el) {
     var text = (el.textContent || '').trim().slice(0, 60);
-    var path = cssPath(el);
-    return { selector: path, tag: el.nodeName.toLowerCase(), text: text, path: path };
+    return { selector: cssPath(el, true), tag: el.nodeName.toLowerCase(), text: text, path: cssPath(el, false) };
   }
 
   function send(type, data) {
@@ -143,10 +174,11 @@ export const INSPECTOR_SCRIPT = String.raw`
     if (!inspectMode) return;
     e.preventDefault();
     e.stopPropagation();
-    var d = describe(e.target);
-    var i = indiceDe(d.selector);
-    if (i !== -1) selected.splice(i, 1);       // ya estaba: se quita
-    else if (selected.length < MAX) selected.push(d);
+    var el = e.target;
+    var d = describe(el);
+    var i = indiceDe(el, d.selector);
+    if (i !== -1) { selected.splice(i, 1); els.splice(i, 1); }   // ya estaba: se quita
+    else if (selected.length < MAX) { selected.push(d); els.push(el); }
     else { send('selection:max', { max: MAX }); return; }
     pintarSeleccion();
     send('selection:changed', selected);
@@ -162,11 +194,13 @@ export const INSPECTOR_SCRIPT = String.raw`
       if (!inspectMode) hoverBox.style.display = 'none';
     } else if (m.type === 'selection:clear') {
       selected = [];
+      els = [];
       pintarSeleccion();
     } else if (m.type === 'selection:remove') {
-      var i = indiceDe(m.selector);
+      var i = indiceDe(null, m.selector);
       if (i === -1) return;
       selected.splice(i, 1);
+      els.splice(i, 1);
       pintarSeleccion();
       send('selection:changed', selected);
     }
@@ -177,9 +211,14 @@ export const INSPECTOR_SCRIPT = String.raw`
     if (!selected.length) return;
     // Los que desaparecieron (HMR borró el elemento) se quitan y se avisa con
     // lo que quedó; los que siguen solo se reacomodan.
-    var vivos = selected.filter(function (s) { return !!document.querySelector(s.selector); });
-    var cambio = vivos.length !== selected.length;
-    selected = vivos;
+    var quedan = [], susEls = [];
+    for (var i = 0; i < selected.length; i++) {
+      var el = vivo(i);
+      if (el) { quedan.push(selected[i]); susEls.push(el); }
+    }
+    var cambio = quedan.length !== selected.length;
+    selected = quedan;
+    els = susEls;
     pintarSeleccion();
     if (cambio) send('selection:changed', selected);
   }

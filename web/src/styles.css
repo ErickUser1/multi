@@ -5366,3 +5366,12 @@ img.av.av-personaje {
   max-height: calc(100vh - 90px);
   overflow-y: auto;
 }
+/* Dentro del panel el fondo de la opción activa es el mismo del panel y no se
+   veía cuál estaba puesta: aquí va en claro. */
+.compartir-acceso .switch-op {
+  color: var(--dim);
+}
+.compartir-acceso .switch-op.activa {
+  background: var(--texto);
+  color: var(--fondo);
+}

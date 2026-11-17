@@ -68,7 +68,6 @@ export function CompartirPanel({
   }, [copiado]);
 
   const base = `${window.location.origin}${window.location.pathname}#/sala/${roomId ?? ""}`;
-  const linkEditar = estado?.tokenEditar ? `${base}?editar=${encodeURIComponent(estado.tokenEditar)}` : null;
 
   const copiar = (que: string, texto: string) => {
     void navigator.clipboard.writeText(texto);
@@ -116,13 +115,20 @@ export function CompartirPanel({
         <div className="publicar-caja compartir-caja">
           <div className="publicar-cab">{t.compartirTitulo}</div>
 
-          <span className="compartir-etiqueta">{t.linkDeLaSala}</span>
-          <div className="publicar-url">
-            <span className="compartir-link">{base}</span>
-            <button className="publicar-copiar" onClick={() => copiar("sala", base)}>
-              {copiado === "sala" ? t.copiado : t.copiar}
-            </button>
-          </div>
+          {/* Con los roles prendidos se comparte invitando (o con el link que
+              da lo que diga "Quien llega con el link puede"). Un link para
+              copiar ahí al lado se leía como una tercera forma de invitar. */}
+          {!activos && (
+            <>
+              <span className="compartir-etiqueta">{t.linkDeLaSala}</span>
+              <div className="publicar-url">
+                <span className="compartir-link">{base}</span>
+                <button className="publicar-copiar" onClick={() => copiar("sala", base)}>
+                  {copiado === "sala" ? t.copiado : t.copiar}
+                </button>
+              </div>
+            </>
+          )}
 
           <label className="compartir-switch">
             <span>
@@ -153,27 +159,6 @@ export function CompartirPanel({
                   </button>
                 ))}
               </div>
-
-              {acceso === "ver" && linkEditar && (
-                <>
-                  <span className="compartir-etiqueta">{t.linkParaEditar}</span>
-                  <div className="publicar-url">
-                    <span className="compartir-link">{linkEditar}</span>
-                    <button className="publicar-copiar" onClick={() => copiar("editar", linkEditar)}>
-                      {copiado === "editar" ? t.copiado : t.copiar}
-                    </button>
-                  </div>
-                  <p className="publicar-nota">
-                    {t.linkParaEditarNota}{" "}
-                    <button
-                      className="compartir-mini"
-                      onClick={() => confirm(t.confirmarNuevoCodigo) && socket?.emit("sala:nuevo-token")}
-                    >
-                      {t.nuevoCodigo}
-                    </button>
-                  </p>
-                </>
-              )}
 
               <span className="compartir-etiqueta">{t.invitarTitulo}</span>
               <form

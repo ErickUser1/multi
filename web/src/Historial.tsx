@@ -26,6 +26,8 @@ export function Historial(props: {
   onBookmark: (hash: string, label: string | null) => void;
   /** Señal para recargar (cambió el historial). */
   version: number;
+  /** Lector: ve la historia y los cambios, pero no regresa ni marca. */
+  soloVer?: boolean;
 }) {
   const { t } = useTextos();
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
@@ -85,7 +87,7 @@ export function Historial(props: {
           {selected.files.length > 0 && (
             <div className="hist-det-files">
               {selected.files.slice(0, 6).map((f) => (
-                <span key={f} className="hist-file" onClick={() => setConfirming({ hash: selected.hash, file: f })} title={t.regresarSolo(f)}>
+                <span key={f} className="hist-file" onClick={() => !props.soloVer && setConfirming({ hash: selected.hash, file: f })} title={props.soloVer ? f : t.regresarSolo(f)}>
                   {f}
                 </span>
               ))}
@@ -97,20 +99,24 @@ export function Historial(props: {
             <button className="hist-btn" onClick={() => verDiff(selected.hash)}>
               Ver cambios
             </button>
-            <button className="hist-btn" onClick={() => setConfirming({ hash: selected.hash })}>
-              {t.regresarAqui}
-            </button>
-            <button
-              className="hist-btn"
-              onClick={() =>
-                props.onBookmark(
-                  selected.hash,
-                  selected.bookmark ? null : prompt(t.comoLaLlamas, t.versionQueFuncionaba) || null,
-                )
-              }
-            >
-              {selected.bookmark ? "★ quitar marca" : "☆ marcar"}
-            </button>
+            {!props.soloVer && (
+              <>
+                <button className="hist-btn" onClick={() => setConfirming({ hash: selected.hash })}>
+                  {t.regresarAqui}
+                </button>
+                <button
+                  className="hist-btn"
+                  onClick={() =>
+                    props.onBookmark(
+                      selected.hash,
+                      selected.bookmark ? null : prompt(t.comoLaLlamas, t.versionQueFuncionaba) || null,
+                    )
+                  }
+                >
+                  {selected.bookmark ? "★ quitar marca" : "☆ marcar"}
+                </button>
+              </>
+            )}
           </div>
 
           {diff !== null && (
@@ -126,7 +132,7 @@ export function Historial(props: {
       )}
 
       {/* Confirmación antes de revertir (evita accidentes) */}
-      {confirming && (
+      {confirming && !props.soloVer && (
         <div className="hist-confirm">
           <div className="hist-confirm-text">
             {confirming.file

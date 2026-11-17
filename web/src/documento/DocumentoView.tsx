@@ -31,6 +31,7 @@ export function DocumentoView({
   yo,
   agents,
   soloYo,
+  soloVer = false,
 }: {
   roomId: string;
   socket: Socket;
@@ -38,6 +39,8 @@ export function DocumentoView({
   agents: Agent[];
   /** Estoy solo en la sala: comentar le habla al agente por defecto. */
   soloYo: boolean;
+  /** Lector: ve el documento y los cursores, pero no escribe ni comenta. */
+  soloVer?: boolean;
 }) {
   const { t } = useTextos();
   // Cada recarga del server (volver atrás) estrena proveedor y Y.Doc.
@@ -74,7 +77,7 @@ export function DocumentoView({
   const proveedor = useMemo(() => {
     void intento;
     return new ProveedorDocumento(socket, {
-      editable: true,
+      editable: !soloVer,
       alSincronizar: () => setListo(true),
       alNoHaber: () => setNoHay(true),
       alRecargar: () => {
@@ -84,7 +87,7 @@ export function DocumentoView({
       },
       alGuardar: setGuardado,
     });
-  }, [socket, intento]);
+  }, [socket, intento, soloVer]);
   useEffect(() => () => proveedor.destruir(), [proveedor]);
 
   const urlImagen = useMemo(
@@ -94,7 +97,7 @@ export function DocumentoView({
 
   const editor = useEditor(
     {
-      editable: true,
+      editable: !soloVer,
       extensions: [
         ...conVistas(
           // Los ids de los bloques nuevos los pone el server (ver esquema.ts).
@@ -393,7 +396,7 @@ export function DocumentoView({
           <article className="doc-hoja" hidden={!listo}>
             <EditorContent editor={editor} />
           </article>
-          {botonComentar && (
+          {botonComentar && !soloVer && (
             <button
               type="button"
               className="doc-comentar"

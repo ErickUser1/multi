@@ -1,3 +1,5 @@
+import { headersDeSala } from "./socket.js";
+
 /**
  * Las imágenes se encogen ANTES de salir del navegador.
  *
@@ -86,6 +88,7 @@ export function subirAdjunto(
     const xhr = new XMLHttpRequest();
     xhr.open("POST", `${serverUrl}/rooms/${roomId}/adjuntos`);
     xhr.withCredentials = true;
+    for (const [k, v] of Object.entries(headersDeSala(roomId))) xhr.setRequestHeader(k, v);
 
     xhr.upload.addEventListener("progress", (e) => {
       if (e.lengthComputable) onProgreso(Math.round((e.loaded / e.total) * 100));

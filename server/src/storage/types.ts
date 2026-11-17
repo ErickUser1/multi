@@ -45,6 +45,39 @@ export interface StoredRoom {
 }
 
 /**
+ * Los roles de una sala (engine/roles.ts decide quién tiene cuál):
+ * - dueño: quien la creó; cambia roles, el acceso del link, y la puede borrar.
+ * - editor: hace todo lo de siempre (chat, agente, documento, publicar…).
+ * - lector: solo ve.
+ */
+export type Rol = "dueno" | "editor" | "lector";
+
+/** Qué da el link de la sala a quien llega sin rol propio. */
+export type AccesoDeLink = "editar" | "ver";
+
+/**
+ * Lo que decide los roles de una sala. Las salas de antes de los roles no
+ * tienen dueño (`duenoLlave` null) y siguen abiertas: todos editan.
+ */
+export interface PermisosDeSala {
+  /** Hash de la llave secreta del dueño. Null: sala sin dueño. */
+  duenoLlave: string | null;
+  /** La cuenta del dueño, si la creó con sesión. */
+  duenoUsuario: string | null;
+  /**
+   * Si el dueño prendió los roles. Apagados (lo de siempre al crear), todos
+   * editan como antes y solo el dueño sigue siendo dueño. Lo que el dueño
+   * había dado se guarda: al volver a prenderlos, ahí está.
+   */
+  activos: boolean;
+  acceso: AccesoDeLink;
+  /** El código del link para editar. */
+  tokenEditar: string | null;
+  /** Lo que el dueño le dio a cada quien: "u:<cuenta>" o "c:<navegador>". */
+  roles: Record<string, "editor" | "lector">;
+}
+
+/**
  * Cuánta gente asume una sala.
  *
  * Nace en "solo" porque así llega todo el mundo, y porque la mención fue lo
@@ -268,6 +301,17 @@ export interface Storage {
   guardarMiniaturaDePlantilla(roomId: string, miniatura: Uint8Array): Promise<void>;
   /** Le pone nombre a la sala. `null` lo quita y se vuelve a ver el id. */
   renameRoom(id: string, nombre: string | null): Promise<void>;
+  /** Quién manda en la sala y qué da su link. */
+  permisosDeSala(id: string): Promise<PermisosDeSala>;
+  /** Al crear la sala: su dueño y el código del link para editar. */
+  fijarDueno(id: string, d: { llave: string; usuario: string | null; tokenEditar: string }): Promise<void>;
+  /** El dueño entró con su llave y ya tiene cuenta: desde ahí es dueño en cualquier compu. */
+  ligarCuentaDeDueno(id: string, usuario: string): Promise<void>;
+  cambiarAcceso(id: string, acceso: AccesoDeLink): Promise<void>;
+  activarRoles(id: string, activos: boolean): Promise<void>;
+  cambiarTokenEditar(id: string, token: string): Promise<void>;
+  /** `null` quita lo que el dueño le había dado: vuelve a valer el link. */
+  fijarRol(id: string, quien: string, rol: "editor" | "lector" | null): Promise<void>;
   /** Si en esta sala hay que mencionar al agente para despertarlo. */
   setModo(id: string, modo: ModoDeSala): Promise<void>;
   /**

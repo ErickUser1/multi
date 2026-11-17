@@ -21,6 +21,14 @@ import {
   type OrphanTurn,
   type PlataformaDePublicacion,
   type EnLaComunidad,
+  type EstadoDeRol,
+  type Rol,
+  type AccesoDeLink,
+  fetchDeSala,
+  guardarSalaNueva,
+  llaveDe,
+  tokenEditarDe,
+  tomarTokenDeLaUrl,
 } from "./socket.js";
 import { AgentList, textoDeEstado } from "./AgentList.js";
 import { AvatarDeAgente } from "./personajes.js";
@@ -32,6 +40,7 @@ import { Historial } from "./Historial.js";
 import { loadStoredCredencial } from "./KeyPanel.js";
 import { EnvPanel, type EstadoSupabase } from "./EnvPanel.js";
 import { PublicarPanel } from "./PublicarPanel.js";
+import { CompartirPanel } from "./CompartirPanel.js";
 import { VersionesSala, type OrigenDeSala, type RemixDeSala } from "./Remix.js";
 import { useTextos, type Textos } from "./i18n.js";
 import { PanelLateral } from "./MenuSalas.js";
@@ -133,6 +142,7 @@ function yaConoceMultti(): boolean {
 }
 
 function readRoomFromHash(): string | null {
+  tomarTokenDeLaUrl();
   const m = window.location.hash.match(/#\/sala\/([\w-]+)/);
   return m ? m[1] : null;
 }
@@ -697,6 +707,9 @@ function Sala({
   const docEncima = tipo === "app" && tieneDocumento;
   // Quién soy en esta sala (nombre y color): con eso se pinta mi cursor en el documento.
   const [yo, setYo] = useState<Member | null>(null);
+  /** Mi rol en la sala. Sin dueño o con los roles apagados, siempre editor. */
+  const [miRol, setMiRol] = useState<EstadoDeRol | null>(null);
+  const soloVer = miRol?.rol === "lector";
   /**
    * Lo que de verdad pasa al escribir. Sola en la sala, escribir despierta al
    * agente aunque el modo diga Multijugador (el server decide igual, ver
@@ -705,8 +718,6 @@ function Sala({
   const modoAlEscribir: ModoDeSala | null = modo && members.length <= 1 ? "solo" : modo;
   const [editandoNombre, setEditandoNombre] = useState(false);
   const [creandoSala, setCreandoSala] = useState(false);
-  /** El botón de compartir acaba de copiar. Se apaga solo. */
-  const [copiado, setCopiado] = useState(false);
   /** Si el historial está abierto. Cerrado por defecto: se consulta de vez en
       cuando, y abajo del preview se llevaba una franja de la pantalla siempre. */
   const [histAbierto, setHistAbierto] = useState(false);
@@ -1145,7 +1156,14 @@ function Sala({
     });
 
     socket.on("connect", () => {
-      socket.emit("join", { roomId, name, clienteId: clienteId() });
+      socket.emit("join", {
+        roomId,
+        name,
+        clienteId: clienteId(),
+        // Con qué soy dueño o editor. Sin nada de esto, vale lo que dé el link.
+        llave: llaveDe(roomId),
+        tokenEditar: tokenEditarDe(roomId),
+      });
       // La key ya configurada viaja sola: no se pide de nuevo en cada sala.
       const guardada = loadStoredCredencial();
       if (guardada) socket.emit("auth:key", guardada);
@@ -1162,6 +1180,18 @@ function Sala({
       setTieneDocumento(!!p.documento);
       if (!p.documento || p.tipo === "documento") setPanel((v) => (v === "documento" ? "preview" : v));
       setYo(p.you);
+      setMiRol(
+        p.rol
+          ? {
+              rol: p.rol,
+              tieneDueno: !!p.tieneDueno,
+              rolesActivos: !!p.rolesActivos,
+              acceso: p.acceso ?? "editar",
+              tokenEditar: p.tokenEditar ?? null,
+              invitados: p.invitados ?? [],
+            }
+          : null,
+      );
       recordarNombre(roomId, p.nombre ?? null);
       setPublicando(p.publicando ?? null);
       setUrlPublicada(p.urlPublicada ?? null);
@@ -1233,6 +1263,8 @@ function Sala({
       for (const m of [...cola.current]) mandarDeLaCola(m);
     });
     socket.on("presence", ({ members }: { members: Member[] }) => setMembers(members));
+    // El dueño cambió algo: me llega mi rol otra vez, ya calculado por el server.
+    socket.on("rol", (e: EstadoDeRol) => setMiRol(e));
 
     // Alguien de la sala le cambió el nombre: se ve al momento en la cabecera
     // de todos, sin recargar. Quién fue sale en el chat.
@@ -1823,18 +1855,6 @@ function Sala({
     }
   }, [anchoChat]);
 
-  const copyLink = async () => {
-    await navigator.clipboard.writeText(window.location.href);
-    setCopiado(true);
-  };
-
-  // El aviso de copiado es de paso, no un estado en el que la barra se quede.
-  useEffect(() => {
-    if (!copiado) return;
-    const id = setTimeout(() => setCopiado(false), 2000);
-    return () => clearTimeout(id);
-  }, [copiado]);
-
   /**
    * Publicar la app de la sala.
    *
@@ -1847,7 +1867,7 @@ function Sala({
     setPublicando("compilando"); // respuesta inmediata; el server confirma en seguida
     setErrorDeNombre(null);
     try {
-      const r = await fetch(`${SERVER_URL}/rooms/${roomId}/publicar`, {
+      const r = await fetchDeSala(roomId, "/publicar", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -1884,7 +1904,7 @@ function Sala({
   const compartirConComunidad = async (autor: string): Promise<string | null> => {
     if (!roomId) return t.comunidadFallo;
     try {
-      const r = await fetch(`${SERVER_URL}/rooms/${roomId}/comunidad`, {
+      const r = await fetchDeSala(roomId, "/comunidad", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ categoria: "juego", autor }),
@@ -1900,7 +1920,7 @@ function Sala({
 
   const quitarDeComunidad = async () => {
     if (!roomId) return;
-    const r = await fetch(`${SERVER_URL}/rooms/${roomId}/comunidad`, { method: "DELETE" }).catch(() => null);
+    const r = await fetchDeSala(roomId, "/comunidad", { method: "DELETE" }).catch(() => null);
     if (r?.ok) setComunidad(null);
     else alert(t.comunidadFallo);
   };
@@ -1911,14 +1931,16 @@ function Sala({
     try {
       const r = await fetch(`${SERVER_URL}/rooms/${roomId}/remix`, {
         method: "POST",
+        credentials: "include",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ autor: yo?.name ?? "" }),
       });
-      const d = (await r.json().catch(() => null)) as { id?: string; error?: string } | null;
+      const d = (await r.json().catch(() => null)) as { id?: string; llave?: string; error?: string } | null;
       if (!r.ok || !d?.id) {
         alert(d?.error ?? t.remixFallo);
         return;
       }
+      guardarSalaNueva({ id: d.id, llave: d.llave });
       window.location.hash = `#/sala/${d.id}`;
     } catch {
       alert(t.remixFallo);
@@ -1973,16 +1995,21 @@ function Sala({
    * vuelta de OAuth pasa por el navegador, y al volver el server redirige de
    * regreso a esta misma sala.
    */
-  const conectarSupabase = () => {
+  const conectarSupabase = async () => {
     if (!roomId) return;
-    window.location.href = `${SERVER_URL}/rooms/${roomId}/supabase/conectar`;
+    // Primero un pase de un solo uso: la navegación no lleva los headers que
+    // dicen quién soy, así que el server no sabría si puedo editar.
+    const r = await fetchDeSala(roomId, "/supabase/pase", { method: "POST" }).catch(() => null);
+    const d = (await r?.json().catch(() => null)) as { pase?: string } | null;
+    const pase = d?.pase ? `?pase=${encodeURIComponent(d.pase)}` : "";
+    window.location.href = `${SERVER_URL}/rooms/${roomId}/supabase/conectar${pase}`;
   };
 
   const desconectarSupabase = async () => {
     if (!roomId) return;
     // El estado real llega por socket, que es lo que además avisa al resto de
     // la sala. Aquí solo se dispara.
-    await fetch(`${SERVER_URL}/rooms/${roomId}/supabase`, { method: "DELETE" }).catch(() => {
+    await fetchDeSala(roomId, "/supabase", { method: "DELETE" }).catch(() => {
       // Si no se pudo, la conexión sigue ahí y el panel la sigue mostrando.
     });
   };
@@ -2103,8 +2130,8 @@ function Sala({
             ) : (
               <button
                 className="sala-nombre"
-                onClick={() => setEditandoNombre(true)}
-                title={nombre ? `${roomId} — ${t.renombrarSala}` : t.renombrarSala}
+                onClick={() => !soloVer && setEditandoNombre(true)}
+                title={soloVer ? (nombre ? roomId ?? "" : "") : nombre ? `${roomId} — ${t.renombrarSala}` : t.renombrarSala}
               >
                 {nombre ?? roomId}
               </button>
@@ -2325,7 +2352,7 @@ function Sala({
           )}
           {/* Solo cuando hay de dónde escoger (multijugador con gente, o varios
               agentes). Sola con un agente no hay decisión que tomar. */}
-          {roomId && (modoAlEscribir === "multi" || agents.length > 1) && (() => {
+          {roomId && !soloVer && (modoAlEscribir === "multi" || agents.length > 1) && (() => {
             const escogido = draft.match(MENCION_AL_INICIO)?.[1]?.toLowerCase() ?? null;
             return (
               <div className={`selector-agentes${agentesPlegados ? " plegado" : ""}`}>
@@ -2354,6 +2381,13 @@ function Sala({
               </div>
             );
           })()}
+          {soloVer ? (
+            // Un lector mira y no escribe. Se le dice aquí, donde iba a escribir:
+            // una caja apagada sin explicación parece que la sala se rompió.
+            <div className="solo-ver-aviso" role="note">
+              {t.soloLecturaChat}
+            </div>
+          ) : (
           <div className="input-wrap">
             {menciones.abierto && (
               <MentionMenu opciones={menciones.opciones} seleccion={menciones.sel} onPick={pickMention} />
@@ -2465,6 +2499,7 @@ function Sala({
               </div>
             </div>
           </div>
+          )}
         </div>
       </aside>
 
@@ -2618,7 +2653,7 @@ function Sala({
                 que ahí el botón no cambiaba nada salvo dejar un aviso que pedía
                 una arroba que no hacía falta. Cuatro de esos cinco estaban solos.
                 Qué implica cada modo lo dice el placeholder de la caja. */}
-            {roomId && modo && members.length > 1 && (
+            {roomId && modo && members.length > 1 && !soloVer && (
               <div
                 className="switch-vista switch-modo"
                 role="group"
@@ -2638,6 +2673,8 @@ function Sala({
                 ))}
               </div>
             )}
+            {soloVer && <span className="solo-lectura">{t.soloLectura}</span>}
+            {!soloVer && (
             <PublicarPanel
               roomId={roomId}
               nombreDeSala={nombre}
@@ -2652,9 +2689,10 @@ function Sala({
               onCompartir={compartirConComunidad}
               onQuitarDeComunidad={quitarDeComunidad}
             />
+            )}
             {/* Las variables son del proyecto de la sala, así que sin sala no
                 hay dónde escribirlas. */}
-            {roomId && (
+            {roomId && !soloVer && (
               <EnvPanel
                 roomId={roomId}
                 supabase={supabase}
@@ -2676,14 +2714,16 @@ function Sala({
             >
               <IconoRemix />
             </button>
-            {/* Sin sala no hay link que compartir: copiaría la URL pelada. */}
-            <button
-              className={`invitar ${copiado ? "copiado" : ""}`}
-              onClick={copyLink}
-              disabled={!roomId}
-            >
-              {copiado ? t.copiado : t.copiarLink}
-            </button>
+            {/* Sin sala no hay link que compartir: copiaría la URL pelada. Al
+                dueño se le abre el panel con los roles; a los demás, copia. */}
+            <CompartirPanel
+              roomId={roomId}
+              estado={miRol}
+              members={members}
+              yo={yo}
+              socket={socketRef.current}
+              conCuenta={!!cuenta.usuario}
+            />
           </div>
         </div>
 
@@ -2735,6 +2775,7 @@ function Sala({
                   yo={{ name: yo?.name ?? name, color: yo?.color ?? "#ff4d1c" }}
                   agents={agents}
                   soloYo={modo === "solo" || members.length <= 1}
+                  soloVer={soloVer}
                 />
               </Suspense>
             </div>
@@ -2827,6 +2868,7 @@ function Sala({
                   yo={{ name: yo?.name ?? name, color: yo?.color ?? "#ff4d1c" }}
                   agents={agents}
                   soloYo={modo === "solo" || members.length <= 1}
+                  soloVer={soloVer}
                 />
               </Suspense>
             )
@@ -2995,6 +3037,7 @@ function Sala({
           <Historial
             roomId={roomId}
             version={histVersion}
+            soloVer={soloVer}
             onRevert={(hash, file) => socketRef.current?.emit("history:revert", { hash, file })}
             onBookmark={(hash, label) => socketRef.current?.emit("history:bookmark", { hash, label })}
           />

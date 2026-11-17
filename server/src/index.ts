@@ -17,6 +17,7 @@ import {
   addMember,
   removeMember,
   membersList,
+  miembroPublico,
   personasEnSala,
   stopAllPreviews,
   parseIntent,
@@ -34,6 +35,7 @@ import {
   tieneDocumento,
   actualizarTipo,
   type Room,
+  type Member,
   type SelectedElement,
   dormirSalasOciosas,
 } from "./rooms.js";
@@ -68,7 +70,19 @@ import {
   tokenDeCookie,
   urlDeAutorizacion,
 } from "./cuentas.js";
-import type { StoredUsuario, StoredComentario, Plantilla } from "./storage/types.js";
+import type { StoredUsuario, StoredComentario, Plantilla, Rol, AccesoDeLink, PermisosDeSala } from "./storage/types.js";
+import {
+  nuevaLlave,
+  nuevoTokenEditar,
+  hashLlave,
+  identidadDe,
+  rolEnSala,
+  puedeEditar,
+  claveDePersona,
+  normalizarCorreo,
+  invitadosDe,
+  type Identidad,
+} from "./engine/roles.js";
 import { anclaDeCita, anclaValida, seccionDeBloque } from "./engine/comentarios.js";
 import { ToolError } from "./agent/tools/base.js";
 import {
@@ -319,6 +333,69 @@ async function usuarioDe(req: { headers: Record<string, unknown> }): Promise<Sto
   return (await getStorage()).usuarioPorSesion(token);
 }
 
+// ── Roles: dueño, editor, lector ────────────────────────────────────────────
+//
+// Quién decide qué está en engine/roles.ts. Aquí solo se lee quién llama: por
+// HTTP, de unos headers que pone la Sala (más la cookie de sesión); por socket,
+// de lo que trajo el `join`. Las salas sin dueño (todas las de antes) dan
+// "editor" a todos, así que nada de esto cambia cómo funcionaban.
+
+const ID_DE_CLIENTE = /^[\w-]{8,64}$/;
+
+function identidadDeReq(req: { headers: Record<string, unknown> }, usuario: StoredUsuario | null): Identidad {
+  const h = req.headers;
+  const cliente = typeof h["x-multi-cliente"] === "string" && ID_DE_CLIENTE.test(h["x-multi-cliente"]) ? h["x-multi-cliente"] : null;
+  return identidadDe({
+    usuarioId: usuario?.id,
+    correo: usuario?.correo,
+    clienteId: cliente,
+    llave: h["x-multi-llave"],
+    tokenEditar: h["x-multi-editar"],
+  });
+}
+
+async function rolDeReq(req: { headers: Record<string, unknown> }, roomId: string): Promise<{ rol: Rol; tieneDueno: boolean }> {
+  const p = await (await getStorage()).permisosDeSala(roomId);
+  if (!p.duenoLlave) return { rol: "editor", tieneDueno: false };
+  return { rol: rolEnSala(p, identidadDeReq(req, await usuarioDe(req))), tieneDueno: true };
+}
+
+/**
+ * El candado de las rutas que cambian algo. Si no pasa, ya respondió 403 y
+ * quien llama solo tiene que salir. "dueno" en una sala sin dueño deja pasar:
+ * ahí nunca hubo a quién preguntarle.
+ */
+async function exigir(
+  req: { headers: Record<string, unknown> },
+  reply: { code: (n: number) => { send: (b: unknown) => unknown } },
+  roomId: string,
+  que: "editar" | "dueno",
+): Promise<boolean> {
+  const { rol, tieneDueno } = await rolDeReq(req, roomId);
+  const ok = que === "dueno" ? !tieneDueno || rol === "dueno" : puedeEditar(rol);
+  if (!ok) {
+    reply.code(403).send({
+      error: que === "dueno" ? "solo el dueño de la sala puede hacer esto" : "solo puedes ver esta sala",
+    });
+  }
+  return ok;
+}
+
+/**
+ * Quien crea la sala es su dueño. Se guarda el hash de la llave y la llave se
+ * devuelve UNA vez: si el navegador la pierde, la cuenta (si había) lo salva.
+ */
+async function hacerDueno(req: { headers: Record<string, unknown> }, roomId: string): Promise<string> {
+  const llave = nuevaLlave();
+  const usuario = await usuarioDe(req);
+  await (await getStorage()).fijarDueno(roomId, {
+    llave: hashLlave(llave),
+    usuario: usuario?.id ?? null,
+    tokenEditar: nuevoTokenEditar(),
+  });
+  return llave;
+}
+
 /** A dónde vuelve Google. Tiene que coincidir con lo registrado en su consola. */
 function urlDeVuelta(req: { headers: Record<string, unknown>; protocol: string }): string {
   const host = req.headers.host as string;
@@ -545,9 +622,9 @@ function refrescarEnSalas(usuarioId: string, cambios: { nombre?: string; foto?: 
 }
 
 // Crear sala → devuelve su id. El cliente navega a /sala/:id.
-fastify.post("/rooms", async () => {
+fastify.post("/rooms", async (req) => {
   const room = await createRoom();
-  return { id: room.id };
+  return { id: room.id, llave: await hacerDueno(req, room.id) };
 });
 
 /**
@@ -567,7 +644,8 @@ fastify.post<{ Params: { id: string }; Body: { autor?: unknown } | undefined }>(
       const autor = typeof req.body?.autor === "string" ? req.body.autor.trim().slice(0, 40) : "";
       io.to(origen.id).emit("room:remixes", { remixes: await (await getStorage()).remixesDe(origen.id) });
       systemMsg(origen, autor ? `${autor} hizo un remix de este proyecto` : "alguien hizo un remix de este proyecto");
-      return { id: remix.id };
+      // Hasta un lector puede hacer remix: es su copia, y de esa sí es dueño.
+      return { id: remix.id, llave: await hacerDueno(req, remix.id) };
     } catch (err) {
       if (err instanceof NadaQueRemixear) return reply.code(409).send({ error: err.message });
       console.error(`[sala ${origen.id}] no se pudo hacer el remix:`, err);
@@ -624,6 +702,7 @@ async function comunidadDe(roomId: string) {
 fastify.post<{ Params: { id: string }; Body: { categoria?: unknown; titulo?: unknown; autor?: unknown } | undefined }>(
   "/rooms/:id/comunidad",
   async (req, reply) => {
+    if (!(await exigir(req, reply, req.params.id, "editar"))) return reply;
     const room = getRoom(req.params.id) ?? (await wakeRoom(req.params.id));
     if (!room) return reply.code(404).send({ error: "sala no encontrada" });
     if (!room.urlPublicada) {
@@ -651,6 +730,7 @@ fastify.post<{ Params: { id: string }; Body: { categoria?: unknown; titulo?: unk
 );
 
 fastify.delete<{ Params: { id: string } }>("/rooms/:id/comunidad", async (req, reply) => {
+  if (!(await exigir(req, reply, req.params.id, "editar"))) return reply;
   const room = getRoom(req.params.id) ?? (await wakeRoom(req.params.id));
   if (!room) return reply.code(404).send({ error: "sala no encontrada" });
   await (await getStorage()).quitarDeComunidad(room.id);
@@ -756,7 +836,7 @@ fastify.post<{ Params: { id: string } }>("/plantillas/:id/usar", async (req, rep
   try {
     const sala = await createRemix(origen, { plantilla: plantilla.titulo });
     console.log(`[plantillas] ${plantilla.roomId} → sala nueva ${sala.id}`);
-    return { id: sala.id };
+    return { id: sala.id, llave: await hacerDueno(req, sala.id) };
   } catch (err) {
     if (err instanceof NadaQueRemixear) return reply.code(409).send({ error: err.message });
     console.error(`[plantillas] no se pudo usar ${plantilla.roomId}:`, err);
@@ -858,6 +938,7 @@ fastify.get<{ Params: { id: string; hash: string } }>(
  * descuido.
  */
 fastify.post<{ Params: { id: string } }>("/rooms/:id/adjuntos", async (req, reply) => {
+  if (!(await exigir(req, reply, req.params.id, "editar"))) return reply;
   const room = getRoom(req.params.id) ?? (await wakeRoom(req.params.id));
   if (!room) return reply.code(404).send({ error: "sala no encontrada" });
 
@@ -1057,6 +1138,7 @@ fastify.get<{ Params: { id: string } }>("/rooms/:id/export/estado", async (req, 
  * lo dice el panel.
  */
 fastify.get<{ Params: { id: string } }>("/rooms/:id/env", async (req, reply) => {
+  if (!(await exigir(req, reply, req.params.id, "editar"))) return reply;
   const room = getRoom(req.params.id) ?? (await wakeRoom(req.params.id));
   if (!room) return reply.code(404).send({ error: "sala no encontrada" });
   return { variables: await leerVariables(room.workspace.dir) };
@@ -1065,6 +1147,7 @@ fastify.get<{ Params: { id: string } }>("/rooms/:id/env", async (req, reply) => 
 fastify.put<{ Params: { id: string }; Body: { variables?: unknown } }>(
   "/rooms/:id/env",
   async (req, reply) => {
+    if (!(await exigir(req, reply, req.params.id, "editar"))) return reply;
     const room = getRoom(req.params.id) ?? (await wakeRoom(req.params.id));
     if (!room) return reply.code(404).send({ error: "sala no encontrada" });
 
@@ -1152,7 +1235,32 @@ function vueltaDeSupabase(req: { headers: Record<string, unknown> }): string {
   return `${proto}://${req.headers.host}/supabase/callback`;
 }
 
-fastify.get<{ Params: { id: string } }>("/rooms/:id/supabase/conectar", async (req, reply) => {
+/**
+ * Conectar es una navegación (el navegador se va a Supabase), así que no puede
+ * llevar los headers de la Sala. Por eso primero se pide un pase, con headers,
+ * y la navegación lo lleva en la URL. Sirve una vez y por dos minutos: si queda
+ * en un log o en el historial del navegador, ya no vale.
+ */
+const pasesDeSupabase = new Map<string, { roomId: string; vence: number }>();
+
+fastify.post<{ Params: { id: string } }>("/rooms/:id/supabase/pase", async (req, reply) => {
+  if (!(await exigir(req, reply, req.params.id, "editar"))) return reply;
+  const ahora = Date.now();
+  for (const [k, v] of pasesDeSupabase) if (v.vence < ahora) pasesDeSupabase.delete(k);
+  const pase = nuevoTokenEditar();
+  pasesDeSupabase.set(pase, { roomId: req.params.id, vence: ahora + 2 * 60_000 });
+  return { pase };
+});
+
+fastify.get<{ Params: { id: string }; Querystring: { pase?: string } }>("/rooms/:id/supabase/conectar", async (req, reply) => {
+  // Las salas sin dueño no piden pase: ahí todos editan, como siempre.
+  if ((await rolDeReq(req, req.params.id)).tieneDueno) {
+    const p = req.query.pase ? pasesDeSupabase.get(req.query.pase) : undefined;
+    if (req.query.pase) pasesDeSupabase.delete(req.query.pase);
+    if (!p || p.roomId !== req.params.id || p.vence < Date.now()) {
+      return reply.code(403).send({ error: "solo puedes ver esta sala" });
+    }
+  }
   const cred = credencialDeSupabase();
   if (!cred) return reply.code(503).send({ error: "este Multti no tiene configurado Supabase" });
   if (!hayLlave()) {
@@ -1664,7 +1772,8 @@ async function accesoVigente(roomId: string): Promise<string | null> {
 /** Ver `accesoVigente`. Aparte del de preparaciones: la preparación lo llama adentro. */
 const renovacionesDeSupabase = new KeyedMutex();
 
-fastify.delete<{ Params: { id: string } }>("/rooms/:id/supabase", async (req) => {
+fastify.delete<{ Params: { id: string } }>("/rooms/:id/supabase", async (req, reply) => {
+  if (!(await exigir(req, reply, req.params.id, "editar"))) return reply;
   // Solo se desconecta de aquí: el proyecto en Supabase sigue existiendo porque
   // es de la persona, y las variables se quedan en el .env porque la app las
   // sigue necesitando para funcionar.
@@ -1689,6 +1798,7 @@ fastify.delete<{ Params: { id: string } }>("/rooms/:id/supabase", async (req) =>
  * por socket, que además llega a TODA la sala y no solo a quien lo pidió.
  */
 fastify.post<{ Params: { id: string }; Body: { nombre?: unknown; plataforma?: unknown } | undefined }>("/rooms/:id/publicar", async (req, reply) => {
+  if (!(await exigir(req, reply, req.params.id, "editar"))) return reply;
   const room = getRoom(req.params.id) ?? (await wakeRoom(req.params.id));
   if (!room) return reply.code(404).send({ error: "sala no encontrada" });
 
@@ -1792,11 +1902,13 @@ async function publicarEnSegundoPlano(room: Room, cred: Credencial, nombre: stri
  * eso solo. Va bajo `/rooms` por lo mismo que el export (el proxy del preview
  * no toca ese prefijo).
  *
- * No hay dueño que comprobar: la sala es de quien tenga el link, y sin cuentas
- * no existe forma de saber quién la creó. Lo que protege de un borrado por
- * accidente es la confirmación de la interfaz, no este endpoint.
+ * Solo el dueño, aunque tenga los roles apagados: borrar no tiene vuelta, y
+ * con el link compartido en un grupo cualquiera la tumbaría por accidente.
+ * Las salas de antes de los roles no tienen dueño y se siguen borrando como
+ * siempre.
  */
 fastify.delete<{ Params: { id: string } }>("/rooms/:id", async (req, reply) => {
+  if (!(await exigir(req, reply, req.params.id, "dueno"))) return reply;
   const borrada = await deleteRoom(req.params.id);
   if (!borrada) return reply.code(404).send({ error: "sala no encontrada" });
 
@@ -1917,12 +2029,63 @@ function vePorSocket(socketId: string): boolean {
   return cred ? proveedorVe(cred.provider) : false;
 }
 
+/**
+ * Lo que la Sala necesita saber de su propio rol. El código del link para
+ * editar va solo al dueño: es lo que él comparte, y nadie más lo necesita.
+ */
+function estadoDeRol(member: Member, p: PermisosDeSala) {
+  const rol = member.rol ?? "editor";
+  return {
+    rol,
+    tieneDueno: !!p.duenoLlave,
+    rolesActivos: !!p.duenoLlave && p.activos,
+    acceso: p.acceso,
+    tokenEditar: rol === "dueno" ? p.tokenEditar : null,
+    // Igual: a quién invitó por correo es asunto del dueño.
+    invitados: rol === "dueno" ? invitadosDe(p) : [],
+  };
+}
+
+/**
+ * Después de que el dueño cambia algo: el rol de cada quien, otra vez, con lo
+ * que trajo al entrar. A cada socket le llega el suyo, y a todos la presencia
+ * (ahí se ve el rol de los demás).
+ */
+async function recalcularRoles(room: Room): Promise<void> {
+  const p = await (await getStorage()).permisosDeSala(room.id);
+  for (const m of room.members.values()) {
+    m.rol = rolEnSala(p, m.identidad ?? {});
+    io.to(m.socketId).emit("rol", estadoDeRol(m, p));
+  }
+  io.to(room.id).emit("presence", { members: membersList(room) });
+}
+
 // ── Socket.IO ─────────────────────────────────────────────────────────────
 
 io.on("connection", (socket) => {
   let joinedRoom: Room | null = null;
 
-  socket.on("join", async ({ roomId, name, clienteId }: { roomId: string; name: string; clienteId?: unknown }) => {
+  /**
+   * El candado de lo que cambia algo. Un lector puede mirar, mover el cursor y
+   * seleccionar, pero nada que toque el proyecto, el chat o la sala. Se le dice
+   * por qué, una línea solo para él: un botón que no hace nada parece error.
+   */
+  const puedeCambiar = (): boolean => {
+    const m = joinedRoom?.members.get(socket.id);
+    if (m && !puedeEditar(m.rol ?? "editor")) {
+      socket.emit("rol:sin-permiso", { message: "Solo puedes ver esta sala. Pídele al dueño que te deje editar." });
+      return false;
+    }
+    return true;
+  };
+
+  /** Solo el dueño. Sin aviso: la interfaz ni le enseña estos botones a nadie más. */
+  const esElDueno = (): Room | null => {
+    const room = joinedRoom;
+    return room && room.members.get(socket.id)?.rol === "dueno" ? room : null;
+  };
+
+  socket.on("join", async ({ roomId, name, clienteId, llave, tokenEditar }: { roomId: string; name: string; clienteId?: unknown; llave?: unknown; tokenEditar?: unknown }) => {
     // Si no está en memoria, puede existir en la BD (el server reinició).
     const room = getRoom(roomId) ?? (await wakeRoom(roomId));
     if (!room) {
@@ -1942,16 +2105,27 @@ io.on("connection", (socket) => {
     // ese nombre. Con cuenta, el perfil pisa al nombre local, que es lo que
     // espera quien se tomó la molestia de tener uno.
     const usuario = await usuarioDe({ headers: socket.handshake.headers });
+    const cliente = typeof clienteId === "string" && ID_DE_CLIENTE.test(clienteId) ? clienteId : undefined;
     const member = addMember(
       room,
       socket.id,
       usuario?.nombre || name || "anónimo",
       usuario ? { id: usuario.id, foto: usuario.foto ?? null } : undefined,
-      typeof clienteId === "string" && /^[\w-]{8,64}$/.test(clienteId) ? clienteId : undefined,
+      cliente,
     );
 
-    // Estado inicial para el que entra, con el chat que ya existía.
+    // Su rol. La llave y el código del link se quedan en el server, en el
+    // miembro, para recalcularlo si el dueño cambia algo mientras está dentro.
     const storage = await getStorage();
+    member.identidad = identidadDe({ usuarioId: usuario?.id, correo: usuario?.correo, clienteId: cliente, llave, tokenEditar });
+    const permisos = await storage.permisosDeSala(roomId);
+    member.rol = rolEnSala(permisos, member.identidad);
+    // El dueño entró con su llave y tiene cuenta: desde ahora también es dueño
+    // desde otra compu, sin tener que cargar la llave.
+    if (member.rol === "dueno" && usuario && !permisos.duenoUsuario) {
+      void storage.ligarCuentaDeDueno(roomId, usuario.id).catch(() => {});
+    }
+
     // Con `void`: que la BD tarde no debe retrasar el `joined`. Mismo criterio
     // que `say`, que emite antes de persistir.
     if (usuario) void storage.recordarSalaDeUsuario(usuario.id, roomId).catch(() => {});
@@ -1966,7 +2140,8 @@ io.on("connection", (socket) => {
       tipo: (room.tipo = await tipoDeSala(room)),
       // Si además hay documento: con una app en el lienzo, se abre encima.
       documento: (room.documento = tieneDocumento(room)),
-      you: member,
+      you: miembroPublico(member),
+      ...estadoDeRol(member, permisos),
       members: membersList(room),
       previewUrl: room.preview?.url ?? null,
       // Quien llega a media cuesta no recibió el "preview:arrancando" (ya pasó),
@@ -2081,6 +2256,8 @@ io.on("connection", (socket) => {
     const ack = (ok: boolean) => {
       if (typeof confirmar === "function") confirmar({ ok });
     };
+    // Lo que no va a entrar se confirma igual: reintentarlo no lo cambia.
+    if (!puedeCambiar()) return ack(true);
     const room = joinedRoom;
     const hayAdjuntos = Array.isArray(crudos) && crudos.length > 0;
     // Todavía no está en la sala: que lo reintente después del `joined`.
@@ -2202,7 +2379,7 @@ io.on("connection", (socket) => {
     "history:revert",
     async ({ hash, file }: { hash: string; file?: string }) => {
       const room = joinedRoom;
-      if (!room || !/^[0-9a-f]{7,40}$/i.test(hash)) return;
+      if (!room || !/^[0-9a-f]{7,40}$/i.test(hash) || !puedeCambiar()) return;
       const member = room.members.get(socket.id);
       const author = member?.name ?? "alguien";
       try {
@@ -2237,7 +2414,7 @@ io.on("connection", (socket) => {
   /** Marcar una versión que importa ("la que funcionaba"). */
   socket.on("history:bookmark", async ({ hash, label }: { hash: string; label: string | null }) => {
     const room = joinedRoom;
-    if (!room || !/^[0-9a-f]{7,40}$/i.test(hash)) return;
+    if (!room || !/^[0-9a-f]{7,40}$/i.test(hash) || !puedeCambiar()) return;
     await setBookmark(room.workspace.dir, hash, label);
     io.to(room.id).emit("history:changed", {});
   });
@@ -2251,7 +2428,7 @@ io.on("connection", (socket) => {
    */
   socket.on("room:rename", async ({ nombre }: { nombre: unknown }) => {
     const room = joinedRoom;
-    if (!room) return;
+    if (!room || !puedeCambiar()) return;
     const member = room.members.get(socket.id);
     const quien = member?.name ?? "alguien";
 
@@ -2273,7 +2450,7 @@ io.on("connection", (socket) => {
    */
   socket.on("room:modo", async ({ modo }: { modo: unknown }) => {
     const room = joinedRoom;
-    if (!room) return;
+    if (!room || !puedeCambiar()) return;
     const member = room.members.get(socket.id);
     const quien = member?.name ?? "alguien";
 
@@ -2291,12 +2468,84 @@ io.on("connection", (socket) => {
     );
   });
 
+  // ── Lo que solo hace el dueño ──────────────────────────────────────────
+
+  /** Prender o apagar los roles. Apagados, todos editan como antes. */
+  socket.on("sala:roles", async ({ activos }: { activos?: unknown }) => {
+    const room = esElDueno();
+    if (!room || typeof activos !== "boolean") return;
+    await (await getStorage()).activarRoles(room.id, activos);
+    await recalcularRoles(room);
+    systemMsg(
+      room,
+      activos
+        ? "el dueño prendió los roles: ahora hay quien edita y quien solo ve"
+        : "el dueño apagó los roles: todos pueden editar",
+    );
+  });
+
+  /** Qué da el link normal: editar o solo ver. */
+  socket.on("sala:acceso", async ({ acceso }: { acceso?: unknown }) => {
+    const room = esElDueno();
+    if (!room || (acceso !== "editar" && acceso !== "ver")) return;
+    await (await getStorage()).cambiarAcceso(room.id, acceso as AccesoDeLink);
+    await recalcularRoles(room);
+  });
+
+  /**
+   * El rol de alguien que está en la sala. Se apunta por su socket y el server
+   * saca de ahí su cuenta o su navegador: el dueño nunca ve esos ids.
+   * `null` le quita lo que tenía y vuelve a valer el link.
+   */
+  socket.on("sala:rol", async ({ socketId, rol }: { socketId?: unknown; rol?: unknown }) => {
+    const room = esElDueno();
+    if (!room || typeof socketId !== "string") return;
+    const otro = room.members.get(socketId);
+    if (!otro || otro.rol === "dueno") return;
+    // Con cuenta, por su correo: así es la misma invitación que se ve en la
+    // lista de invitados, y no dos reglas que se pisan.
+    const clave = otro.identidad?.correo ? `e:${otro.identidad.correo}` : claveDePersona(otro);
+    if (!clave) return;
+    const nuevo = rol === "editor" || rol === "lector" ? rol : null;
+    await (await getStorage()).fijarRol(room.id, clave, nuevo);
+    await recalcularRoles(room);
+  });
+
+  /**
+   * Invitar por correo: quien entre con esa cuenta de Google recibe el rol, en
+   * cualquier compu y aunque todavía no haya llegado. `rol: null` lo quita.
+   */
+  socket.on("sala:invitar", async ({ correo, rol }: { correo?: unknown; rol?: unknown }) => {
+    const room = esElDueno();
+    const limpio = typeof correo === "string" ? normalizarCorreo(correo) : null;
+    if (!room || !limpio) {
+      if (room) socket.emit("sala:invitar-error", { message: "ese correo no se ve bien" });
+      return;
+    }
+    const storage = await getStorage();
+    const nuevo = rol === "editor" || rol === "lector" ? rol : null;
+    if (nuevo && invitadosDe(await storage.permisosDeSala(room.id)).length >= 200) {
+      socket.emit("sala:invitar-error", { message: "ya hay demasiadas invitaciones en esta sala" });
+      return;
+    }
+    await storage.fijarRol(room.id, `e:${limpio}`, nuevo);
+    await recalcularRoles(room);
+  });
+
+  /** Un código nuevo para el link de editar: el viejo deja de servir. */
+  socket.on("sala:nuevo-token", async () => {
+    const room = esElDueno();
+    if (!room) return;
+    await (await getStorage()).cambiarTokenEditar(room.id, nuevoTokenEditar());
+    await recalcularRoles(room);
+  });
+
   // El humano decide qué hacer con el trabajo que quedó a medias por un crash.
   // Nunca se decide automáticamente: ese trabajo ya está en disco y ya lo vieron
   // todos en el preview (ver DESIGN.md "turnos huérfanos").
   socket.on("orphans:resolve", async ({ action }: { action: "keep" | "revert" }) => {
     const room = joinedRoom;
-    if (!room?.orphanTurns?.length) return;
+    if (!room?.orphanTurns?.length || !puedeCambiar()) return;
     const member = room.members.get(socket.id);
 
     try {
@@ -2384,6 +2633,12 @@ io.on("connection", (socket) => {
       const room = joinedRoom;
       const member = room?.members.get(socket.id);
       if (!room || !member) return ack(false);
+      // Un lector no tiene el documento editable; si algo llega igual, que su
+      // copia vuelva a la del server en vez de quedarse con un cambio fantasma.
+      if (!puedeCambiar()) {
+        socket.emit("doc:recargar", { generacion: -1 });
+        return ack(false);
+      }
       const doc = await documentosVivos.abrir(room.id, room.workspace.dir);
       if (!doc) return ack(false);
       const r = aplicarDeCliente(doc, update, generacion, { autor: member.name, socketId: socket.id });
@@ -2408,6 +2663,7 @@ io.on("connection", (socket) => {
       const room = joinedRoom;
       const member = room?.members.get(socket.id);
       if (!room || !member) return ack(false);
+      if (!puedeCambiar()) return ack(true);
       const contenido = typeof texto === "string" ? texto.trim() : "";
       if (!contenido) return ack(true);
       // Un reintento de algo que ya llegó: se confirma y no se repite.
@@ -2462,7 +2718,7 @@ io.on("connection", (socket) => {
 
   socket.on("comentario:resolver", async ({ hilo, resuelto }: { hilo?: unknown; resuelto?: unknown }) => {
     const room = joinedRoom;
-    if (!room || !room.members.has(socket.id) || typeof hilo !== "string") return;
+    if (!room || !room.members.has(socket.id) || typeof hilo !== "string" || !puedeCambiar()) return;
     if (!(await hiloDe(room, hilo))) return;
     await (await getStorage()).resolverHilo(room.id, hilo, resuelto === true);
     io.to(room.id).emit("comentario:resuelto", { hilo, resuelto: resuelto === true });

@@ -14,7 +14,8 @@ import {
 } from "./engine/container.js";
 import { containerRunner, localRunner, NoHayAislamiento, type Runner } from "./engine/runner.js";
 import type { Message } from "./agent/providers/types.js";
-import type { ModoDeSala } from "./storage/types.js";
+import type { ModoDeSala, Rol } from "./storage/types.js";
+import { claveDePersona, hashLlave, type Identidad } from "./engine/roles.js";
 import { AgentRegistry } from "./engine/agents.js";
 import { KeyedMutex } from "./engine/keyed-mutex.js";
 import { RunCoordinator } from "./engine/coordinator.js";
@@ -51,6 +52,45 @@ export interface Member {
    * casos es otra persona. No identifica a nadie ni da permisos; solo agrupa.
    */
   clienteId?: string;
+  /**
+   * Lo que puede hacer en esta sala (engine/roles.ts). Lo pone el `join` y lo
+   * vuelve a calcular el server cuando el dueño cambia algo.
+   */
+  rol?: Rol;
+  /**
+   * Con qué entró (su llave de dueño, el código del link para editar). Solo en
+   * el server: hace falta para recalcular su rol, y jamás se manda a nadie.
+   */
+  identidad?: Identidad;
+}
+
+/**
+ * Lo que la sala ve de cada quien. Sin `usuarioId`, `clienteId` ni
+ * `identidad`: con el `clienteId` de otro cualquiera podría hacerse pasar por
+ * él, y quedarse con el rol que le dio el dueño.
+ */
+export interface MiembroPublico {
+  socketId: string;
+  name: string;
+  color: string;
+  canInvoke?: boolean;
+  foto?: string | null;
+  rol: Rol;
+  /** Agrupa las pestañas de la misma persona, sin decir quién es. */
+  persona: string;
+}
+
+export function miembroPublico(m: Member): MiembroPublico {
+  const clave = claveDePersona(m) ?? m.socketId;
+  return {
+    socketId: m.socketId,
+    name: m.name,
+    color: m.color,
+    canInvoke: m.canInvoke,
+    foto: m.foto ?? null,
+    rol: m.rol ?? "editor",
+    persona: hashLlave(`persona:${clave}`).slice(0, 12),
+  };
 }
 
 /** Un elemento del preview seleccionado (capturado por el inspector). */
@@ -1056,8 +1096,8 @@ export function removeMember(room: Room, socketId: string): void {
   if (room.members.size === 0) room.vaciaDesde = Date.now();
 }
 
-export function membersList(room: Room): Member[] {
-  return [...room.members.values()];
+export function membersList(room: Room): MiembroPublico[] {
+  return [...room.members.values()].map(miembroPublico);
 }
 
 /**

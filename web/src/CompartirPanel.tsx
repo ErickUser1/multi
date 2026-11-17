@@ -32,6 +32,8 @@ export function CompartirPanel({
   const { t } = useTextos();
   const [abierto, setAbierto] = useState(false);
   const [copiado, setCopiado] = useState<string | null>(null);
+  /** Qué link enseña el panel con los roles prendidos. Solo cambia lo que se ve. */
+  const [cualLink, setCualLink] = useState<"editar" | "ver">("ver");
   const [correo, setCorreo] = useState("");
   const [rolInvitado, setRolInvitado] = useState<"editor" | "lector">("editor");
   const [errorInvitar, setErrorInvitar] = useState<string | null>(null);
@@ -152,19 +154,32 @@ export function CompartirPanel({
 
           {activos && (
             <>
-              {/* Dos links, uno por rol: el de la sala da solo ver, y el que
-                  lleva su código da editar. Así se comparte uno u otro según a
-                  quién, sin tener que explicar un ajuste del link. */}
-              <span className="compartir-etiqueta">{t.linkParaVer}</span>
-              <div className="publicar-url">
-                <span className="compartir-link">{base}</span>
-                <button className="publicar-copiar" onClick={() => copiar("ver", base)}>
-                  {copiado === "ver" ? t.copiado : t.copiar}
-                </button>
+              {/* Un link por rol, y el switch elige cuál se ve: el de la sala
+                  da solo ver, el que lleva su código da editar. Se copia el que
+                  toca según a quién se le manda. */}
+              <span className="compartir-etiqueta">{t.elLinkDa}</span>
+              <div className="switch-vista compartir-acceso" role="radiogroup" aria-label={t.elLinkDa}>
+                {(["editar", "ver"] as const).map((a) => (
+                  <button
+                    key={a}
+                    type="button"
+                    className={`switch-op${cualLink === a ? " activa" : ""}`}
+                    aria-pressed={cualLink === a}
+                    onClick={() => setCualLink(a)}
+                  >
+                    {a === "editar" ? t.accesoEditar : t.accesoVer}
+                  </button>
+                ))}
               </div>
-              {linkEditar && (
+              {cualLink === "ver" || !linkEditar ? (
+                <div className="publicar-url">
+                  <span className="compartir-link">{base}</span>
+                  <button className="publicar-copiar" onClick={() => copiar("ver", base)}>
+                    {copiado === "ver" ? t.copiado : t.copiar}
+                  </button>
+                </div>
+              ) : (
                 <>
-                  <span className="compartir-etiqueta">{t.linkParaEditar}</span>
                   <div className="publicar-url">
                     <span className="compartir-link">{linkEditar}</span>
                     <button className="publicar-copiar" onClick={() => copiar("editar", linkEditar)}>

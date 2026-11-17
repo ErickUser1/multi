@@ -21,6 +21,10 @@ import {
   personasEnSala,
   stopAllPreviews,
   parseIntent,
+  anclasDe,
+  textoDeAnclas,
+  anclaDelMensaje,
+  tituloDesde,
   intentDeLaSala,
   wakeRoom,
   maybeStartPreview,
@@ -2217,14 +2221,16 @@ io.on("connection", (socket) => {
   });
 
   // Mensaje de chat → lo retransmite y dispara al agente.
-  // `anchor` (opcional) es la selección LOCAL del que manda (cuidado 2).
+  // `anchors` (opcional) es la selección LOCAL del que manda (cuidado 2): los
+  // elementos del preview a los que se refiere. `anchor` es uno solo, de antes.
   socket.on(
     "chat",
     async (
       {
       id: idCliente,
       text,
-      anchor,
+      anchors: anclasCrudas,
+      anchor: anclaVieja,
       adjuntos: crudos,
     }: {
       /**
@@ -2234,7 +2240,8 @@ io.on("connection", (socket) => {
        */
       id?: string;
       text: string;
-      anchor?: SelectedElement | null;
+      anchors?: unknown;
+      anchor?: unknown;
       /**
        * Los archivos YA SUBIDOS, solo con su identidad.
        *
@@ -2266,6 +2273,7 @@ io.on("connection", (socket) => {
     if (!text?.trim() && !hayAdjuntos) return ack(true);
     const member = room.members.get(socket.id);
     if (!member) return ack(false);
+    const anclas = anclasDe({ anchors: anclasCrudas, anchor: anclaVieja });
 
     // Un reintento de algo que ya llegó: se confirma y no se repite.
     if (typeof idCliente === "string" && idCliente) {
@@ -2309,7 +2317,7 @@ io.on("connection", (socket) => {
       color: member.color,
       role: "human",
       text,
-      anchoredTo: anchor ? anchor.path : undefined,
+      anchoredTo: anclaDelMensaje(anclas),
       adjuntos: adjuntos.length ? adjuntos : undefined,
       usuarioId: member.usuarioId,
       foto: member.foto,
@@ -2319,20 +2327,20 @@ io.on("connection", (socket) => {
     // 2) A quién le toca. La misma decisión que un comentario del documento:
     //    vive en pedirAlAgente para que los dos caminos no se separen.
     const despacho = await pedirAlAgente(room, socket, member, text, {
-      anchor: anchor ?? null,
+      anchors: anclas,
       adjuntos,
       origen: { tipo: "chat" },
     });
     if (!despacho) return;
 
     // Al mandar mensaje anclado, limpiar la selección de este miembro (cuidado 4).
-    if (anchor) {
+    if (anclas.length) {
       room.selections.delete(socket.id);
       io.to(room.id).emit("select", {
         socketId: socket.id,
         name: member.name,
         color: member.color,
-        element: null,
+        elements: [],
       });
     }
   });
@@ -2352,20 +2360,22 @@ io.on("connection", (socket) => {
     });
   });
 
-  // Selección de un elemento del preview → visible para todos + guardada en la sala.
-  socket.on("select", (sel: SelectedElement | null) => {
+  // Lo que alguien tiene seleccionado en el preview → visible para todos. Llega
+  // la lista completa (o un elemento solo, de una pestaña de antes); vacía es
+  // que ya no tiene nada.
+  socket.on("select", (crudo: unknown) => {
     const room = joinedRoom;
     if (!room) return;
     const member = room.members.get(socket.id);
     if (!member) return;
-    // Recordar la selección de este miembro (para anclar su próximo mensaje).
-    if (sel) room.selections.set(socket.id, sel);
+    const elements = anclasDe(Array.isArray(crudo) ? { anchors: crudo } : { anchor: crudo });
+    if (elements.length) room.selections.set(socket.id, elements);
     else room.selections.delete(socket.id);
     io.to(room.id).emit("select", {
       socketId: socket.id,
       name: member.name,
       color: member.color,
-      element: sel,
+      elements,
     });
   });
 
@@ -2704,7 +2714,7 @@ io.on("connection", (socket) => {
       // La misma regla que el chat: en una sala de una persona el comentario
       // le habla al agente; en multijugador, solo si lo mencionan con @.
       await pedirAlAgente(room, socket, member, contenido, {
-        anchor: null,
+        anchors: [],
         adjuntos: [],
         origen: { tipo: "comentario", hilo: c.hiloId, bloque, seccion },
         contexto:
@@ -2818,13 +2828,13 @@ async function pedirAlAgente(
   socket: { id: string; emit: (evento: string, datos: unknown) => unknown },
   member: { name: string; color: string },
   text: string,
-  opts: { anchor: SelectedElement | null; adjuntos: Adjunto[]; origen: OrigenDelPedido; contexto?: string },
+  opts: { anchors: SelectedElement[]; adjuntos: Adjunto[]; origen: OrigenDelPedido; contexto?: string },
 ): Promise<boolean> {
-  const { anchor, adjuntos } = opts;
+  const { anchors, adjuntos } = opts;
   // 2) ¿Es plática o una orden? El agente solo despierta si lo llaman, salvo
   //    en una sala de una persona, donde escribir ya es pedirle algo.
   //    La decisión vive en rooms.ts, junto a parseIntent, y ahí se prueba.
-  const intent = intentDeLaSala(parseIntent(text, !!anchor), {
+  const intent = intentDeLaSala(parseIntent(text, anchors.length > 0), {
     modo: room.modo,
     texto: text,
     primerAgente: room.agents.list()[0]?.name,
@@ -2848,7 +2858,7 @@ async function pedirAlAgente(
   }
 
   // Anclaje: prependemos el elemento como texto legible (cuidado 3).
-  const withAnchor = (t: string) => (anchor ? `${anchorText(anchor)}\n\n${t}` : t);
+  const withAnchor = (t: string) => (anchors.length ? `${textoDeAnclas(anchors)}\n\n${t}` : t);
 
   // Los adjuntos se anuncian como texto SIEMPRE, vea o no vea el modelo. Con
   // el nombre le basta para pedir `usar_adjunto` y meterlo en la app; verlo
@@ -3638,11 +3648,6 @@ function ultimosMensajes(room: Room): Map<string, string> {
 }
 
 /** Formatea el elemento anclado como texto legible para el prompt del agente. */
-function anchorText(el: SelectedElement): string {
-  const textPart = el.text ? ` con el texto "${el.text}"` : "";
-  return `[El usuario seleccionó este elemento del preview: <${el.tag}>${textPart}, ubicado en "${el.path}". Encuentra el código correspondiente y aplica el cambio que pide abajo a ESE elemento.]`;
-}
-
 function summarizeTool(name: string, input: Record<string, unknown>): string {
   if (name === "write_file" || name === "edit_file") return `${name} → ${input.path}`;
   if (name === "read_file") return `leyendo ${input.path}`;
@@ -3944,27 +3949,6 @@ const AVISO_SIN_AISLAMIENTO =
   "Pueden seguir platicando, y todo lo que ya hicieron sigue guardado. " +
   "Quien administra este Multti tiene que revisarlo.";
 
-/**
- * Un nombre de sala a partir de lo primero que se pidió.
- *
- * Recorta el arranque típico ("hazme una", "crea un") porque en una lista de
- * salas todas empezarían igual y la parte que distingue quedaría fuera del
- * ancho visible. Lo que queda son las primeras palabras de la petición, que es
- * lo que la persona reconoce.
- */
-function tituloDesde(task: string): string {
-  const limpio = task
-    .replace(/@[a-z0-9-]+/gi, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .replace(
-      /^(?:(?:hazme|haz|crea|crear|créame|creame|quiero|necesito|puedes|podrias|podrías|me gustaria|me gustaría|ayudame|ayúdame|dame|genera|arma)\s+)+(?:que\s+)?(?:crees|hagas|generes|armes)?\s*(?:el\s+c[oó]digo\s+para\s+)?(?:una?|el|la|unos|unas)?\s*/i,
-      "",
-    );
-  const corto = limpio.split(/[.,;\n?]/)[0]?.trim() ?? "";
-  const palabras = corto.split(" ").slice(0, 6).join(" ");
-  return palabras.charAt(0).toUpperCase() + palabras.slice(1);
-}
 
 /** Lo que dice el agente cuando se quedó sin espacio dos veces en el mismo turno. */
 const TEXTO_SIN_ESPACIO =
